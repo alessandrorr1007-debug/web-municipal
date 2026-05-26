@@ -2,7 +2,12 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
-import { MercadoPagoConfig, Payment } from "mercadopago";
+
+import {
+  MercadoPagoConfig,
+  Payment,
+  Preference,
+} from "mercadopago";
 
 dotenv.config();
 
@@ -21,13 +26,13 @@ const MONTO_TRAMITE = 100;
 
 console.log("TOKEN DECOLECTA:", TOKEN_DECOLECTA ? "Existe" : "No existe");
 console.log("TOKEN MERCADO PAGO:", MP_ACCESS_TOKEN ? "Existe" : "No existe");
-console.log("MONTO TRÁMITE:", `S/${MONTO_TRAMITE}.00`);
 
 const mpClient = new MercadoPagoConfig({
   accessToken: MP_ACCESS_TOKEN || "",
 });
 
 const payment = new Payment(mpClient);
+const preference = new Preference(mpClient);
 
 app.get("/", (req, res) => {
   res.json({
@@ -36,7 +41,10 @@ app.get("/", (req, res) => {
   });
 });
 
-/* API SUNAT */
+/* =========================
+   API SUNAT
+========================= */
+
 app.get("/api/ruc/:numero", async (req, res) => {
   try {
     const { numero } = req.params;
@@ -44,12 +52,6 @@ app.get("/api/ruc/:numero", async (req, res) => {
     if (!TOKEN_DECOLECTA) {
       return res.status(500).json({
         error: "Falta DECOLECTA_TOKEN en .env",
-      });
-    }
-
-    if (!numero || numero.length !== 11) {
-      return res.status(400).json({
-        error: "El RUC debe tener 11 dígitos.",
       });
     }
 
@@ -65,7 +67,6 @@ app.get("/api/ruc/:numero", async (req, res) => {
 
     res.json(response.data);
   } catch (error) {
-    console.error("ERROR SUNAT:");
     console.error(error.response?.data || error.message);
 
     res.status(500).json({
@@ -75,100 +76,65 @@ app.get("/api/ruc/:numero", async (req, res) => {
   }
 });
 
-/* PAGO CON TARJETA */
-app.post("/api/pagos/procesar-tarjeta", async (req, res) => {
+/* =========================
+   CREAR PREFERENCIA CHECKOUT PRO
+========================= */
+
+app.post("/api/pagos/crear-preferencia", async (req, res) => {
   try {
-    if (!MP_ACCESS_TOKEN) {
-      return res.status(500).json({
-        error: "Falta MERCADO_PAGO_ACCESS_TOKEN en .env",
-      });
-    }
+    const { ruc, razonSocial } = req.body;
 
-    const {
-      token,
-      issuerId,
-      paymentMethodId,
-      installments,
-      payer,
-      ruc,
-      razonSocial,
-    } = req.body;
-
-    if (!token) {
-      return res.status(400).json({
-        error: "Falta token de tarjeta",
-      });
-    }
-
-    if (!paymentMethodId) {
-      return res.status(400).json({
-        error: "Falta paymentMethodId",
-      });
-    }
-
-    if (!payer?.email) {
-      return res.status(400).json({
-        error: "Falta correo del pagador",
-      });
-    }
-
-    const result = await payment.create({
+    const result = await preference.create({
       body: {
-        transaction_amount: MONTO_TRAMITE,
-        token,
-        description: `Licencia municipal de funcionamiento - ${
-          razonSocial || "Negocio"
-        }`,
-        installments: Number(installments) || 1,
-        payment_method_id: paymentMethodId,
-        issuer_id: issuerId || undefined,
-        payer: {
-          email: payer.email,
-          identification: payer.identification || {
-            type: "DNI",
-            number: "12345678",
+        items: [
+          {
+            id: "LICENCIA-MUNICIPAL",
+            title: `Licencia Municipal - ${razonSocial || "Negocio"}`,
+            quantity: 1,
+            currency_id: "PEN",
+            unit_price: MONTO_TRAMITE,
           },
+        ],
+
+        payer: {
+          email: "test_user_650000@testuser.com",
         },
+
         external_reference: `RUC-${ruc || "SIN-RUC"}-${Date.now()}`,
-      },
-      requestOptions: {
-        idempotencyKey: `tarjeta-${Date.now()}-${Math.random()
-          .toString(36)
-          .substring(2)}`,
+
+        back_urls: {
+          success: "https://web-municipal-1.onrender.com",
+          failure: "https://web-municipal-1.onrender.com",
+          pending: "https://web-municipal-1.onrender.com",
+        },
+
+        auto_return: "approved",
       },
     });
 
     res.json({
       id: result.id,
-      status: result.status,
-      status_detail: result.status_detail,
-      payment_method_id: result.payment_method_id,
-      transaction_amount: result.transaction_amount,
-      date_approved: result.date_approved,
+      init_point: result.init_point,
+      sandbox_init_point: result.sandbox_init_point,
     });
   } catch (error) {
-    console.error("ERROR PROCESANDO TARJETA:");
-    console.error(error.message);
-    console.error(error.cause || error);
+    console.error("ERROR CREANDO PREFERENCIA:");
+    console.error(error);
 
     res.status(500).json({
-      error: "No se pudo procesar el pago con tarjeta",
+      error: "No se pudo crear la preferencia de pago",
       detalle: error.message,
-      causa: error.cause || null,
     });
   }
 });
 
-/* VERIFICAR PAGO */
+/* =========================
+   VERIFICAR PAGO
+========================= */
+
 app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
   try {
     const { paymentId } = req.params;
-
-    if (!MP_ACCESS_TOKEN) {
-      return res.status(500).json({
-        error: "Falta MERCADO_PAGO_ACCESS_TOKEN en .env",
-      });
-    }
 
     const result = await payment.get({
       id: paymentId,
@@ -178,23 +144,21 @@ app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
       id: result.id,
       status: result.status,
       status_detail: result.status_detail,
-      payment_method_id: result.payment_method_id,
       transaction_amount: result.transaction_amount,
+      payment_method_id: result.payment_method_id,
       date_approved: result.date_approved,
     });
   } catch (error) {
     console.error("ERROR VERIFICANDO PAGO:");
-    console.error(error.message);
-    console.error(error.cause || error);
+    console.error(error);
 
     res.status(500).json({
       error: "No se pudo verificar el pago",
       detalle: error.message,
-      causa: error.cause || null,
     });
   }
 });
 
 app.listen(3000, () => {
-  console.log("Backend SUNAT y Mercado Pago corriendo en puerto 3000");
+  console.log("Servidor corriendo en puerto 3000");
 });

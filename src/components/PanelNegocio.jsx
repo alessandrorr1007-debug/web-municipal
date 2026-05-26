@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import jsPDF from "jspdf";
-import { initMercadoPago, CardPayment } from "@mercadopago/sdk-react";
 import { consultarRuc } from "../services/rucService";
-import { procesarPagoTarjeta } from "../services/pagoService";
+import { crearPreferenciaPago } from "../services/pagoService";
 import {
   guardarSolicitud,
   obtenerSolicitudes,
@@ -12,8 +10,6 @@ import { useAuth } from "../context/AuthContext";
 
 function PanelNegocio() {
   const { usuario } = useAuth();
-
-  const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || "";
   const MONTO_TRAMITE = 100;
 
   const [archivos, setArchivos] = useState([]);
@@ -40,13 +36,68 @@ function PanelNegocio() {
     condicionSunat: "",
   });
 
+  const confirmarPagoMercadoPago = (datosPago = {}) => {
+    setMetodoPago("Mercado Pago Checkout Pro TEST");
+    setEstadoPago("Confirmado");
+    setDetallePago((prev) => ({
+      ...(prev || {}),
+      ...datosPago,
+      status: "approved",
+      metodo: "checkout_pro_test",
+    }));
+  };
+
+  const registrarPagoDemo = () => {
+    const codigoOperacion = `DEMO-${Date.now().toString().slice(-8)}`;
+
+    setMetodoPago("Pago demo municipal");
+    setEstadoPago("Confirmado");
+    setDetallePago({
+      id: codigoOperacion,
+      paymentId: codigoOperacion,
+      preferenceId: codigoOperacion,
+      status: "approved",
+      metodo: "demo_municipal",
+    });
+
+    alert("Pago demo registrado correctamente. Ya puedes enviar la solicitud.");
+  };
+
   useEffect(() => {
-    if (MP_PUBLIC_KEY) {
-      initMercadoPago(MP_PUBLIC_KEY, {
-        locale: "es-PE",
-      });
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("status") || params.get("collection_status");
+    const paymentId = params.get("payment_id") || params.get("collection_id");
+    const preferenceId = params.get("preference_id");
+
+    if (status === "approved") {
+      const datosPago = {
+        id: paymentId || preferenceId || `MP-${Date.now().toString().slice(-8)}`,
+        paymentId: paymentId || "",
+        preferenceId: preferenceId || "",
+        status,
+      };
+
+      localStorage.setItem("mp_pago_estado", JSON.stringify(datosPago));
+      confirmarPagoMercadoPago(datosPago);
+      setPaso("pago");
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
     }
-  }, [MP_PUBLIC_KEY]);
+
+    const pagoGuardado = localStorage.getItem("mp_pago_estado");
+
+    if (pagoGuardado) {
+      try {
+        const datosPago = JSON.parse(pagoGuardado);
+
+        if (datosPago?.status === "approved") {
+          confirmarPagoMercadoPago(datosPago);
+        }
+      } catch (error) {
+        console.error("No se pudo leer el estado del pago.", error);
+      }
+    }
+  }, []);
 
   const cargarMisSolicitudes = async () => {
     try {
@@ -186,55 +237,51 @@ function PanelNegocio() {
     setPaso("pago");
   };
 
-  const procesarPagoIntegrado = async (datosPago) => {
+  const iniciarPagoMercadoPago = async () => {
     try {
       setProcesandoPago(true);
 
-      const data = await procesarPagoTarjeta({
-        token: datosPago.token,
-        issuerId: datosPago.issuer_id || datosPago.issuerId,
-        paymentMethodId:
-          datosPago.payment_method_id || datosPago.paymentMethodId,
-        transactionAmount: MONTO_TRAMITE,
-        installments: datosPago.installments || 1,
-        description: `Licencia municipal de funcionamiento - RUC ${form.ruc}`,
-        payer: datosPago.payer,
+      const data = await crearPreferenciaPago({
         ruc: form.ruc,
         razonSocial: form.razonSocial,
       });
 
-      setDetallePago(data);
-      setMetodoPago("Mercado Pago - Tarjeta");
+      const urlPago = data.sandbox_init_point || data.init_point;
 
-      if (data.status === "approved") {
-        setEstadoPago("Confirmado");
-        alert("Pago aprobado correctamente.");
-        return data;
+      if (!urlPago) {
+        throw new Error("Mercado Pago no devolvió un enlace de pago.");
       }
 
-      if (data.status === "pending" || data.status === "in_process") {
-        setEstadoPago("Pendiente de pago");
-        alert("El pago quedó pendiente de validación.");
-        return data;
-      }
+      const datosPendientes = {
+        id: data.id || "",
+        preferenceId: data.id || "",
+        initPoint: urlPago,
+        status: "pending",
+      };
 
-      setEstadoPago("Pago rechazado");
-      alert("El pago fue rechazado. Prueba con otra tarjeta.");
-      return data;
+      setMetodoPago("Mercado Pago Checkout Pro TEST");
+      setEstadoPago("Pendiente de pago");
+      setDetallePago(datosPendientes);
+
+      localStorage.removeItem("mp_pago_estado");
+      localStorage.setItem("mp_pago_pendiente", JSON.stringify(datosPendientes));
+
+      window.open(urlPago, "_blank", "noopener,noreferrer");
     } catch (error) {
       console.error(error);
-      alert(error.message || "No se pudo procesar el pago.");
-      throw error;
+      alert(error.message || "No se pudo iniciar el pago con Mercado Pago.");
     } finally {
       setProcesandoPago(false);
     }
   };
 
-  const marcarPagoDemo = () => {
-    setMetodoPago("Pago demo");
-    setEstadoPago("Confirmado");
-    setDetallePago({ status: "approved", metodo: "demo" });
-    alert("Pago marcado como confirmado para pruebas.");
+  const iniciarPagoDemo = () => {
+    setProcesandoPago(true);
+
+    setTimeout(() => {
+      registrarPagoDemo();
+      setProcesandoPago(false);
+    }, 600);
   };
 
   const enviarSolicitud = async () => {
@@ -310,6 +357,8 @@ function PanelNegocio() {
     setExpediente("");
     setDetallePago(null);
     setProcesandoPago(false);
+    localStorage.removeItem("mp_pago_estado");
+    localStorage.removeItem("mp_pago_pendiente");
 
     setForm({
       tipoTramite: "Nueva licencia",
@@ -402,6 +451,8 @@ function PanelNegocio() {
     setExpediente("");
     setDetallePago(null);
     setProcesandoPago(false);
+    localStorage.removeItem("mp_pago_estado");
+    localStorage.removeItem("mp_pago_pendiente");
 
     setForm({
       tipoTramite: "Renovación anual",
@@ -418,126 +469,84 @@ function PanelNegocio() {
   const descargarLicencia = (solicitud) => {
     const fechaAprobacion = obtenerFechaAprobacion(solicitud);
     const fechaExpiracion = obtenerFechaExpiracion(solicitud);
-    const estadoVisible = obtenerEstadoVisible(solicitud);
 
-    const doc = new jsPDF("p", "mm", "a4");
-
-    const margenX = 18;
-    let y = 18;
-
-    const agregarTextoMultilinea = (texto, x, yInicial, anchoMaximo, salto = 6) => {
-      const lineas = doc.splitTextToSize(String(texto || "No registrado"), anchoMaximo);
-      doc.text(lineas, x, yInicial);
-      return yInicial + lineas.length * salto;
-    };
-
-    const agregarDato = (label, valor) => {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.text(`${label}:`, margenX + 8, y);
-
-      doc.setFont("helvetica", "normal");
-      y = agregarTextoMultilinea(valor, margenX + 56, y, 105, 5) + 4;
-    };
-
-    doc.setFillColor(30, 64, 100);
-    doc.rect(0, 0, 210, 36, "F");
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("MUNICIPALIDAD DE TRUJILLO", 105, 16, { align: "center" });
-
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    doc.text("Sistema de Licencias de Funcionamiento", 105, 25, {
-      align: "center",
-    });
-
-    y = 48;
-
-    doc.setTextColor(15, 23, 42);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(17);
-    doc.text("LICENCIA MUNICIPAL DE FUNCIONAMIENTO", 105, y, {
-      align: "center",
-    });
-
-    y += 8;
-
-    doc.setDrawColor(37, 99, 235);
-    doc.setLineWidth(0.6);
-    doc.line(35, y, 175, y);
-
-    y += 14;
-
-    doc.setFillColor(239, 246, 255);
-    doc.setDrawColor(147, 197, 253);
-    doc.roundedRect(margenX, y, 174, 100, 4, 4, "FD");
-
-    y += 12;
-
-    agregarDato("N° de licencia", solicitud.numeroLicencia || solicitud.id);
-    agregarDato("Expediente", solicitud.id);
-    agregarDato("Tipo de trámite", solicitud.tipoTramite || "Nueva licencia");
-    agregarDato("RUC", solicitud.ruc);
-    agregarDato("Razón social", solicitud.razonSocial);
-    agregarDato("Nombre comercial", solicitud.nombreNegocio);
-    agregarDato("Dirección", solicitud.direccion);
-    agregarDato("Giro comercial", solicitud.giro);
-
-    y += 8;
-
-    doc.setFillColor(220, 252, 231);
-    doc.setDrawColor(22, 163, 74);
-    doc.roundedRect(margenX, y, 174, 18, 4, 4, "FD");
-
-    doc.setTextColor(22, 101, 52);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(estadoVisible.toUpperCase(), 105, y + 12, { align: "center" });
-
-    y += 32;
-
-    doc.setTextColor(15, 23, 42);
-    doc.setFillColor(255, 251, 235);
-    doc.setDrawColor(245, 158, 11);
-    doc.roundedRect(margenX, y, 174, 40, 4, 4, "FD");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("Vigencia de la licencia", margenX + 8, y + 10);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Fecha de emisión: ${formatearFecha(fechaAprobacion)}`, margenX + 8, y + 20);
-    doc.text(`Fecha de expiración: ${formatearFecha(fechaExpiracion)}`, margenX + 8, y + 28);
-
-    const textoVigencia =
-      "Esta licencia tiene una duración de 1 año y deberá renovarse antes de la fecha de vencimiento.";
-    doc.text(doc.splitTextToSize(textoVigencia, 155), margenX + 8, y + 36);
-
-    y += 58;
-
-    doc.setDrawColor(17, 24, 39);
-    doc.line(65, y, 145, y);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text("Funcionario Municipal Responsable", 105, y + 7, {
-      align: "center",
-    });
-
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text(
-      "Documento generado automáticamente por el sistema municipal.",
-      105,
-      282,
-      { align: "center" }
+    const textoQr = encodeURIComponent(
+      `LICENCIA MUNICIPAL | Expediente: ${solicitud.id} | RUC: ${solicitud.ruc} | Estado: ${obtenerEstadoVisible(solicitud)} | Vence: ${formatearFecha(fechaExpiracion)}`
     );
 
-    doc.save(`Licencia_${solicitud.ruc}.pdf`);
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${textoQr}`;
+
+    const contenido = `
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title>Licencia Municipal</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; background: #f3f4f6; color: #111827; }
+            .licencia { max-width: 900px; margin: auto; background: white; border: 5px solid #111827; border-radius: 18px; padding: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+            .header { text-align: center; margin-bottom: 30px; }
+            .header h1 { margin: 0; font-size: 34px; color: #111827; }
+            .header h2 { margin-top: 10px; font-size: 22px; color: #2563eb; }
+            .datos { margin-top: 30px; }
+            .dato { margin: 14px 0; font-size: 17px; line-height: 1.5; }
+            .dato strong { color: #111827; }
+            .vigencia { margin-top: 30px; padding: 18px; background: #eff6ff; border: 2px solid #2563eb; border-radius: 12px; }
+            .vigencia h3 { margin-top: 0; color: #1d4ed8; }
+            .estado { margin-top: 25px; padding: 18px; border-radius: 12px; text-align: center; background: #dcfce7; color: #166534; font-size: 22px; font-weight: bold; border: 2px solid #16a34a; }
+            .qr { margin-top: 30px; text-align: center; }
+            .qr img { width: 130px; height: 130px; }
+            .firma { margin-top: 80px; text-align: center; }
+            .linea { width: 280px; margin: auto; border-top: 2px solid #111827; margin-bottom: 10px; }
+            .footer { margin-top: 40px; text-align: center; color: #6b7280; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="licencia">
+            <div class="header">
+              <h1>MUNICIPALIDAD</h1>
+              <h2>LICENCIA MUNICIPAL DE FUNCIONAMIENTO</h2>
+            </div>
+            <div class="datos">
+              <p class="dato"><strong>Número de licencia:</strong> ${solicitud.numeroLicencia || solicitud.id}</p>
+              <p class="dato"><strong>Número de expediente:</strong> ${solicitud.id}</p>
+              <p class="dato"><strong>Tipo de trámite:</strong> ${solicitud.tipoTramite || "Nueva licencia"}</p>
+              <p class="dato"><strong>RUC:</strong> ${solicitud.ruc}</p>
+              <p class="dato"><strong>Razón social:</strong> ${solicitud.razonSocial}</p>
+              <p class="dato"><strong>Nombre comercial:</strong> ${solicitud.nombreNegocio}</p>
+              <p class="dato"><strong>Dirección:</strong> ${solicitud.direccion}</p>
+              <p class="dato"><strong>Giro comercial:</strong> ${solicitud.giro}</p>
+              <p class="dato"><strong>Fecha de aprobación:</strong> ${formatearFecha(fechaAprobacion)}</p>
+            </div>
+            <div class="vigencia">
+              <h3>Vigencia de la licencia</h3>
+              <p class="dato"><strong>Fecha de emisión:</strong> ${formatearFecha(fechaAprobacion)}</p>
+              <p class="dato"><strong>Fecha de expiración:</strong> ${formatearFecha(fechaExpiracion)}</p>
+              <p>Esta licencia tiene una duración de 1 año y deberá renovarse antes de la fecha de vencimiento.</p>
+            </div>
+            <div class="estado">${obtenerEstadoVisible(solicitud).toUpperCase()}</div>
+            <div class="qr">
+              <p><strong>Código QR de verificación</strong></p>
+              <img src="${qrUrl}" alt="QR de verificación" />
+            </div>
+            <div class="firma">
+              <div class="linea"></div>
+              <p>Funcionario Municipal Responsable</p>
+            </div>
+            <div class="footer">Documento generado automáticamente por el sistema municipal.</div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([contenido], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.download = `Licencia_${solicitud.ruc}.html`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -841,7 +850,7 @@ function PanelNegocio() {
           <div className="section-header">
             <div>
               <h2>Pago del trámite</h2>
-              <p>Realiza el pago oficial o usa el modo demo para probar el flujo.</p>
+              <p>Elige una opción de pago para continuar con tu solicitud municipal.</p>
             </div>
           </div>
 
@@ -853,68 +862,179 @@ function PanelNegocio() {
               <p><strong>Razón social:</strong> {form.razonSocial}</p>
               <p><strong>Documentos PDF:</strong> {archivos.length}</p>
               <p><strong>Concepto:</strong> Licencia municipal de funcionamiento</p>
+
               <div className="monto-box">
                 <span>Total a pagar</span>
                 <strong>S/{MONTO_TRAMITE.toFixed(2)}</strong>
               </div>
+
               <span className={`badge ${estadoPago === "Confirmado" ? "ok" : "warning"}`}>
                 {estadoPago}
               </span>
+
+              {detallePago?.id && (
+                <p className="text-muted">
+                  <strong>Operación:</strong> {detallePago.id}
+                </p>
+              )}
             </aside>
 
             <div className="detalle-pago detalle-pago-modern">
-              {!MP_PUBLIC_KEY ? (
-                <div className="voucher-box">
-                  <h3>Falta configurar Mercado Pago</h3>
-                  <p>
-                    Agrega VITE_MP_PUBLIC_KEY en el archivo .env del frontend para mostrar el formulario de pago.
-                  </p>
+              {estadoPago !== "Confirmado" ? (
+                <div
+                  className="voucher-box"
+                  style={{
+                    padding: "28px",
+                    borderRadius: "18px",
+                    border: "1px solid #dbeafe",
+                    background:
+                      "linear-gradient(135deg, #ffffff 0%, #f8fbff 55%, #ecfdf5 100%)",
+                    boxShadow: "0 14px 35px rgba(15, 23, 42, 0.08)",
+                  }}
+                >
+                  <div style={{ marginBottom: "22px" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "7px 12px",
+                        borderRadius: "999px",
+                        background: "#e0f2fe",
+                        color: "#075985",
+                        fontWeight: "700",
+                        fontSize: "13px",
+                        marginBottom: "12px",
+                      }}
+                    >
+                      Pago del expediente
+                    </span>
+
+                    <h3 style={{ margin: "0 0 8px", color: "#0f172a" }}>
+                      Selecciona cómo deseas pagar
+                    </h3>
+
+                    <p style={{ margin: 0, color: "#475569", lineHeight: "1.6" }}>
+                      Puedes intentar el pago TEST oficial con Mercado Pago o usar
+                      el modo demo municipal para continuar la evaluación del flujo.
+                    </p>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                      gap: "18px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        border: "1px solid #bbf7d0",
+                        background: "#f0fdf4",
+                        borderRadius: "16px",
+                        padding: "20px",
+                      }}
+                    >
+                      <div style={{ fontSize: "28px", marginBottom: "8px" }}>💳</div>
+
+                      <h4 style={{ margin: "0 0 8px", color: "#14532d" }}>
+                        Pago TEST con Mercado Pago
+                      </h4>
+
+                      <p style={{ color: "#475569", lineHeight: "1.55" }}>
+                        Abre Checkout Pro oficial en ambiente de prueba. No cobra
+                        dinero real, pero usa la pasarela oficial.
+                      </p>
+
+                      <button
+                        type="button"
+                        className="btn-pago btn-full"
+                        onClick={iniciarPagoMercadoPago}
+                        disabled={procesandoPago}
+                      >
+                        {procesandoPago
+                          ? "Generando enlace..."
+                          : "Pagar con Mercado Pago TEST"}
+                      </button>
+
+                      {detallePago?.initPoint && (
+                        <a
+                          href={detallePago.initPoint}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: "inline-block",
+                            marginTop: "12px",
+                            fontWeight: "700",
+                          }}
+                        >
+                          Abrir enlace de pago nuevamente
+                        </a>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: "1px solid #fed7aa",
+                        background: "#fff7ed",
+                        borderRadius: "16px",
+                        padding: "20px",
+                      }}
+                    >
+                      <div style={{ fontSize: "28px", marginBottom: "8px" }}>🧾</div>
+
+                      <h4 style={{ margin: "0 0 8px", color: "#7c2d12" }}>
+                        Pago demo municipal
+                      </h4>
+
+                      <p style={{ color: "#475569", lineHeight: "1.55" }}>
+                        Registra un comprobante demo para continuar el circuito:
+                        solicitud, inspección, decisión y licencia.
+                      </p>
+
+                      <button
+                        type="button"
+                        className="btn-secundario btn-full"
+                        onClick={iniciarPagoDemo}
+                        disabled={procesandoPago}
+                      >
+                        {procesandoPago ? "Registrando..." : "Confirmar pago demo"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {estadoPago === "Pendiente de pago" && (
+                    <div
+                      style={{
+                        marginTop: "18px",
+                        padding: "14px 16px",
+                        borderRadius: "14px",
+                        background: "#eff6ff",
+                        color: "#1e3a8a",
+                        border: "1px solid #bfdbfe",
+                      }}
+                    >
+                      Esperando confirmación de Mercado Pago. Si el entorno TEST
+                      no finaliza el pago, puedes usar el pago demo municipal para
+                      continuar la revisión del proyecto.
+                    </div>
+                  )}
                 </div>
-              ) : estadoPago !== "Confirmado" ? (
-                <>
-                  <h3>Pago con tarjeta dentro de la web</h3>
-                  <p>Completa los datos de pago sin salir del sistema municipal.</p>
-
-                  <CardPayment
-                    initialization={{ amount: MONTO_TRAMITE }}
-                    customization={{
-                      paymentMethods: {
-                        minInstallments: 1,
-                        maxInstallments: 1,
-                      },
-                    }}
-                    onSubmit={procesarPagoIntegrado}
-                    onReady={() => console.log("Formulario de pago listo")}
-                    onError={(error) => {
-                      console.error("ERROR MERCADO PAGO:", error);
-
-                      if (error?.message) {
-                        alert(error.message);
-                      } else {
-                        alert(JSON.stringify(error));
-                      }
-                    }}
-                  />
-                </>
               ) : (
                 <div className="voucher-box success-voucher">
-                  <h3>Pago confirmado</h3>
-                  <p>El comprobante del pago queda registrado automáticamente.</p>
-                  {detallePago?.id && <p><strong>ID de pago:</strong> {detallePago.id}</p>}
+                  <h3>Pago registrado</h3>
+                  <p>El comprobante quedó asociado a esta solicitud.</p>
+
+                  {detallePago?.id && (
+                    <p>
+                      <strong>Código de operación:</strong> {detallePago.id}
+                    </p>
+                  )}
+
+                  <p>
+                    <strong>Método:</strong> {metodoPago}
+                  </p>
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="payment-actions">
-            <button
-              type="button"
-              className="btn-secundario"
-              onClick={marcarPagoDemo}
-              disabled={procesandoPago}
-            >
-              Marcar pago como realizado (demo)
-            </button>
           </div>
 
           <div className="acciones-pago acciones-pago-modern">
