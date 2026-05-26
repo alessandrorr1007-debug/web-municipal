@@ -886,8 +886,13 @@ function PanelNegocio() {
                     onSubmit={procesarPagoIntegrado}
                     onReady={() => console.log("Formulario de pago listo")}
                     onError={(error) => {
-                      console.error(error);
-                      alert("Ocurrió un error cargando el formulario de pago. Revisa la consola.");
+                      console.error("ERROR MERCADO PAGO:", error);
+
+                      if (error?.message) {
+                        alert(error.message);
+                      } else {
+                        alert(JSON.stringify(error));
+                      }
                     }}
                   />
                 </>
