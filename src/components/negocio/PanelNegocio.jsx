@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { initMercadoPago } from "@mercadopago/sdk-react";
 import { consultarRuc } from "../../services/rucService";
 import { procesarPagoTarjeta } from "../../services/pagoService";
 import {
@@ -43,14 +42,6 @@ function PanelNegocio() {
     estadoSunat: "",
     condicionSunat: "",
   });
-
-  useEffect(() => {
-    if (MP_PUBLIC_KEY) {
-      initMercadoPago(MP_PUBLIC_KEY, {
-        locale: "es-PE",
-      });
-    }
-  }, [MP_PUBLIC_KEY]);
 
   const cargarMisSolicitudes = async () => {
     try {
@@ -192,13 +183,8 @@ function PanelNegocio() {
   };
 
   const procesarPagoIntegrado = async (datosPago) => {
-    console.log("DATOS PAGO MERCADO PAGO:", datosPago);
-
     try {
       setProcesandoPago(true);
-
-      const payerEmail =
-        datosPago?.payer?.email || "test_user_123456@testuser.com";
 
       const data = await procesarPagoTarjeta({
         token: datosPago.token,
@@ -207,13 +193,14 @@ function PanelNegocio() {
           datosPago.payment_method_id || datosPago.paymentMethodId,
         transactionAmount: Number(MONTO_TRAMITE),
         installments: Number(datosPago.installments) || 1,
-        description: `Licencia municipal de funcionamiento - RUC ${form.ruc}`,
 
         payer: {
-          email: payerEmail,
+          email:
+            datosPago?.payer?.email || "test_user_650000@testuser.com",
+
           identification: {
             type: "DNI",
-            number: "123456789",
+            number: "12345678",
           },
         },
 
@@ -221,32 +208,19 @@ function PanelNegocio() {
         razonSocial: form.razonSocial,
       });
 
-      console.log("RESPUESTA PAGO:", data);
-
       setDetallePago(data);
 
       if (data.status === "approved") {
         setMetodoPago("Mercado Pago - Tarjeta");
         setEstadoPago("Confirmado");
         alert("Pago aprobado correctamente.");
-        return data;
+        return;
       }
 
-      if (data.status === "pending" || data.status === "in_process") {
-        setMetodoPago("Mercado Pago - Tarjeta");
-        setEstadoPago("Pendiente de pago");
-        alert("El pago quedó pendiente de validación.");
-        return data;
-      }
-
-      setMetodoPago("Mercado Pago - Tarjeta");
-      setEstadoPago("Pago rechazado");
-      alert("El pago fue rechazado. Prueba con otra tarjeta.");
-      return data;
+      alert("El pago no fue aprobado.");
     } catch (error) {
-      console.error("ERROR PROCESANDO PAGO:", error);
-      alert(error?.message || "No se pudo procesar el pago.");
-      throw error;
+      console.error(error);
+      alert("No se pudo procesar el pago.");
     } finally {
       setProcesandoPago(false);
     }
@@ -255,26 +229,16 @@ function PanelNegocio() {
   const marcarPagoDemo = () => {
     setMetodoPago("Pago demo");
     setEstadoPago("Confirmado");
+
     setDetallePago({
       status: "approved",
       metodo: "demo",
-      transaction_amount: MONTO_TRAMITE,
     });
 
-    alert("Pago marcado como confirmado para pruebas.");
+    alert("Pago demo confirmado.");
   };
 
   const enviarSolicitud = async () => {
-    if (estadoPago !== "Confirmado") {
-      alert("Debe realizar y confirmar el pago antes de enviar la solicitud.");
-      return;
-    }
-
-    if (archivos.length === 0) {
-      alert("Debe subir al menos un PDF antes de enviar la solicitud.");
-      return;
-    }
-
     try {
       setGuardando(true);
 
@@ -293,31 +257,10 @@ function PanelNegocio() {
         giro: form.giro,
         estadoSunat: form.estadoSunat,
         condicionSunat: form.condicionSunat,
-
         archivosPdf: pdfsSubidos,
-        archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
-        archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
-
         metodoPago,
         estadoPago,
-        comprobantePago:
-          estadoPago === "Confirmado"
-            ? `Pago confirmado mediante ${metodoPago} por S/${MONTO_TRAMITE}`
-            : `Pago generado mediante ${metodoPago}`,
-
         estado: "En revisión",
-        inspeccion: "Sin inspección",
-        recomendacionInspector: "",
-        observacionInspector: "",
-        evidenciasInspector: [],
-        decisionFuncionario: "",
-        observacionFuncionario: "",
-        numeroLicencia: "",
-        fechaAprobacion: "",
-        fechaExpiracionLicencia: "",
-        pagoId: detallePago?.id || "",
-        pagoEstadoDetalle: detallePago?.status_detail || "",
-        montoPago: MONTO_TRAMITE,
       });
 
       setExpediente(nueva.id);
@@ -325,104 +268,19 @@ function PanelNegocio() {
       setPaso("confirmacion");
     } catch (error) {
       console.error(error);
-      alert(error.message || "No se pudo guardar la solicitud.");
+      alert("No se pudo guardar la solicitud.");
     } finally {
       setGuardando(false);
     }
   };
 
-  const nuevaSolicitud = () => {
-    setPaso("solicitud");
-    setMetodoPago("");
-    setEstadoPago("Sin pago");
-    setArchivos([]);
-    setRucValidado(false);
-    setErrorRuc("");
-    setExpediente("");
-    setDetallePago(null);
-    setProcesandoPago(false);
-
-    setForm({
-      tipoTramite: "Nueva licencia",
-      ruc: "",
-      nombreNegocio: "",
-      razonSocial: "",
-      direccion: "",
-      giro: "",
-      estadoSunat: "",
-      condicionSunat: "",
-    });
-  };
-
-  const renovarLicencia = (solicitud) => {
-    setPaso("solicitud");
-    setMetodoPago("");
-    setEstadoPago("Sin pago");
-    setArchivos([]);
-    setRucValidado(true);
-    setErrorRuc("");
-    setExpediente("");
-    setDetallePago(null);
-    setProcesandoPago(false);
-
-    setForm({
-      tipoTramite: "Renovación anual",
-      ruc: solicitud.ruc || "",
-      nombreNegocio: solicitud.nombreNegocio || "",
-      razonSocial: solicitud.razonSocial || "",
-      direccion: solicitud.direccion || "",
-      giro: solicitud.giro || "",
-      estadoSunat: solicitud.estadoSunat || "",
-      condicionSunat: solicitud.condicionSunat || "",
-    });
-  };
-
   return (
     <div className="panel panel-negocio">
-      <div className="panel-hero">
-        <div>
-          <span className="eyebrow">Portal del solicitante</span>
-          <h1>Licencia de funcionamiento</h1>
-          <p>
-            Registra tu solicitud, realiza el pago y consulta el avance de tu
-            expediente.
-          </p>
-        </div>
-
-        <div className="hero-card">
-          <span>Solicitante</span>
-          <strong>{usuario?.nombre || "Usuario negocio"}</strong>
-          <small>{usuario?.correo}</small>
-        </div>
-      </div>
-
-      <div className="tabs-panel">
-        <button
-          type="button"
-          className={paso === "misSolicitudes" ? "tab-active" : ""}
-          onClick={() => {
-            cargarMisSolicitudes();
-            setPaso("misSolicitudes");
-          }}
-        >
-          Mis solicitudes
-        </button>
-
-        <button
-          type="button"
-          className={paso === "solicitud" ? "tab-active" : ""}
-          onClick={nuevaSolicitud}
-        >
-          Nueva solicitud
-        </button>
-      </div>
-
       {paso === "misSolicitudes" && (
         <TablaMisSolicitudes
           misSolicitudes={misSolicitudes}
-          cargarMisSolicitudes={cargarMisSolicitudes}
-          nuevaSolicitud={nuevaSolicitud}
-          renovarLicencia={renovarLicencia}
+          nuevaSolicitud={() => setPaso("solicitud")}
+          renovarLicencia={() => setPaso("solicitud")}
         />
       )}
 
