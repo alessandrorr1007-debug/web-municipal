@@ -21,6 +21,7 @@ const MONTO_TRAMITE = 100;
 
 console.log("TOKEN DECOLECTA:", TOKEN_DECOLECTA ? "Existe" : "No existe");
 console.log("TOKEN MERCADO PAGO:", MP_ACCESS_TOKEN ? "Existe" : "No existe");
+console.log("MONTO TRÁMITE:", `S/${MONTO_TRAMITE}.00`);
 
 const mpClient = new MercadoPagoConfig({
   accessToken: MP_ACCESS_TOKEN || "",
@@ -30,13 +31,12 @@ const payment = new Payment(mpClient);
 
 app.get("/", (req, res) => {
   res.json({
-    mensaje: "Backend SUNAT y pago con tarjeta activo",
+    mensaje: "Backend SUNAT y Mercado Pago activo",
+    monto: MONTO_TRAMITE,
   });
 });
 
-/* =========================
-   API SUNAT
-========================= */
+/* API SUNAT */
 app.get("/api/ruc/:numero", async (req, res) => {
   try {
     const { numero } = req.params;
@@ -44,6 +44,12 @@ app.get("/api/ruc/:numero", async (req, res) => {
     if (!TOKEN_DECOLECTA) {
       return res.status(500).json({
         error: "Falta DECOLECTA_TOKEN en .env",
+      });
+    }
+
+    if (!numero || numero.length !== 11) {
+      return res.status(400).json({
+        error: "El RUC debe tener 11 dígitos.",
       });
     }
 
@@ -69,9 +75,7 @@ app.get("/api/ruc/:numero", async (req, res) => {
   }
 });
 
-/* =========================
-   PAGO CON TARJETA
-========================= */
+/* PAGO CON TARJETA */
 app.post("/api/pagos/procesar-tarjeta", async (req, res) => {
   try {
     if (!MP_ACCESS_TOKEN) {
@@ -111,28 +115,22 @@ app.post("/api/pagos/procesar-tarjeta", async (req, res) => {
     const result = await payment.create({
       body: {
         transaction_amount: MONTO_TRAMITE,
-
         token,
-
-        description: `Licencia municipal - ${razonSocial || "Negocio"}`,
-
+        description: `Licencia municipal de funcionamiento - ${
+          razonSocial || "Negocio"
+        }`,
         installments: Number(installments) || 1,
-
         payment_method_id: paymentMethodId,
-
         issuer_id: issuerId || undefined,
-
         payer: {
           email: payer.email,
           identification: payer.identification || {
             type: "DNI",
-            number: "123456789",
+            number: "12345678",
           },
         },
-
         external_reference: `RUC-${ruc || "SIN-RUC"}-${Date.now()}`,
       },
-
       requestOptions: {
         idempotencyKey: `tarjeta-${Date.now()}-${Math.random()
           .toString(36)
@@ -161,12 +159,16 @@ app.post("/api/pagos/procesar-tarjeta", async (req, res) => {
   }
 });
 
-/* =========================
-   VERIFICAR PAGO
-========================= */
+/* VERIFICAR PAGO */
 app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
   try {
     const { paymentId } = req.params;
+
+    if (!MP_ACCESS_TOKEN) {
+      return res.status(500).json({
+        error: "Falta MERCADO_PAGO_ACCESS_TOKEN en .env",
+      });
+    }
 
     const result = await payment.get({
       id: paymentId,
@@ -183,10 +185,12 @@ app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
   } catch (error) {
     console.error("ERROR VERIFICANDO PAGO:");
     console.error(error.message);
+    console.error(error.cause || error);
 
     res.status(500).json({
       error: "No se pudo verificar el pago",
       detalle: error.message,
+      causa: error.cause || null,
     });
   }
 });

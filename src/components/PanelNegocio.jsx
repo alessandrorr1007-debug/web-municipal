@@ -13,7 +13,7 @@ function PanelNegocio() {
   const { usuario } = useAuth();
 
   const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || "";
-  const MONTO_TRAMITE = 1;
+  const MONTO_TRAMITE = 100;
 
   const [archivos, setArchivos] = useState([]);
   const [buscando, setBuscando] = useState(false);
@@ -194,7 +194,7 @@ function PanelNegocio() {
         issuerId: datosPago.issuer_id || datosPago.issuerId,
         paymentMethodId:
           datosPago.payment_method_id || datosPago.paymentMethodId,
-        transactionAmount: 1,
+        transactionAmount: 100,
         installments: datosPago.installments || 1,
         description: `Licencia municipal de funcionamiento - RUC ${form.ruc}`,
         payer: datosPago.payer,
