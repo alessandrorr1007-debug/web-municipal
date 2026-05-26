@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import jsPDF from "jspdf";
 import { initMercadoPago, CardPayment } from "@mercadopago/sdk-react";
 import { consultarRuc } from "../services/rucService";
 import { procesarPagoTarjeta } from "../services/pagoService";
@@ -417,84 +418,126 @@ function PanelNegocio() {
   const descargarLicencia = (solicitud) => {
     const fechaAprobacion = obtenerFechaAprobacion(solicitud);
     const fechaExpiracion = obtenerFechaExpiracion(solicitud);
+    const estadoVisible = obtenerEstadoVisible(solicitud);
 
-    const textoQr = encodeURIComponent(
-      `LICENCIA MUNICIPAL | Expediente: ${solicitud.id} | RUC: ${solicitud.ruc} | Estado: ${obtenerEstadoVisible(solicitud)} | Vence: ${formatearFecha(fechaExpiracion)}`
+    const doc = new jsPDF("p", "mm", "a4");
+
+    const margenX = 18;
+    let y = 18;
+
+    const agregarTextoMultilinea = (texto, x, yInicial, anchoMaximo, salto = 6) => {
+      const lineas = doc.splitTextToSize(String(texto || "No registrado"), anchoMaximo);
+      doc.text(lineas, x, yInicial);
+      return yInicial + lineas.length * salto;
+    };
+
+    const agregarDato = (label, valor) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`${label}:`, margenX + 8, y);
+
+      doc.setFont("helvetica", "normal");
+      y = agregarTextoMultilinea(valor, margenX + 56, y, 105, 5) + 4;
+    };
+
+    doc.setFillColor(30, 64, 100);
+    doc.rect(0, 0, 210, 36, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("MUNICIPALIDAD DE TRUJILLO", 105, 16, { align: "center" });
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.text("Sistema de Licencias de Funcionamiento", 105, 25, {
+      align: "center",
+    });
+
+    y = 48;
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(17);
+    doc.text("LICENCIA MUNICIPAL DE FUNCIONAMIENTO", 105, y, {
+      align: "center",
+    });
+
+    y += 8;
+
+    doc.setDrawColor(37, 99, 235);
+    doc.setLineWidth(0.6);
+    doc.line(35, y, 175, y);
+
+    y += 14;
+
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(147, 197, 253);
+    doc.roundedRect(margenX, y, 174, 100, 4, 4, "FD");
+
+    y += 12;
+
+    agregarDato("N° de licencia", solicitud.numeroLicencia || solicitud.id);
+    agregarDato("Expediente", solicitud.id);
+    agregarDato("Tipo de trámite", solicitud.tipoTramite || "Nueva licencia");
+    agregarDato("RUC", solicitud.ruc);
+    agregarDato("Razón social", solicitud.razonSocial);
+    agregarDato("Nombre comercial", solicitud.nombreNegocio);
+    agregarDato("Dirección", solicitud.direccion);
+    agregarDato("Giro comercial", solicitud.giro);
+
+    y += 8;
+
+    doc.setFillColor(220, 252, 231);
+    doc.setDrawColor(22, 163, 74);
+    doc.roundedRect(margenX, y, 174, 18, 4, 4, "FD");
+
+    doc.setTextColor(22, 101, 52);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(estadoVisible.toUpperCase(), 105, y + 12, { align: "center" });
+
+    y += 32;
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFillColor(255, 251, 235);
+    doc.setDrawColor(245, 158, 11);
+    doc.roundedRect(margenX, y, 174, 40, 4, 4, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Vigencia de la licencia", margenX + 8, y + 10);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Fecha de emisión: ${formatearFecha(fechaAprobacion)}`, margenX + 8, y + 20);
+    doc.text(`Fecha de expiración: ${formatearFecha(fechaExpiracion)}`, margenX + 8, y + 28);
+
+    const textoVigencia =
+      "Esta licencia tiene una duración de 1 año y deberá renovarse antes de la fecha de vencimiento.";
+    doc.text(doc.splitTextToSize(textoVigencia, 155), margenX + 8, y + 36);
+
+    y += 58;
+
+    doc.setDrawColor(17, 24, 39);
+    doc.line(65, y, 145, y);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Funcionario Municipal Responsable", 105, y + 7, {
+      align: "center",
+    });
+
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      "Documento generado automáticamente por el sistema municipal.",
+      105,
+      282,
+      { align: "center" }
     );
 
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${textoQr}`;
-
-    const contenido = `
-      <html>
-        <head>
-          <meta charset="UTF-8" />
-          <title>Licencia Municipal</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 40px; background: #f3f4f6; color: #111827; }
-            .licencia { max-width: 900px; margin: auto; background: white; border: 5px solid #111827; border-radius: 18px; padding: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
-            .header { text-align: center; margin-bottom: 30px; }
-            .header h1 { margin: 0; font-size: 34px; color: #111827; }
-            .header h2 { margin-top: 10px; font-size: 22px; color: #2563eb; }
-            .datos { margin-top: 30px; }
-            .dato { margin: 14px 0; font-size: 17px; line-height: 1.5; }
-            .dato strong { color: #111827; }
-            .vigencia { margin-top: 30px; padding: 18px; background: #eff6ff; border: 2px solid #2563eb; border-radius: 12px; }
-            .vigencia h3 { margin-top: 0; color: #1d4ed8; }
-            .estado { margin-top: 25px; padding: 18px; border-radius: 12px; text-align: center; background: #dcfce7; color: #166534; font-size: 22px; font-weight: bold; border: 2px solid #16a34a; }
-            .qr { margin-top: 30px; text-align: center; }
-            .qr img { width: 130px; height: 130px; }
-            .firma { margin-top: 80px; text-align: center; }
-            .linea { width: 280px; margin: auto; border-top: 2px solid #111827; margin-bottom: 10px; }
-            .footer { margin-top: 40px; text-align: center; color: #6b7280; font-size: 14px; }
-          </style>
-        </head>
-        <body>
-          <div class="licencia">
-            <div class="header">
-              <h1>MUNICIPALIDAD</h1>
-              <h2>LICENCIA MUNICIPAL DE FUNCIONAMIENTO</h2>
-            </div>
-            <div class="datos">
-              <p class="dato"><strong>Número de licencia:</strong> ${solicitud.numeroLicencia || solicitud.id}</p>
-              <p class="dato"><strong>Número de expediente:</strong> ${solicitud.id}</p>
-              <p class="dato"><strong>Tipo de trámite:</strong> ${solicitud.tipoTramite || "Nueva licencia"}</p>
-              <p class="dato"><strong>RUC:</strong> ${solicitud.ruc}</p>
-              <p class="dato"><strong>Razón social:</strong> ${solicitud.razonSocial}</p>
-              <p class="dato"><strong>Nombre comercial:</strong> ${solicitud.nombreNegocio}</p>
-              <p class="dato"><strong>Dirección:</strong> ${solicitud.direccion}</p>
-              <p class="dato"><strong>Giro comercial:</strong> ${solicitud.giro}</p>
-              <p class="dato"><strong>Fecha de aprobación:</strong> ${formatearFecha(fechaAprobacion)}</p>
-            </div>
-            <div class="vigencia">
-              <h3>Vigencia de la licencia</h3>
-              <p class="dato"><strong>Fecha de emisión:</strong> ${formatearFecha(fechaAprobacion)}</p>
-              <p class="dato"><strong>Fecha de expiración:</strong> ${formatearFecha(fechaExpiracion)}</p>
-              <p>Esta licencia tiene una duración de 1 año y deberá renovarse antes de la fecha de vencimiento.</p>
-            </div>
-            <div class="estado">${obtenerEstadoVisible(solicitud).toUpperCase()}</div>
-            <div class="qr">
-              <p><strong>Código QR de verificación</strong></p>
-              <img src="${qrUrl}" alt="QR de verificación" />
-            </div>
-            <div class="firma">
-              <div class="linea"></div>
-              <p>Funcionario Municipal Responsable</p>
-            </div>
-            <div class="footer">Documento generado automáticamente por el sistema municipal.</div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    const blob = new Blob([contenido], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const enlace = document.createElement("a");
-    enlace.href = url;
-    enlace.download = `Licencia_${solicitud.ruc}.html`;
-    document.body.appendChild(enlace);
-    enlace.click();
-    document.body.removeChild(enlace);
-    URL.revokeObjectURL(url);
+    doc.save(`Licencia_${solicitud.ruc}.pdf`);
   };
 
   return (

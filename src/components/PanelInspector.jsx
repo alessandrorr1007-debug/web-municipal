@@ -111,8 +111,8 @@ function PanelInspector() {
       return [];
     }
 
-    if (actuales.length + nuevas.length > 5) {
-      alert("Solo puedes subir como máximo 5 fotos de evidencia.");
+    if (actuales.length + nuevas.length > 2) {
+      alert("Solo puedes subir como máximo 2 fotos de evidencia.");
       return [];
     }
 
@@ -125,10 +125,10 @@ function PanelInspector() {
       return [];
     }
 
-    const imagenMuyPesada = nuevas.find((file) => file.size > 5 * 1024 * 1024);
+    const imagenMuyPesada = nuevas.find((file) => file.size > 500 * 1024);
 
     if (imagenMuyPesada) {
-      alert("Cada imagen debe pesar como máximo 5 MB.");
+      alert("Cada imagen debe pesar como máximo 500 KB.");
       return [];
     }
 
@@ -277,7 +277,7 @@ function PanelInspector() {
           <span className="eyebrow">Área de inspección municipal</span>
           <h1>Panel Inspector</h1>
           <p>
-            Revisa los documentos del negocio, sube hasta 5 evidencias
+            Revisa los documentos del negocio, sube hasta 2 evidencias
             fotográficas y envía tu recomendación al funcionario.
           </p>
         </div>
@@ -409,7 +409,7 @@ function PanelInspector() {
                       <div className="empty-icon">🖼️</div>
                       <p>Subir evidencias fotográficas</p>
                       <span>
-                        Máximo 5 fotos. Puedes arrastrarlas aquí o seleccionarlas.
+                        Máximo 2 fotos de 500 KB. Puedes arrastrarlas aquí o seleccionarlas.
                       </span>
 
                       <label className="file-label">
