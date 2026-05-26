@@ -11,9 +11,7 @@ initMercadoPago(import.meta.env.VITE_MP_PUBLIC_KEY, {
 });
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
-  </React.StrictMode>
+  <AuthProvider>
+    <App />
+  </AuthProvider>
 );
