@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import {
   obtenerSolicitudes,
   actualizarSolicitud,
-} from "../../services/solicitudService";
-import TablaSolicitudes from "./TablaSolicitudes";
+} from "../services/solicitudService";
 
 function PanelFuncionario() {
   const [solicitudes, setSolicitudes] = useState([]);
@@ -80,8 +79,10 @@ function PanelFuncionario() {
       numeroLicencia,
       fechaAprobacion,
       fechaDecisionFuncionario,
+
       fechaExpiracionLicencia,
       fechaVencimiento: fechaExpiracionLicencia,
+
       licenciaVigente: true,
       licenciaRenovada: esRenovacion,
       fechaRenovacion: esRenovacion ? fechaAprobacion : "",
@@ -127,7 +128,8 @@ function PanelFuncionario() {
     solicitud.estado === "Licencia rechazada";
 
   const licenciaVencida = (solicitud) => {
-    const fecha = solicitud.fechaExpiracionLicencia || solicitud.fechaVencimiento;
+    const fecha =
+      solicitud.fechaExpiracionLicencia || solicitud.fechaVencimiento;
 
     if (!fecha) return false;
 
@@ -145,6 +147,40 @@ function PanelFuncionario() {
     hoy.setHours(0, 0, 0, 0);
 
     return fechaVencimiento < hoy;
+  };
+
+  const mostrarDocumentos = (solicitud) => {
+    if (solicitud.archivosPdf?.length > 0) {
+      return (
+        <div className="documentos-lista">
+          {solicitud.archivosPdf.map((pdf, index) => (
+            <a
+              key={index}
+              href={pdf.archivoUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              PDF {index + 1}
+            </a>
+          ))}
+        </div>
+      );
+    }
+
+    if (solicitud.archivoUrl) {
+      return (
+        <a
+          className="file-pill"
+          href={solicitud.archivoUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Ver PDF
+        </a>
+      );
+    }
+
+    return <span className="file-pill">Sin PDF</span>;
   };
 
   const total = solicitudes.length;
@@ -170,6 +206,18 @@ function PanelFuncionario() {
   ).length;
 
   const vencidas = solicitudes.filter((s) => licenciaVencida(s)).length;
+
+  const badgeClase = (estado = "") => {
+    const texto = estado.toLowerCase();
+
+    if (texto.includes("aprobada")) return "ok";
+    if (texto.includes("rechazada")) return "danger";
+    if (texto.includes("observada")) return "warning";
+    if (texto.includes("inspección")) return "info";
+    if (texto.includes("resultado")) return "warning";
+    if (texto.includes("revisión")) return "neutral";
+    return "neutral";
+  };
 
   return (
     <div className="panel panel-funcionario">
@@ -244,18 +292,211 @@ function PanelFuncionario() {
           </div>
         </div>
 
-        <TablaSolicitudes
-          solicitudes={solicitudes}
-          cargarSolicitudes={cargarSolicitudes}
-          observacionesRechazo={observacionesRechazo}
-          cambiarObservacionRechazo={cambiarObservacionRechazo}
-          derivarInspector={derivarInspector}
-          aprobarLicencia={aprobarLicencia}
-          rechazarLicencia={rechazarLicencia}
-          puedeAprobar={puedeAprobar}
-          solicitudCerrada={solicitudCerrada}
-          licenciaVencida={licenciaVencida}
-        />
+        {solicitudes.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📂</div>
+            <h3>No existen solicitudes registradas</h3>
+            <p>
+              Cuando un negocio envíe una solicitud, aparecerá en esta sección.
+            </p>
+            <button type="button" onClick={cargarSolicitudes}>
+              Actualizar solicitudes
+            </button>
+          </div>
+        ) : (
+          <div className="tabla-container">
+            <table className="modern-table funcionario-table">
+              <thead>
+                <tr>
+                  <th>Expediente</th>
+                  <th>Negocio</th>
+                  <th>Trámite</th>
+                  <th>Documentos</th>
+                  <th>Pago</th>
+                  <th>Estado</th>
+                  <th>Inspección</th>
+                  <th>Obs. inspector</th>
+                  <th>Obs. funcionario</th>
+                  <th>Evidencias</th>
+                  <th>Licencia</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {solicitudes.map((solicitud) => {
+                  const estaVencida = licenciaVencida(solicitud);
+
+                  return (
+                    <tr key={solicitud.id}>
+                      <td>
+                        <strong>{solicitud.id}</strong>
+                        <small>RUC: {solicitud.ruc}</small>
+                      </td>
+
+                      <td>
+                        <strong>{solicitud.nombreNegocio}</strong>
+                        <small>{solicitud.razonSocial}</small>
+                      </td>
+
+                      <td>{solicitud.tipoTramite || "Nueva licencia"}</td>
+
+                      <td>{mostrarDocumentos(solicitud)}</td>
+
+                      <td>
+                        <span
+                          className={`badge ${
+                            solicitud.estadoPago === "Confirmado"
+                              ? "ok"
+                              : "warning"
+                          }`}
+                        >
+                          {solicitud.estadoPago || "Pendiente"}
+                        </span>
+                        <small>
+                          {solicitud.comprobantePago ||
+                            solicitud.metodoPago ||
+                            "Sin comprobante"}
+                        </small>
+                      </td>
+
+                      <td>
+                        {estaVencida ? (
+                          <span className="badge danger">Licencia vencida</span>
+                        ) : (
+                          <span
+                            className={`badge ${badgeClase(solicitud.estado)}`}
+                          >
+                            {solicitud.estado}
+                          </span>
+                        )}
+                      </td>
+
+                      <td>
+                        <strong>
+                          {solicitud.recomendacionInspector ||
+                            "Sin recomendación"}
+                        </strong>
+                        <small>
+                          {solicitud.resultadoInspeccion || "Sin resultado"}
+                        </small>
+                      </td>
+
+                      <td>
+                        {solicitud.observacionInspector || "Sin observación"}
+                      </td>
+
+                      <td>
+                        {solicitud.observacionFuncionario ||
+                          "Sin observación del funcionario"}
+                      </td>
+
+                      <td>
+                        {solicitud.evidenciasInspector?.length > 0 ? (
+                          <div className="evidencias-tabla">
+                            {solicitud.evidenciasInspector.map((img, index) => (
+                              <a
+                                key={index}
+                                href={img.url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Foto {index + 1}
+                              </a>
+                            ))}
+                          </div>
+                        ) : (
+                          "Sin evidencias"
+                        )}
+                      </td>
+
+                      <td>
+                        {solicitud.numeroLicencia ? (
+                          <>
+                            <strong>{solicitud.numeroLicencia}</strong>
+
+                            <small>
+                              Emisión:{" "}
+                              {solicitud.fechaAprobacion || "Sin fecha"}
+                            </small>
+
+                            <small>
+                              Vence:{" "}
+                              {solicitud.fechaExpiracionLicencia ||
+                                solicitud.fechaVencimiento ||
+                                "Sin vencimiento"}
+                            </small>
+
+                            {solicitud.licenciaRenovada && (
+                              <small>Renovación anual aprobada</small>
+                            )}
+
+                            {estaVencida && (
+                              <span className="badge danger">
+                                Licencia vencida
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          "No generada"
+                        )}
+                      </td>
+
+                      <td>
+                        <div className="action-stack">
+                          <button
+                            type="button"
+                            onClick={() => derivarInspector(solicitud.id)}
+                            disabled={
+                              solicitud.estado === "En inspección" ||
+                              solicitud.estado ===
+                                "Resultado enviado al funcionario" ||
+                              solicitudCerrada(solicitud)
+                            }
+                          >
+                            Enviar a inspector
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-ok"
+                            onClick={() => aprobarLicencia(solicitud)}
+                            disabled={!puedeAprobar(solicitud)}
+                          >
+                            Aprobar licencia
+                          </button>
+
+                          {!solicitudCerrada(solicitud) && (
+                            <textarea
+                              placeholder="Motivo del rechazo..."
+                              value={observacionesRechazo[solicitud.id] || ""}
+                              onChange={(e) =>
+                                cambiarObservacionRechazo(
+                                  solicitud.id,
+                                  e.target.value
+                                )
+                              }
+                              rows="3"
+                            />
+                          )}
+
+                          <button
+                            type="button"
+                            className="btn-danger"
+                            onClick={() => rechazarLicencia(solicitud.id)}
+                            disabled={solicitudCerrada(solicitud)}
+                          >
+                            Rechazar licencia
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

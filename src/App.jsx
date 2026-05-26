@@ -48,9 +48,7 @@ function App() {
 
         {usuario.rol === "inspector" && <PanelInspector />}
 
-        {!["negocio", "funcionario", "inspector"].includes(
-          usuario.rol
-        ) && (
+        {!["negocio", "funcionario", "inspector"].includes(usuario.rol) && (
           <div className="section-card">
             <h2>Rol no reconocido</h2>
             <p>Tu usuario no tiene un rol válido asignado.</p>
