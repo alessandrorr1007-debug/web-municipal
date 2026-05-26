@@ -9,24 +9,42 @@ function PanelInspector() {
   const [pendientes, setPendientes] = useState([]);
   const [historial, setHistorial] = useState([]);
   const [cargando, setCargando] = useState(false);
+  const [enviandoId, setEnviandoId] = useState("");
   const [formularios, setFormularios] = useState({});
+
+  const esPendienteInspeccion = (solicitud) => {
+    const estado = (solicitud.estado || "").toLowerCase();
+    const inspeccion = (solicitud.inspeccion || "").toLowerCase();
+
+    return (
+      estado.includes("inspección") ||
+      estado.includes("inspeccion") ||
+      inspeccion.includes("pendiente") ||
+      inspeccion.includes("sin inspección") ||
+      inspeccion.includes("sin inspeccion")
+    ) &&
+      solicitud.estado !== "Resultado enviado al funcionario" &&
+      solicitud.inspeccion !== "Aprobada" &&
+      solicitud.inspeccion !== "Rechazada";
+  };
+
+  const esHistorialInspeccion = (solicitud) => {
+    return (
+      solicitud.estado === "Resultado enviado al funcionario" ||
+      solicitud.inspeccion === "Aprobada" ||
+      solicitud.inspeccion === "Rechazada"
+    );
+  };
 
   const cargarSolicitudes = async () => {
     try {
       setCargando(true);
+
       const data = await obtenerSolicitudes();
 
       setSolicitudes(data);
-      setPendientes(data.filter((s) => s.estado === "En inspección"));
-
-      setHistorial(
-        data.filter(
-          (s) =>
-            s.estado === "Resultado enviado al funcionario" ||
-            s.inspeccion === "Aprobada" ||
-            s.inspeccion === "Rechazada"
-        )
-      );
+      setPendientes(data.filter(esPendienteInspeccion));
+      setHistorial(data.filter(esHistorialInspeccion));
     } catch (error) {
       console.error(error);
       alert("No se pudieron cargar las inspecciones.");
@@ -87,7 +105,11 @@ function PanelInspector() {
 
   const validarImagenes = (id, archivos) => {
     const actuales = formularios[id]?.evidencias || [];
-    const nuevas = Array.from(archivos);
+    const nuevas = Array.from(archivos || []);
+
+    if (nuevas.length === 0) {
+      return [];
+    }
 
     if (actuales.length + nuevas.length > 5) {
       alert("Solo puedes subir como máximo 5 fotos de evidencia.");
@@ -148,41 +170,57 @@ function PanelInspector() {
 
   const enviarResultadoInspector = async (solicitud) => {
     const formulario = formularios[solicitud.id] || {};
+    const observacion = (formulario.observacion || "").trim();
+    const recomendacion = formulario.recomendacion || "";
+    const evidencias = formulario.evidencias || [];
 
-    if (!formulario.observacion || formulario.observacion.trim() === "") {
+    if (enviandoId) return;
+
+    if (!observacion) {
       alert("La observación del inspector es obligatoria.");
       return;
     }
 
-    if (!formulario.recomendacion) {
+    if (!recomendacion) {
       alert("Debes elegir una recomendación: Aprobar o Rechazar.");
       return;
     }
 
-    if (!formulario.evidencias || formulario.evidencias.length === 0) {
+    if (evidencias.length === 0) {
       alert("Debes subir al menos una foto como evidencia.");
       return;
     }
 
-    const inspeccion =
-      formulario.recomendacion === "Aprobar" ? "Aprobada" : "Rechazada";
+    const inspeccion = recomendacion === "Aprobar" ? "Aprobada" : "Rechazada";
 
-    await actualizarSolicitud(solicitud.id, {
-      inspeccion,
-      recomendacionInspector: formulario.recomendacion,
-      observacionInspector: formulario.observacion.trim(),
-      evidenciasInspector: formulario.evidencias,
-      fechaInspeccion: formatearFechaHora(),
-      resultadoInspeccion:
-        formulario.recomendacion === "Aprobar"
-          ? "El inspector recomienda aprobar el licenciamiento."
-          : "El inspector recomienda rechazar el licenciamiento.",
-      estado: "Resultado enviado al funcionario",
-    });
+    try {
+      setEnviandoId(solicitud.id);
 
-    limpiarFormulario(solicitud.id);
-    alert("Resultado de inspección enviado al funcionario.");
-    await cargarSolicitudes();
+      await actualizarSolicitud(solicitud.id, {
+        inspeccion,
+        recomendacionInspector: recomendacion,
+        observacionInspector: observacion,
+        evidenciasInspector: evidencias,
+        fechaInspeccion: formatearFechaHora(),
+        resultadoInspeccion:
+          recomendacion === "Aprobar"
+            ? "El inspector recomienda aprobar el licenciamiento."
+            : "El inspector recomienda rechazar el licenciamiento.",
+        estado: "Resultado enviado al funcionario",
+      });
+
+      limpiarFormulario(solicitud.id);
+      alert("Resultado de inspección enviado al funcionario.");
+      await cargarSolicitudes();
+    } catch (error) {
+      console.error(error);
+      alert(
+        error.message ||
+          "No se pudo enviar el resultado al funcionario. Revisa la consola."
+      );
+    } finally {
+      setEnviandoId("");
+    }
   };
 
   const badgeClase = (estado = "") => {
@@ -248,6 +286,7 @@ function PanelInspector() {
           type="button"
           className="btn-outline-light"
           onClick={cargarSolicitudes}
+          disabled={cargando || !!enviandoId}
         >
           {cargando ? "Actualizando..." : "Actualizar"}
         </button>
@@ -306,6 +345,7 @@ function PanelInspector() {
           <div className="inspector-grid">
             {pendientes.map((solicitud) => {
               const formulario = formularios[solicitud.id] || {};
+              const estaEnviando = enviandoId === solicitud.id;
 
               return (
                 <article className="inspection-card" key={solicitud.id}>
@@ -357,6 +397,7 @@ function PanelInspector() {
                         }
                         placeholder="Escribe la observación de la inspección..."
                         rows="4"
+                        disabled={estaEnviando}
                       />
                     </label>
 
@@ -380,6 +421,7 @@ function PanelInspector() {
                           onChange={(e) =>
                             manejarEvidencias(solicitud.id, e.target.files)
                           }
+                          disabled={estaEnviando}
                           hidden
                         />
                       </label>
@@ -402,6 +444,7 @@ function PanelInspector() {
                               onClick={() =>
                                 quitarEvidencia(solicitud.id, index)
                               }
+                              disabled={estaEnviando}
                             >
                               Quitar
                             </button>
@@ -421,6 +464,7 @@ function PanelInspector() {
                             e.target.value
                           )
                         }
+                        disabled={estaEnviando}
                       >
                         <option value="">Seleccionar recomendación</option>
                         <option value="Aprobar">Aprobar</option>
@@ -434,8 +478,11 @@ function PanelInspector() {
                       type="button"
                       className="btn-ok"
                       onClick={() => enviarResultadoInspector(solicitud)}
+                      disabled={estaEnviando}
                     >
-                      Enviar resultado al funcionario
+                      {estaEnviando
+                        ? "Enviando resultado..."
+                        : "Enviar resultado al funcionario"}
                     </button>
                   </div>
                 </article>

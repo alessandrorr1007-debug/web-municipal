@@ -32,9 +32,6 @@ function App() {
         </div>
 
         <div className="topbar-user">
-          <span>{usuario.nombre || "Usuario"}</span>
-          <small>{usuario.rol}</small>
-
           <button type="button" onClick={salir}>
             Cerrar sesión
           </button>

@@ -194,7 +194,7 @@ function PanelNegocio() {
         issuerId: datosPago.issuer_id || datosPago.issuerId,
         paymentMethodId:
           datosPago.payment_method_id || datosPago.paymentMethodId,
-        transactionAmount: 100,
+        transactionAmount: MONTO_TRAMITE,
         installments: datosPago.installments || 1,
         description: `Licencia municipal de funcionamiento - RUC ${form.ruc}`,
         payer: datosPago.payer,
@@ -203,22 +203,20 @@ function PanelNegocio() {
       });
 
       setDetallePago(data);
+      setMetodoPago("Mercado Pago - Tarjeta");
 
       if (data.status === "approved") {
-        setMetodoPago("Mercado Pago - Tarjeta");
         setEstadoPago("Confirmado");
         alert("Pago aprobado correctamente.");
         return data;
       }
 
       if (data.status === "pending" || data.status === "in_process") {
-        setMetodoPago("Mercado Pago - Tarjeta");
         setEstadoPago("Pendiente de pago");
         alert("El pago quedó pendiente de validación.");
         return data;
       }
 
-      setMetodoPago("Mercado Pago - Tarjeta");
       setEstadoPago("Pago rechazado");
       alert("El pago fue rechazado. Prueba con otra tarjeta.");
       return data;
@@ -267,18 +265,15 @@ function PanelNegocio() {
         giro: form.giro,
         estadoSunat: form.estadoSunat,
         condicionSunat: form.condicionSunat,
-
         archivosPdf: pdfsSubidos,
         archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
         archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
-
         metodoPago,
         estadoPago,
         comprobantePago:
           estadoPago === "Confirmado"
             ? `Pago confirmado mediante ${metodoPago}`
             : `Pago generado mediante ${metodoPago}`,
-
         estado: "En revisión",
         inspeccion: "Sin inspección",
         recomendacionInspector: "",
@@ -340,7 +335,7 @@ function PanelNegocio() {
       return fecha;
     }
 
-    return fechaDate.toLocaleDateString();
+    return fechaDate.toLocaleDateString("es-PE");
   };
 
   const obtenerFechaAprobacion = (solicitud) => {
@@ -434,192 +429,77 @@ function PanelNegocio() {
         <head>
           <meta charset="UTF-8" />
           <title>Licencia Municipal</title>
-
           <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 40px;
-              background: #f3f4f6;
-              color: #111827;
-            }
-
-            .licencia {
-              max-width: 900px;
-              margin: auto;
-              background: white;
-              border: 5px solid #111827;
-              border-radius: 18px;
-              padding: 40px;
-              box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            }
-
-            .header {
-              text-align: center;
-              margin-bottom: 30px;
-            }
-
-            .header h1 {
-              margin: 0;
-              font-size: 34px;
-              color: #111827;
-            }
-
-            .header h2 {
-              margin-top: 10px;
-              font-size: 22px;
-              color: #2563eb;
-            }
-
-            .datos {
-              margin-top: 30px;
-            }
-
-            .dato {
-              margin: 14px 0;
-              font-size: 17px;
-              line-height: 1.5;
-            }
-
-            .dato strong {
-              color: #111827;
-            }
-
-            .vigencia {
-              margin-top: 30px;
-              padding: 18px;
-              background: #eff6ff;
-              border: 2px solid #2563eb;
-              border-radius: 12px;
-            }
-
-            .vigencia h3 {
-              margin-top: 0;
-              color: #1d4ed8;
-            }
-
-            .estado {
-              margin-top: 25px;
-              padding: 18px;
-              border-radius: 12px;
-              text-align: center;
-              background: #dcfce7;
-              color: #166534;
-              font-size: 22px;
-              font-weight: bold;
-              border: 2px solid #16a34a;
-            }
-
-            .qr {
-              margin-top: 30px;
-              text-align: center;
-            }
-
-            .qr img {
-              width: 130px;
-              height: 130px;
-            }
-
-            .firma {
-              margin-top: 80px;
-              text-align: center;
-            }
-
-            .linea {
-              width: 280px;
-              margin: auto;
-              border-top: 2px solid #111827;
-              margin-bottom: 10px;
-            }
-
-            .footer {
-              margin-top: 40px;
-              text-align: center;
-              color: #6b7280;
-              font-size: 14px;
-            }
+            body { font-family: Arial, sans-serif; padding: 40px; background: #f3f4f6; color: #111827; }
+            .licencia { max-width: 900px; margin: auto; background: white; border: 5px solid #111827; border-radius: 18px; padding: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+            .header { text-align: center; margin-bottom: 30px; }
+            .header h1 { margin: 0; font-size: 34px; color: #111827; }
+            .header h2 { margin-top: 10px; font-size: 22px; color: #2563eb; }
+            .datos { margin-top: 30px; }
+            .dato { margin: 14px 0; font-size: 17px; line-height: 1.5; }
+            .dato strong { color: #111827; }
+            .vigencia { margin-top: 30px; padding: 18px; background: #eff6ff; border: 2px solid #2563eb; border-radius: 12px; }
+            .vigencia h3 { margin-top: 0; color: #1d4ed8; }
+            .estado { margin-top: 25px; padding: 18px; border-radius: 12px; text-align: center; background: #dcfce7; color: #166534; font-size: 22px; font-weight: bold; border: 2px solid #16a34a; }
+            .qr { margin-top: 30px; text-align: center; }
+            .qr img { width: 130px; height: 130px; }
+            .firma { margin-top: 80px; text-align: center; }
+            .linea { width: 280px; margin: auto; border-top: 2px solid #111827; margin-bottom: 10px; }
+            .footer { margin-top: 40px; text-align: center; color: #6b7280; font-size: 14px; }
           </style>
         </head>
-
         <body>
           <div class="licencia">
             <div class="header">
               <h1>MUNICIPALIDAD</h1>
               <h2>LICENCIA MUNICIPAL DE FUNCIONAMIENTO</h2>
             </div>
-
             <div class="datos">
-              <p class="dato"><strong>Número de licencia:</strong> ${
-                solicitud.numeroLicencia || solicitud.id
-              }</p>
+              <p class="dato"><strong>Número de licencia:</strong> ${solicitud.numeroLicencia || solicitud.id}</p>
               <p class="dato"><strong>Número de expediente:</strong> ${solicitud.id}</p>
-              <p class="dato"><strong>Tipo de trámite:</strong> ${
-                solicitud.tipoTramite || "Nueva licencia"
-              }</p>
+              <p class="dato"><strong>Tipo de trámite:</strong> ${solicitud.tipoTramite || "Nueva licencia"}</p>
               <p class="dato"><strong>RUC:</strong> ${solicitud.ruc}</p>
               <p class="dato"><strong>Razón social:</strong> ${solicitud.razonSocial}</p>
-              <p class="dato"><strong>Nombre comercial:</strong> ${
-                solicitud.nombreNegocio
-              }</p>
+              <p class="dato"><strong>Nombre comercial:</strong> ${solicitud.nombreNegocio}</p>
               <p class="dato"><strong>Dirección:</strong> ${solicitud.direccion}</p>
               <p class="dato"><strong>Giro comercial:</strong> ${solicitud.giro}</p>
-              <p class="dato"><strong>Fecha de aprobación:</strong> ${formatearFecha(
-                fechaAprobacion
-              )}</p>
+              <p class="dato"><strong>Fecha de aprobación:</strong> ${formatearFecha(fechaAprobacion)}</p>
             </div>
-
             <div class="vigencia">
               <h3>Vigencia de la licencia</h3>
-              <p class="dato"><strong>Fecha de emisión:</strong> ${formatearFecha(
-                fechaAprobacion
-              )}</p>
-              <p class="dato"><strong>Fecha de expiración:</strong> ${formatearFecha(
-                fechaExpiracion
-              )}</p>
+              <p class="dato"><strong>Fecha de emisión:</strong> ${formatearFecha(fechaAprobacion)}</p>
+              <p class="dato"><strong>Fecha de expiración:</strong> ${formatearFecha(fechaExpiracion)}</p>
               <p>Esta licencia tiene una duración de 1 año y deberá renovarse antes de la fecha de vencimiento.</p>
             </div>
-
-            <div class="estado">
-              ${obtenerEstadoVisible(solicitud).toUpperCase()}
-            </div>
-
+            <div class="estado">${obtenerEstadoVisible(solicitud).toUpperCase()}</div>
             <div class="qr">
               <p><strong>Código QR de verificación</strong></p>
               <img src="${qrUrl}" alt="QR de verificación" />
             </div>
-
             <div class="firma">
               <div class="linea"></div>
               <p>Funcionario Municipal Responsable</p>
             </div>
-
-            <div class="footer">
-              Documento generado automáticamente por el sistema municipal.
-            </div>
+            <div class="footer">Documento generado automáticamente por el sistema municipal.</div>
           </div>
         </body>
       </html>
     `;
 
-    const blob = new Blob([contenido], {
-      type: "text/html",
-    });
-
+    const blob = new Blob([contenido], { type: "text/html" });
     const url = URL.createObjectURL(blob);
-
     const enlace = document.createElement("a");
     enlace.href = url;
     enlace.download = `Licencia_${solicitud.ruc}.html`;
-
     document.body.appendChild(enlace);
     enlace.click();
     document.body.removeChild(enlace);
-
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className="panel panel-negocio">
-      <div className="panel-hero">
+      <div className="panel-hero panel-hero-modern">
         <div>
           <span className="eyebrow">Portal del solicitante</span>
           <h1>Licencia de funcionamiento</h1>
@@ -627,15 +507,9 @@ function PanelNegocio() {
             Registra tu solicitud, realiza el pago y consulta el avance de tu expediente.
           </p>
         </div>
-
-        <div className="hero-card">
-          <span>Solicitante</span>
-          <strong>{usuario?.nombre || "Usuario negocio"}</strong>
-          <small>{usuario?.correo}</small>
-        </div>
       </div>
 
-      <div className="tabs-panel">
+      <div className="tabs-panel tabs-panel-modern">
         <button
           type="button"
           className={paso === "misSolicitudes" ? "tab-active" : ""}
@@ -644,7 +518,7 @@ function PanelNegocio() {
             setPaso("misSolicitudes");
           }}
         >
-          Mis solicitudes
+          📂 Mis solicitudes
         </button>
 
         <button
@@ -652,12 +526,12 @@ function PanelNegocio() {
           className={paso === "solicitud" ? "tab-active" : ""}
           onClick={nuevaSolicitud}
         >
-          Nueva solicitud
+          ➕ Nueva solicitud
         </button>
       </div>
 
       {paso === "misSolicitudes" && (
-        <section className="section-card">
+        <section className="section-card section-card-modern">
           <div className="section-header">
             <div>
               <h2>Mis solicitudes</h2>
@@ -670,7 +544,7 @@ function PanelNegocio() {
           </div>
 
           {misSolicitudes.length === 0 ? (
-            <div className="empty-state">
+            <div className="empty-state empty-state-modern">
               <div className="empty-icon">📄</div>
               <h3>Aún no has enviado solicitudes</h3>
               <p>Cuando registres una solicitud de licencia, aparecerá aquí.</p>
@@ -679,165 +553,91 @@ function PanelNegocio() {
               </button>
             </div>
           ) : (
-            <div className="tabla-container">
-              <table className="modern-table">
-                <thead>
-                  <tr>
-                    <th>Expediente</th>
-                    <th>Fecha</th>
-                    <th>Trámite</th>
-                    <th>Negocio</th>
-                    <th>Documentos</th>
-                    <th>Pago</th>
-                    <th>Estado</th>
-                    <th>Inspección</th>
-                    <th>Resultado</th>
-                    <th>Motivo</th>
-                    <th>Vigencia</th>
-                    <th>Licencia</th>
-                  </tr>
-                </thead>
+            <div className="solicitudes-grid">
+              {misSolicitudes.map((s) => (
+                <article className="solicitud-card" key={s.id}>
+                  <div className="solicitud-card-header">
+                    <div>
+                      <span>Expediente</span>
+                      <h3>{s.id}</h3>
+                    </div>
+                    <span className={`badge ${badgeClase(obtenerEstadoVisible(s))}`}>
+                      {obtenerEstadoVisible(s)}
+                    </span>
+                  </div>
 
-                <tbody>
-                  {misSolicitudes.map((s) => (
-                    <tr key={s.id}>
-                      <td>
-                        <strong>{s.id}</strong>
-                        <small>RUC: {s.ruc}</small>
-                      </td>
+                  <div className="solicitud-card-body">
+                    <p><strong>RUC:</strong> {s.ruc}</p>
+                    <p><strong>Negocio:</strong> {s.nombreNegocio}</p>
+                    <p><strong>Trámite:</strong> {s.tipoTramite || "Nueva licencia"}</p>
+                    <p><strong>Fecha:</strong> {s.fecha}</p>
+                    <p><strong>Pago:</strong> {s.estadoPago}</p>
+                    <p><strong>Inspección:</strong> {s.inspeccion || "Sin inspección"}</p>
+                  </div>
 
-                      <td>{s.fecha}</td>
-                      <td>{s.tipoTramite || "Nueva licencia"}</td>
-                      <td>{s.nombreNegocio}</td>
+                  <div className="solicitud-card-actions">
+                    {s.archivosPdf?.length > 0 ? (
+                      s.archivosPdf.map((pdf, index) => (
+                        <a key={index} href={pdf.archivoUrl} target="_blank" rel="noreferrer">
+                          PDF {index + 1}
+                        </a>
+                      ))
+                    ) : s.archivoUrl ? (
+                      <a href={s.archivoUrl} target="_blank" rel="noreferrer">
+                        Ver PDF
+                      </a>
+                    ) : (
+                      <span>Sin PDF</span>
+                    )}
+                  </div>
 
-                      <td>
-                        {s.archivosPdf?.length > 0 ? (
-                          <div className="documentos-lista">
-                            {s.archivosPdf.map((pdf, index) => (
-                              <a
-                                key={index}
-                                href={pdf.archivoUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                PDF {index + 1}
-                              </a>
-                            ))}
-                          </div>
-                        ) : s.archivoUrl ? (
-                          <a href={s.archivoUrl} target="_blank" rel="noreferrer">
-                            Ver PDF
-                          </a>
-                        ) : (
-                          "Sin PDF"
+                  {s.estado === "Licencia rechazada" && (
+                    <div className="motivo-rechazo">
+                      <strong>Motivo:</strong>
+                      <p>{s.observacionFuncionario || "No se registró motivo del rechazo."}</p>
+                    </div>
+                  )}
+
+                  {s.estado === "Licencia aprobada" && (
+                    <div className="vigencia-box">
+                      <strong>Vence:</strong> {formatearFecha(obtenerFechaExpiracion(s))}
+                    </div>
+                  )}
+
+                  <div className="solicitud-card-footer">
+                    {s.estado === "Licencia aprobada" ? (
+                      <>
+                        {!licenciaVencida(s) && (
+                          <button
+                            type="button"
+                            className="btn-ok"
+                            onClick={() => descargarLicencia(s)}
+                          >
+                            Descargar licencia
+                          </button>
                         )}
-                      </td>
 
-                      <td>
-                        <span
-                          className={`badge ${
-                            s.estadoPago === "Confirmado" ? "ok" : "warning"
-                          }`}
+                        <button
+                          type="button"
+                          className="btn-secundario"
+                          onClick={() => renovarLicencia(s)}
                         >
-                          {s.estadoPago}
-                        </span>
-                      </td>
-
-                      <td>
-                        <span className={`badge ${badgeClase(obtenerEstadoVisible(s))}`}>
-                          {obtenerEstadoVisible(s)}
-                        </span>
-                      </td>
-
-                      <td>
-                        <strong>{s.inspeccion || "Sin inspección"}</strong>
-                        <small>
-                          {s.recomendacionInspector
-                            ? `Recomendación: ${s.recomendacionInspector}`
-                            : "Sin recomendación"}
-                        </small>
-                      </td>
-
-                      <td>
-                        {s.estado === "Licencia aprobada" && !licenciaVencida(s) && (
-                          <span className="badge ok">Licencia aprobada</span>
-                        )}
-
-                        {licenciaVencida(s) && (
-                          <span className="badge danger">Licencia vencida</span>
-                        )}
-
-                        {s.estado === "Licencia rechazada" && (
-                          <span className="badge danger">Licencia rechazada</span>
-                        )}
-
-                        {s.estado !== "Licencia aprobada" &&
-                          s.estado !== "Licencia rechazada" && (
-                            <span>{s.resultadoInspeccion || "Sin resultado final"}</span>
-                          )}
-                      </td>
-
-                      <td>
-                        {s.estado === "Licencia rechazada" ? (
-                          <div className="motivo-rechazo">
-                            <strong>Motivo:</strong>
-                            <p>
-                              {s.observacionFuncionario ||
-                                "No se registró motivo del rechazo."}
-                            </p>
-                          </div>
-                        ) : (
-                          "Sin motivo"
-                        )}
-                      </td>
-
-                      <td>
-                        {s.estado === "Licencia aprobada" ? (
-                          <div className="motivo-rechazo">
-                            <strong>Vence:</strong>
-                            <p>{formatearFecha(obtenerFechaExpiracion(s))}</p>
-                          </div>
-                        ) : (
-                          "No aplica"
-                        )}
-                      </td>
-
-                      <td>
-                        {s.estado === "Licencia aprobada" ? (
-                          <div className="documentos-lista">
-                            {!licenciaVencida(s) && (
-                              <button
-                                type="button"
-                                className="btn-ok"
-                                onClick={() => descargarLicencia(s)}
-                              >
-                                Descargar licencia
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              className="btn-secundario"
-                              onClick={() => renovarLicencia(s)}
-                            >
-                              Renovar
-                            </button>
-                          </div>
-                        ) : (
-                          "No disponible"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          Renovar
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-muted">Licencia no disponible aún</span>
+                    )}
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </section>
       )}
 
       {paso === "solicitud" && (
-        <section className="section-card">
+        <section className="section-card section-card-modern">
           <div className="section-header">
             <div>
               <h2>Nueva solicitud</h2>
@@ -845,117 +645,145 @@ function PanelNegocio() {
             </div>
           </div>
 
-          <div className="formulario">
-            <div className="form-grid">
-              <select
-                name="tipoTramite"
-                value={form.tipoTramite}
-                onChange={manejarCambio}
-              >
+          <div className="formulario formulario-modern">
+            <div className="form-block">
+              <div className="block-title">
+                <span>1</span>
+                <div>
+                  <h3>Tipo de trámite</h3>
+                  <p>Selecciona si registrarás una licencia nueva o una renovación.</p>
+                </div>
+              </div>
+
+              <select name="tipoTramite" value={form.tipoTramite} onChange={manejarCambio}>
                 <option value="Nueva licencia">Nueva licencia</option>
                 <option value="Renovación anual">Renovación anual</option>
               </select>
             </div>
 
-            <div className="ruc-row">
-              <input
-                type="text"
-                name="ruc"
-                placeholder="Ingrese RUC"
-                value={form.ruc}
-                onChange={manejarCambio}
-                maxLength="11"
-              />
-
-              <button type="button" onClick={buscarRuc} disabled={buscando}>
-                {buscando ? "Buscando..." : "Buscar RUC"}
-              </button>
-            </div>
-
-            {errorRuc && <p className="error">{errorRuc}</p>}
-            {rucValidado && <p className="success">RUC validado correctamente.</p>}
-
-            <div className="form-grid">
-              <input
-                type="text"
-                name="nombreNegocio"
-                placeholder="Nombre del negocio"
-                value={form.nombreNegocio}
-                onChange={manejarCambio}
-              />
-
-              <input
-                type="text"
-                name="razonSocial"
-                placeholder="Razón social"
-                value={form.razonSocial}
-                onChange={manejarCambio}
-              />
-
-              <input
-                type="text"
-                name="direccion"
-                placeholder="Dirección del local"
-                value={form.direccion}
-                onChange={manejarCambio}
-              />
-
-              <input
-                type="text"
-                name="giro"
-                placeholder="Giro comercial"
-                value={form.giro}
-                onChange={manejarCambio}
-              />
-            </div>
-
-            <div className="sunat-info">
-              <span>
-                Estado SUNAT: <strong>{form.estadoSunat || "Pendiente"}</strong>
-              </span>
-              <span>
-                Condición: <strong>{form.condicionSunat || "Pendiente"}</strong>
-              </span>
-            </div>
-
-            <div
-              className="drop-zone"
-              onDrop={manejarDrop}
-              onDragOver={(e) => e.preventDefault()}
-            >
-              <div className="empty-icon">📎</div>
-              <p>Subir documentos del trámite en PDF</p>
-              <span>Máximo 5 PDFs. Arrastra tus archivos o selecciónalos.</span>
-
-              <label className="file-label">
-                Elegir PDFs
-                <input
-                  type="file"
-                  accept=".pdf"
-                  multiple
-                  onChange={manejarArchivos}
-                  hidden
-                />
-              </label>
-
-              {archivos.length > 0 && (
-                <div className="archivo-box">
-                  {archivos.map((file, index) => (
-                    <div key={index} className="archivo-item">
-                      <p className="archivo-seleccionado">
-                        PDF {index + 1}: {file.name}
-                      </p>
-                      <button
-                        type="button"
-                        className="btn-quitar"
-                        onClick={() => quitarArchivo(index)}
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
+            <div className="form-block">
+              <div className="block-title">
+                <span>2</span>
+                <div>
+                  <h3>Validar RUC</h3>
+                  <p>Busca el RUC para completar automáticamente los datos SUNAT.</p>
                 </div>
-              )}
+              </div>
+
+              <div className="ruc-row ruc-row-modern">
+                <input
+                  type="text"
+                  name="ruc"
+                  placeholder="Ingrese RUC de 11 dígitos"
+                  value={form.ruc}
+                  onChange={manejarCambio}
+                  maxLength="11"
+                />
+
+                <button type="button" onClick={buscarRuc} disabled={buscando}>
+                  {buscando ? "Buscando..." : "Buscar RUC"}
+                </button>
+              </div>
+
+              {errorRuc && <p className="error">{errorRuc}</p>}
+              {rucValidado && <p className="success">RUC validado correctamente.</p>}
+            </div>
+
+            <div className="form-block">
+              <div className="block-title">
+                <span>3</span>
+                <div>
+                  <h3>Datos del negocio</h3>
+                  <p>Verifica que la información obtenida sea correcta.</p>
+                </div>
+              </div>
+
+              <div className="form-grid">
+                <input
+                  type="text"
+                  name="nombreNegocio"
+                  placeholder="Nombre del negocio"
+                  value={form.nombreNegocio}
+                  onChange={manejarCambio}
+                />
+
+                <input
+                  type="text"
+                  name="razonSocial"
+                  placeholder="Razón social"
+                  value={form.razonSocial}
+                  onChange={manejarCambio}
+                />
+
+                <input
+                  type="text"
+                  name="direccion"
+                  placeholder="Dirección del local"
+                  value={form.direccion}
+                  onChange={manejarCambio}
+                />
+
+                <input
+                  type="text"
+                  name="giro"
+                  placeholder="Giro comercial"
+                  value={form.giro}
+                  onChange={manejarCambio}
+                />
+              </div>
+
+              <div className="sunat-info sunat-info-modern">
+                <span>
+                  Estado SUNAT: <strong>{form.estadoSunat || "Pendiente"}</strong>
+                </span>
+                <span>
+                  Condición: <strong>{form.condicionSunat || "Pendiente"}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="form-block">
+              <div className="block-title">
+                <span>4</span>
+                <div>
+                  <h3>Documentos PDF</h3>
+                  <p>Sube los archivos del trámite. Puedes arrastrarlos aquí.</p>
+                </div>
+              </div>
+
+              <div
+                className="drop-zone drop-zone-modern"
+                onDrop={manejarDrop}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                <div className="empty-icon">📎</div>
+                <p>Subir documentos del trámite en PDF</p>
+                <span>Máximo 5 PDFs. Arrastra tus archivos o selecciónalos.</span>
+
+                <label className="file-label">
+                  Elegir PDFs
+                  <input type="file" accept=".pdf" multiple onChange={manejarArchivos} hidden />
+                </label>
+
+                {archivos.length > 0 && (
+                  <div className="archivo-box">
+                    {archivos.map((file, index) => (
+                      <div key={index} className="archivo-item">
+                        <p className="archivo-seleccionado">
+                          PDF {index + 1}: {file.name}
+                        </p>
+                        <button
+                          type="button"
+                          className="btn-quitar"
+                          onClick={() => quitarArchivo(index)}
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <button type="button" className="btn-pago btn-full" onClick={continuarPago}>
@@ -966,7 +794,7 @@ function PanelNegocio() {
       )}
 
       {paso === "pago" && (
-        <section className="section-card">
+        <section className="section-card section-card-modern">
           <div className="section-header">
             <div>
               <h2>Pago del trámite</h2>
@@ -974,64 +802,74 @@ function PanelNegocio() {
             </div>
           </div>
 
-          <div className="resumen-pago">
-            <h3>Resumen del trámite</h3>
-            <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
-            <p><strong>RUC:</strong> {form.ruc}</p>
-            <p><strong>Razón social:</strong> {form.razonSocial}</p>
-            <p><strong>Documentos PDF:</strong> {archivos.length}</p>
-            <p><strong>Concepto:</strong> Licencia municipal de funcionamiento</p>
-            <p><strong>Monto:</strong> S/{MONTO_TRAMITE.toFixed(2)}</p>
-            <p><strong>Estado del pago:</strong> {estadoPago}</p>
+          <div className="payment-layout">
+            <aside className="resumen-pago resumen-pago-modern">
+              <h3>Resumen del trámite</h3>
+              <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
+              <p><strong>RUC:</strong> {form.ruc}</p>
+              <p><strong>Razón social:</strong> {form.razonSocial}</p>
+              <p><strong>Documentos PDF:</strong> {archivos.length}</p>
+              <p><strong>Concepto:</strong> Licencia municipal de funcionamiento</p>
+              <div className="monto-box">
+                <span>Total a pagar</span>
+                <strong>S/{MONTO_TRAMITE.toFixed(2)}</strong>
+              </div>
+              <span className={`badge ${estadoPago === "Confirmado" ? "ok" : "warning"}`}>
+                {estadoPago}
+              </span>
+            </aside>
+
+            <div className="detalle-pago detalle-pago-modern">
+              {!MP_PUBLIC_KEY ? (
+                <div className="voucher-box">
+                  <h3>Falta configurar Mercado Pago</h3>
+                  <p>
+                    Agrega VITE_MP_PUBLIC_KEY en el archivo .env del frontend para mostrar el formulario de pago.
+                  </p>
+                </div>
+              ) : estadoPago !== "Confirmado" ? (
+                <>
+                  <h3>Pago con tarjeta dentro de la web</h3>
+                  <p>Completa los datos de pago sin salir del sistema municipal.</p>
+
+                  <CardPayment
+                    initialization={{ amount: MONTO_TRAMITE }}
+                    customization={{
+                      paymentMethods: {
+                        minInstallments: 1,
+                        maxInstallments: 1,
+                      },
+                    }}
+                    onSubmit={procesarPagoIntegrado}
+                    onReady={() => console.log("Formulario de pago listo")}
+                    onError={(error) => {
+                      console.error(error);
+                      alert("Ocurrió un error cargando el formulario de pago. Revisa la consola.");
+                    }}
+                  />
+                </>
+              ) : (
+                <div className="voucher-box success-voucher">
+                  <h3>Pago confirmado</h3>
+                  <p>El comprobante del pago queda registrado automáticamente.</p>
+                  {detallePago?.id && <p><strong>ID de pago:</strong> {detallePago.id}</p>}
+                </div>
+              )}
+            </div>
           </div>
 
-          {!MP_PUBLIC_KEY ? (
-            <div className="voucher-box">
-              <h3>Falta configurar Mercado Pago</h3>
-              <p>
-                Agrega VITE_MP_PUBLIC_KEY en el archivo .env del frontend para mostrar el formulario de pago.
-              </p>
-            </div>
-          ) : estadoPago !== "Confirmado" ? (
-            <div className="detalle-pago">
-              <h3>Pago con tarjeta dentro de la web</h3>
-              <p>
-                Completa los datos de pago sin salir del sistema municipal.
-              </p>
-
-              <CardPayment
-                initialization={{
-                  amount: MONTO_TRAMITE,
-                }}
-                customization={{
-                  paymentMethods: {
-                    minInstallments: 1,
-                    maxInstallments: 1,
-                  },
-                }}
-                onSubmit={procesarPagoIntegrado}
-                onReady={() => console.log("Formulario de pago listo")}
-                onError={(error) => {
-                  console.error(error);
-                  alert("Ocurrió un error cargando el formulario de pago. Revisa la consola.");
-                }}
-              />
-            </div>
-          ) : (
-            <div className="voucher-box">
-              <h3>Pago confirmado</h3>
-              <p>El comprobante del pago queda registrado automáticamente.</p>
-              {detallePago?.id && <p><strong>ID de pago:</strong> {detallePago.id}</p>}
-            </div>
-          )}
-
           <div className="payment-actions">
-            <button type="button" className="btn-secundario" onClick={marcarPagoDemo}>
+            <button
+              type="button"
+              className="btn-secundario"
+              onClick={marcarPagoDemo}
+              disabled={procesandoPago}
+            >
               Marcar pago como realizado (demo)
             </button>
           </div>
 
-          <div className="acciones-pago">
+          <div className="acciones-pago acciones-pago-modern">
             <button type="button" onClick={() => setPaso("solicitud")}>
               Volver
             </button>
@@ -1040,10 +878,7 @@ function PanelNegocio() {
               type="button"
               className="btn-pago"
               onClick={enviarSolicitud}
-              disabled={
-                guardando ||
-                estadoPago !== "Confirmado"
-              }
+              disabled={guardando || estadoPago !== "Confirmado"}
             >
               {guardando ? "Guardando solicitud..." : "Enviar solicitud"}
             </button>
@@ -1052,12 +887,12 @@ function PanelNegocio() {
       )}
 
       {paso === "confirmacion" && (
-        <section className="section-card confirmacion">
+        <section className="section-card section-card-modern confirmacion">
           <div className="success-circle">✓</div>
           <h2>Solicitud registrada</h2>
           <p>Tu solicitud fue enviada correctamente y los PDFs quedaron guardados.</p>
 
-          <div className="resumen-pago">
+          <div className="resumen-pago resumen-pago-modern">
             <p><strong>Número de expediente:</strong> {expediente}</p>
             <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
             <p><strong>Estado:</strong> En revisión municipal</p>
@@ -1065,11 +900,7 @@ function PanelNegocio() {
             <p><strong>Monto:</strong> S/{MONTO_TRAMITE.toFixed(2)}</p>
           </div>
 
-          <button
-            type="button"
-            className="btn-pago"
-            onClick={() => setPaso("misSolicitudes")}
-          >
+          <button type="button" className="btn-pago" onClick={() => setPaso("misSolicitudes")}>
             Ver mis solicitudes
           </button>
         </section>

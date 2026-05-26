@@ -83,13 +83,6 @@ function Login() {
             Plataforma para solicitar, consultar y descargar licencias
             municipales de funcionamiento de manera digital.
           </p>
-
-          <div className="login-benefits">
-            <span>Consulta RUC</span>
-            <span>Pago del trámite</span>
-            <span>Inspección municipal</span>
-            <span>Licencia descargable</span>
-          </div>
         </div>
 
         <div className="login-form-box">

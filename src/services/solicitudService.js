@@ -20,13 +20,13 @@ const generarIdExpediente = () => {
 
 export const guardarSolicitud = async (solicitud) => {
   const id = generarIdExpediente();
-
   const archivosPdf = solicitud.archivosPdf || [];
 
   const nuevaSolicitud = {
     id,
     fecha: new Date().toLocaleString("es-PE"),
     creadoEn: serverTimestamp(),
+    actualizadoEn: serverTimestamp(),
 
     uidUsuario: solicitud.uidUsuario || "",
     correoUsuario: solicitud.correoUsuario || "",
@@ -43,20 +43,9 @@ export const guardarSolicitud = async (solicitud) => {
 
     archivosPdf,
 
-    archivo:
-      solicitud.archivoNombre ||
-      archivosPdf[0]?.archivoNombre ||
-      "Sin archivo",
-
-    archivoNombre:
-      solicitud.archivoNombre ||
-      archivosPdf[0]?.archivoNombre ||
-      "Sin archivo",
-
-    archivoUrl:
-      solicitud.archivoUrl ||
-      archivosPdf[0]?.archivoUrl ||
-      "",
+    archivo: solicitud.archivoNombre || archivosPdf[0]?.archivoNombre || "Sin archivo",
+    archivoNombre: solicitud.archivoNombre || archivosPdf[0]?.archivoNombre || "Sin archivo",
+    archivoUrl: solicitud.archivoUrl || archivosPdf[0]?.archivoUrl || "",
 
     metodoPago: solicitud.metodoPago || "",
     estadoPago: solicitud.estadoPago || "Pendiente de validación",
@@ -73,6 +62,7 @@ export const guardarSolicitud = async (solicitud) => {
     observacionInspector: solicitud.observacionInspector || "",
     recomendacionInspector: solicitud.recomendacionInspector || "",
     evidenciasInspector: solicitud.evidenciasInspector || [],
+    fechaInspeccion: solicitud.fechaInspeccion || "",
 
     decisionFuncionario: solicitud.decisionFuncionario || "",
     observacionFuncionario: solicitud.observacionFuncionario || "",
@@ -80,7 +70,6 @@ export const guardarSolicitud = async (solicitud) => {
 
     numeroLicencia: solicitud.numeroLicencia || "",
     fechaAprobacion: solicitud.fechaAprobacion || "",
-    fechaInspeccion: solicitud.fechaInspeccion || "",
 
     fechaExpiracionLicencia: solicitud.fechaExpiracionLicencia || "",
     fechaVencimiento: solicitud.fechaVencimiento || "",
@@ -91,6 +80,9 @@ export const guardarSolicitud = async (solicitud) => {
 
     licenciaAnterior: solicitud.licenciaAnterior || "",
     qrVerificacion: solicitud.qrVerificacion || "",
+
+    pagoId: solicitud.pagoId || "",
+    pagoEstadoDetalle: solicitud.pagoEstadoDetalle || "",
   };
 
   await setDoc(doc(db, COLLECTION_NAME, id), nuevaSolicitud);
@@ -109,6 +101,10 @@ export const obtenerSolicitudes = async () => {
 };
 
 export const actualizarSolicitud = async (id, cambios) => {
+  if (!id) {
+    throw new Error("No se recibió el ID de la solicitud.");
+  }
+
   const solicitudRef = doc(db, COLLECTION_NAME, id);
 
   await updateDoc(solicitudRef, {
@@ -120,6 +116,10 @@ export const actualizarSolicitud = async (id, cambios) => {
 };
 
 export const obtenerSolicitudPorId = async (id) => {
+  if (!id) {
+    throw new Error("No se recibió el ID de la solicitud.");
+  }
+
   const solicitudRef = doc(db, COLLECTION_NAME, id);
   const snapshot = await getDoc(solicitudRef);
 
