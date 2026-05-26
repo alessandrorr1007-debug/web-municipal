@@ -24,13 +24,34 @@ function PagoTarjeta({
 
       <div className="resumen-pago">
         <h3>Resumen del trámite</h3>
-        <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
-        <p><strong>RUC:</strong> {form.ruc}</p>
-        <p><strong>Razón social:</strong> {form.razonSocial}</p>
-        <p><strong>Documentos PDF:</strong> {archivos.length}</p>
-        <p><strong>Concepto:</strong> Licencia municipal de funcionamiento</p>
-        <p><strong>Monto:</strong> S/{Number(MONTO_TRAMITE).toFixed(2)}</p>
-        <p><strong>Estado del pago:</strong> {estadoPago}</p>
+
+        <p>
+          <strong>Tipo de trámite:</strong> {form.tipoTramite}
+        </p>
+
+        <p>
+          <strong>RUC:</strong> {form.ruc}
+        </p>
+
+        <p>
+          <strong>Razón social:</strong> {form.razonSocial}
+        </p>
+
+        <p>
+          <strong>Documentos PDF:</strong> {archivos.length}
+        </p>
+
+        <p>
+          <strong>Concepto:</strong> Licencia municipal de funcionamiento
+        </p>
+
+        <p>
+          <strong>Monto:</strong> S/{Number(MONTO_TRAMITE).toFixed(2)}
+        </p>
+
+        <p>
+          <strong>Estado del pago:</strong> {estadoPago}
+        </p>
       </div>
 
       {!MP_PUBLIC_KEY ? (
@@ -45,18 +66,34 @@ function PagoTarjeta({
 
           <div className="voucher-box">
             <h3>Datos correctos para probar</h3>
-            <p><strong>Tarjeta Mastercard:</strong> 5031 7557 3453 0604</p>
-            <p><strong>Fecha:</strong> 11/30</p>
-            <p><strong>CVV:</strong> 123</p>
-            <p><strong>Nombre:</strong> APRO</p>
-            <p><strong>DNI:</strong> 12345678</p>
+
             <p>
-              En el campo E-mail puedes colocar el usuario comprador TEST que
-              creaste en Mercado Pago.
+              <strong>Tarjeta Mastercard:</strong> 5031 7557 3453 0604
+            </p>
+
+            <p>
+              <strong>Fecha:</strong> 11/30
+            </p>
+
+            <p>
+              <strong>CVV:</strong> 123
+            </p>
+
+            <p>
+              <strong>Nombre:</strong> APRO
+            </p>
+
+            <p>
+              <strong>DNI:</strong> 12345678
+            </p>
+
+            <p>
+              <strong>E-mail:</strong> test_user_650000@testuser.com
             </p>
           </div>
 
           <CardPayment
+            key={`mp-${Number(MONTO_TRAMITE)}-${form.ruc || "sin-ruc"}`}
             initialization={{
               amount: Number(MONTO_TRAMITE),
             }}
