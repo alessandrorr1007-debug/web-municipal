@@ -1,6 +1,9 @@
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:3000";
+
 export const consultarRuc = async (ruc) => {
   const response = await fetch(
-    `http://localhost:3000/api/ruc/${ruc}`
+    `${API_URL}/api/ruc/${ruc}`
   );
 
   if (!response.ok) {
