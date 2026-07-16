@@ -6,7 +6,7 @@ import {
   sendPasswordResetEmail,
 } from "firebase/auth";
 
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, query, collection, where, getDocs } from "firebase/firestore";
 
 export const registrarUsuario = async (datos) => {
   const credenciales = await createUserWithEmailAndPassword(
@@ -69,6 +69,12 @@ export const iniciarSesion = async (correo, password) => {
 
 export const cerrarSesion = async () => {
   await signOut(auth);
+};
+
+export const verificarRucExistente = async (ruc) => {
+  const q = query(collection(db, "usuarios"), where("ruc", "==", ruc));
+  const snapshot = await getDocs(q);
+  return !snapshot.empty;
 };
 
 export const enviarRecuperacion = async (correo) => {

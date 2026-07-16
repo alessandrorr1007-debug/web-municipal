@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { iniciarSesion, registrarUsuario, enviarRecuperacion } from "../services/authService";
+import { iniciarSesion, registrarUsuario, enviarRecuperacion, verificarRucExistente } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 
 function Login({ onVolver, modoInicial }) {
@@ -9,11 +9,13 @@ function Login({ onVolver, modoInicial }) {
   const [nombre, setNombre] = useState("");
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
   const [recuperacionEnviada, setRecuperacionEnviada] = useState(false);
   const [correoRecuperacion, setCorreoRecuperacion] = useState("");
   const [mostrarRecuperar, setMostrarRecuperar] = useState(false);
+  const [registroExitoso, setRegistroExitoso] = useState(false);
 
   const [dni, setDni] = useState("");
   const [telefono, setTelefono] = useState("");
@@ -55,16 +57,19 @@ function Login({ onVolver, modoInicial }) {
     if (!dni || dni.length < 8) { setError("Ingresa un DNI válido de 8 dígitos."); return; }
     if (!ruc || ruc.length !== 11) { setError("El RUC debe tener 11 digitos."); return; }
     if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return; }
+    if (password !== confirmPassword) { setError("Las contraseñas no coinciden."); return; }
 
     setCargando(true);
     try {
+      const rucExiste = await verificarRucExistente(ruc);
+      if (rucExiste) { setError("Ya existe una cuenta registrada con ese RUC."); setCargando(false); return; }
+
       await registrarUsuario({
         nombre, correo, password, rol: "negocio",
         dni, telefono, ruc, razonSocial, nombreComercial,
         direccion: direccionNeg, tipoNegocio, categoria,
       });
-      const dataUsuario = await iniciarSesion(correo, password);
-      setUsuario(dataUsuario);
+      setRegistroExitoso(true);
     } catch (err) {
       const msg = err?.message || "";
       if (msg.includes("email-already-in-use")) setError("Ya existe una cuenta con ese correo electronico.");
@@ -166,6 +171,24 @@ function Login({ onVolver, modoInicial }) {
             </div>
           ) : (
             <>
+              {registroExitoso ? (
+                <div style={{ textAlign: "center", padding: "20px 0" }}>
+                  <div style={{ fontSize: "48px", marginBottom: "16px" }}>&#9989;</div>
+                  <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Registro exitoso</h2>
+                  <p style={{ margin: "0 0 24px", color: "#475569", fontSize: "14px", lineHeight: "1.6" }}>
+                    Tu cuenta ha sido creada correctamente. Ahora puedes iniciar sesión con tu correo electrónico y contraseña.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setRegistroExitoso(false); setModo("login"); setError(""); }}
+                    className="primary-btn"
+                    style={{ padding: "14px 32px", fontSize: "15px" }}
+                  >
+                    Iniciar sesión
+                  </button>
+                </div>
+              ) : (
+                <>
               <div style={{ textAlign: "center", marginBottom: "24px" }}>
                 <h2 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "22px" }}>
                   {modo === "login" ? "Iniciar sesión" : "Crear cuenta"}
@@ -256,6 +279,13 @@ function Login({ onVolver, modoInicial }) {
                   <input type="password" placeholder="Minimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
                 </div>
 
+                {modo === "registro" && (
+                  <div>
+                    <label style={inputLabel}>Confirmar contraseña</label>
+                    <input type="password" placeholder="Repite tu contraseña" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} />
+                  </div>
+                )}
+
                 {modo === "login" && (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#64748b", cursor: "pointer" }}>
@@ -289,6 +319,8 @@ function Login({ onVolver, modoInicial }) {
                 <p style={{ margin: "0 0 4px" }}>Al continuar, aceptas los términos y condiciones del sistema municipal.</p>
                 <p style={{ margin: 0 }}>Protegido por Firebase Authentication</p>
               </div>
+                </>
+              )}
             </>
           )}
         </div>

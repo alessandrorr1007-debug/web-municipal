@@ -52,20 +52,20 @@ function App() {
     );
   }
 
-  if (!usuario || vista === "landing") {
-    return (
-      <LandingPage
-        onLogin={() => setVista("login")}
-        onRegister={() => setVista("registro")}
-      />
-    );
-  }
-
   if ((vista === "login" || vista === "registro") && !usuario) {
     return (
       <Login
         onVolver={() => setVista("landing")}
         modoInicial={vista === "registro" ? "registro" : "login"}
+      />
+    );
+  }
+
+  if (!usuario || vista === "landing") {
+    return (
+      <LandingPage
+        onLogin={() => setVista("login")}
+        onRegister={() => setVista("registro")}
       />
     );
   }
