@@ -166,6 +166,7 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
     const { ruc } = req.params;
 
     if (!/^\d{11}$/.test(ruc)) {
+      console.log("RUC con formato inválido:", ruc);
       return res.status(400).json({ error: "El RUC debe tener exactamente 11 dígitos." });
     }
 
@@ -174,10 +175,11 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
       return res.status(500).json({ error: "Servicio de consulta no configurado. Token faltante." });
     }
 
-    console.log("Consultando Decolecta SUNAT para RUC:", ruc);
+    const targetUrl = `https://api.decolecta.com/v1/sunat/ruc/full?numero=${ruc}`;
+    console.log("URL consultada:", targetUrl);
 
     const response = await axios.get(
-      `https://api.decolecta.com/v1/sunat/ruc/full?numero=${ruc}`,
+      targetUrl,
       {
         headers: {
           Accept: "application/json",
@@ -186,14 +188,60 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
       }
     );
 
-    console.log("Respuesta Decolecta SUNAT:", JSON.stringify(response.data));
+    console.log("Código HTTP recibido:", response.status);
+    console.log("Respuesta completa de Decolecta:", JSON.stringify(response.data, null, 2));
 
-    if (!response.data || !response.data.data) {
-      console.log("Sin datos en la respuesta");
+    const resBody = response.data;
+    const data = resBody.data || resBody;
+
+    if (!data || (!data.numero_documento && !data.razon_social)) {
+      console.log("Sin datos o sin razon_social/numero_documento en la respuesta.");
+      console.log("Resultado de la validación: NO VÁLIDO");
+      console.log("Motivo: RUC no encontrado en registros de SUNAT");
       return res.status(404).json({ error: "RUC no encontrado en registros de SUNAT." });
     }
 
-    res.json(response.data);
+    const rucNum = data.numero_documento || data.ruc || ruc;
+    const razonSocial = data.razon_social || "";
+    const estado = (data.estado || "").toUpperCase().trim();
+    const condicion = (data.condicion || "").toUpperCase().trim();
+    const direccion = data.direccion || "";
+    const departamento = data.departamento || "";
+    const provincia = data.provincia || "";
+    const distrito = data.distrito || "";
+
+    let esValido = true;
+    let motivoRechazo = "";
+
+    if (estado !== "ACTIVO") {
+      esValido = false;
+      motivoRechazo = "El RUC se encuentra inactivo o dado de baja en SUNAT. No es posible registrar una solicitud de licencia.";
+    } else if (condicion !== "HABIDO") {
+      esValido = false;
+      motivoRechazo = "El contribuyente no tiene una condición válida en SUNAT. Regularice su situación antes de solicitar una licencia.";
+    }
+
+    const payload = {
+      success: true,
+      ruc: rucNum,
+      razonSocial,
+      estado,
+      condicion,
+      direccion,
+      departamento,
+      provincia,
+      distrito,
+      esValido,
+      motivoRechazo
+    };
+
+    console.log("Objeto enviado al frontend:", JSON.stringify(payload, null, 2));
+    console.log("Resultado de la validación:", esValido ? "VÁLIDO" : "NO VÁLIDO");
+    if (!esValido) {
+      console.log("Motivo de rechazo:", motivoRechazo);
+    }
+
+    res.json(payload);
   } catch (error) {
     console.error("=== ERROR CONSULTANDO RUC ===");
     console.error("Status:", error.response?.status);

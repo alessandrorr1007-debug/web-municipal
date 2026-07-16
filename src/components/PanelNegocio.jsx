@@ -18,6 +18,7 @@ function PanelNegocio({ seccion }) {
   const [buscando, setBuscando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [errorRuc, setErrorRuc] = useState("");
+  const [successRuc, setSuccessRuc] = useState("");
   const [rucValidado, setRucValidado] = useState(false);
   const [paso, setPaso] = useState("misSolicitudes");
   const [metodoPago, setMetodoPago] = useState("");
@@ -38,6 +39,9 @@ function PanelNegocio({ seccion }) {
     giro: "",
     estadoSunat: "",
     condicionSunat: "",
+    departamento: "",
+    provincia: "",
+    distrito: "",
   });
 
   const confirmarPagoMercadoPago = (datosPago = {}) => {
@@ -165,11 +169,13 @@ function PanelNegocio({ seccion }) {
     if (e.target.name === "ruc") {
       setRucValidado(false);
       setErrorRuc("");
+      setSuccessRuc("");
     }
   };
 
   const buscarRuc = async () => {
     setErrorRuc("");
+    setSuccessRuc("");
     setRucValidado(false);
 
     if (form.ruc.trim().length !== 11) {
@@ -181,31 +187,26 @@ function PanelNegocio({ seccion }) {
       setBuscando(true);
 
       const data = await consultarRuc(form.ruc.trim());
-      const info = data.data || data.resultado || data;
 
       setForm((prev) => ({
         ...prev,
-        razonSocial: info.razon_social || info.nombre_o_razon_social || "",
-        nombreNegocio:
-          info.nombre_comercial ||
-          info.razon_social ||
-          info.nombre_o_razon_social ||
-          "",
-        direccion:
-          info.direccion ||
-          info.direccion_completa ||
-          info.domicilio_fiscal ||
-          "",
-        giro:
-          info.actividad_economica ||
-          info.actividad ||
-          info.ciiu ||
-          "Actividad económica no especificada",
-        estadoSunat: info.estado || "",
-        condicionSunat: info.condicion || "",
+        razonSocial: data.razonSocial || "",
+        nombreNegocio: data.razonSocial || "",
+        direccion: data.direccion || "",
+        estadoSunat: data.estado || "",
+        condicionSunat: data.condicion || "",
+        departamento: data.departamento || "",
+        provincia: data.provincia || "",
+        distrito: data.distrito || "",
+        giro: prev.giro || "Comercio"
       }));
 
-      setRucValidado(true);
+      if (data.esValido) {
+        setRucValidado(true);
+        setSuccessRuc("Contribuyente válido. Puede continuar con el registro de la solicitud.");
+      } else {
+        setErrorRuc(data.motivoRechazo || "El RUC no es válido para registrar una solicitud.");
+      }
     } catch (error) {
       console.error(error);
       setErrorRuc(error.message || "No se pudo consultar el RUC.");
@@ -359,6 +360,9 @@ function PanelNegocio({ seccion }) {
         giro: form.giro,
         estadoSunat: form.estadoSunat,
         condicionSunat: form.condicionSunat,
+        departamento: form.departamento,
+        provincia: form.provincia,
+        distrito: form.distrito,
         archivosPdf: pdfsSubidos,
         archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
         archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
@@ -806,21 +810,51 @@ function PanelNegocio({ seccion }) {
                     <input type="text" name="ruc" placeholder="Ingrese RUC de 11 digitos" value={form.ruc} onChange={manejarCambio} maxLength="11" />
                     <button type="button" onClick={buscarRuc} disabled={buscando}>{buscando ? "Buscando..." : "Consultar SUNAT"}</button>
                   </div>
-                  {errorRuc && <p className="error">{errorRuc}</p>}
-                  {rucValidado && <p className="success">RUC validado correctamente.</p>}
+                  {errorRuc && <p className="error" style={{ color: "#dc2626", fontWeight: "600", marginTop: "8px" }}>{errorRuc}</p>}
+                  {successRuc && <p className="success" style={{ color: "#166534", fontWeight: "600", marginTop: "8px" }}>{successRuc}</p>}
                 </div>
 
                 <div className="form-block">
                   <div className="block-title"><span>3</span><div><h3>Datos del negocio</h3><p>Verifica que la información obtenida sea correcta.</p></div></div>
                   <div className="form-grid">
-                    <input type="text" name="nombreNegocio" placeholder="Nombre del negocio" value={form.nombreNegocio} onChange={manejarCambio} />
-                    <input type="text" name="razonSocial" placeholder="Razón social" value={form.razonSocial} onChange={manejarCambio} />
-                    <input type="text" name="direccion" placeholder="Dirección del local" value={form.direccion} onChange={manejarCambio} />
-                    <input type="text" name="giro" placeholder="Giro comercial" value={form.giro} onChange={manejarCambio} />
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Razón social</label>
+                      <input type="text" name="razonSocial" placeholder="Razón social" value={form.razonSocial} readOnly disabled style={{ background: "#f1f5f9" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Dirección fiscal</label>
+                      <input type="text" name="direccion" placeholder="Dirección del local" value={form.direccion} readOnly disabled style={{ background: "#f1f5f9" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Nombre comercial / de fantasía</label>
+                      <input type="text" name="nombreNegocio" placeholder="Nombre del negocio" value={form.nombreNegocio} onChange={manejarCambio} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Giro comercial</label>
+                      <input type="text" name="giro" placeholder="Giro comercial" value={form.giro} onChange={manejarCambio} />
+                    </div>
                   </div>
-                  <div className="sunat-info sunat-info-modern">
-                    <span>Estado SUNAT: <strong>{form.estadoSunat || "Pendiente"}</strong></span>
-                    <span>Condición: <strong>{form.condicionSunat || "Pendiente"}</strong></span>
+                  <div className="form-grid" style={{ marginTop: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Estado SUNAT</label>
+                      <input type="text" name="estadoSunat" placeholder="Estado SUNAT" value={form.estadoSunat} readOnly disabled style={{ background: "#f1f5f9" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Condición SUNAT</label>
+                      <input type="text" name="condicionSunat" placeholder="Condición SUNAT" value={form.condicionSunat} readOnly disabled style={{ background: "#f1f5f9" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Departamento</label>
+                      <input type="text" name="departamento" placeholder="Departamento" value={form.departamento} readOnly disabled style={{ background: "#f1f5f9" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Provincia</label>
+                      <input type="text" name="provincia" placeholder="Provincia" value={form.provincia} readOnly disabled style={{ background: "#f1f5f9" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Distrito</label>
+                      <input type="text" name="distrito" placeholder="Distrito" value={form.distrito} readOnly disabled style={{ background: "#f1f5f9" }} />
+                    </div>
                   </div>
                 </div>
 
@@ -844,7 +878,19 @@ function PanelNegocio({ seccion }) {
                   </div>
                 </div>
 
-                <button type="button" className="btn-pago btn-full" onClick={continuarPago}>Continuar al pago</button>
+                <button
+                  type="button"
+                  className="btn-pago btn-full"
+                  onClick={continuarPago}
+                  disabled={!rucValidado}
+                  style={{
+                    opacity: rucValidado ? 1 : 0.6,
+                    cursor: rucValidado ? "pointer" : "not-allowed",
+                    background: rucValidado ? "#1e3a8a" : "#94a3b8"
+                  }}
+                >
+                  {rucValidado ? "Continuar al pago" : "Validar RUC para continuar"}
+                </button>
               </div>
             </section>
           )}
