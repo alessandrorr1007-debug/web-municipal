@@ -30,6 +30,10 @@ export const guardarSolicitud = async (solicitud) => {
 
     uidUsuario: solicitud.uidUsuario || "",
     correoUsuario: solicitud.correoUsuario || "",
+    nombreSolicitante: solicitud.nombreSolicitante || "",
+    telefonoSolicitante: solicitud.telefonoSolicitante || "",
+
+    canalRegistro: solicitud.canalRegistro || "online",
 
     tipoTramite: solicitud.tipoTramite || "Nueva licencia",
 
@@ -48,21 +52,28 @@ export const guardarSolicitud = async (solicitud) => {
     archivoUrl: solicitud.archivoUrl || archivosPdf[0]?.archivoUrl || "",
 
     metodoPago: solicitud.metodoPago || "",
-    estadoPago: solicitud.estadoPago || "Pendiente de validación",
-    pago: solicitud.estadoPago || "Pendiente de validación",
+    estadoPago: solicitud.estadoPago || "Pendiente de validacion",
+    pago: solicitud.estadoPago || "Pendiente de validacion",
     comprobantePago: solicitud.comprobantePago || "",
+    montoPagado: solicitud.montoPagado || 0,
 
-    estado: solicitud.estado || "En revisión",
+    estado: solicitud.estado || "En revision",
 
-    inspeccion: solicitud.inspeccion || "Sin inspección",
+    fechaVisitaInspector: solicitud.fechaVisitaInspector || "",
+    programadoPor: solicitud.programadoPor || "",
+    nombreProgramador: solicitud.nombreProgramador || "",
+
+    inspeccion: solicitud.inspeccion || "Sin inspeccion",
     resultadoInspeccion: solicitud.resultadoInspeccion || "",
 
     observacion: solicitud.observacion || "",
-
     observacionInspector: solicitud.observacionInspector || "",
     recomendacionInspector: solicitud.recomendacionInspector || "",
     evidenciasInspector: solicitud.evidenciasInspector || [],
     fechaInspeccion: solicitud.fechaInspeccion || "",
+
+    cantidadReobservaciones: solicitud.cantidadReobservaciones || 0,
+    historialReobservaciones: solicitud.historialReobservaciones || [],
 
     decisionFuncionario: solicitud.decisionFuncionario || "",
     observacionFuncionario: solicitud.observacionFuncionario || "",
@@ -70,7 +81,6 @@ export const guardarSolicitud = async (solicitud) => {
 
     numeroLicencia: solicitud.numeroLicencia || "",
     fechaAprobacion: solicitud.fechaAprobacion || "",
-
     fechaExpiracionLicencia: solicitud.fechaExpiracionLicencia || "",
     fechaVencimiento: solicitud.fechaVencimiento || "",
     licenciaVigente: solicitud.licenciaVigente || false,
@@ -83,6 +93,8 @@ export const guardarSolicitud = async (solicitud) => {
 
     pagoId: solicitud.pagoId || "",
     pagoEstadoDetalle: solicitud.pagoEstadoDetalle || "",
+
+    notificaciones: solicitud.notificaciones || [],
   };
 
   await setDoc(doc(db, COLLECTION_NAME, id), nuevaSolicitud);

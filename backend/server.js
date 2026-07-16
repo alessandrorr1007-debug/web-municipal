@@ -22,7 +22,7 @@ const TOKEN_DECOLECTA =
 const MP_ACCESS_TOKEN =
   process.env.MERCADO_PAGO_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN;
 
-const MONTO_TRAMITE = 100;
+const MONTO_TRAMITE = 3;
 
 console.log("TOKEN DECOLECTA:", TOKEN_DECOLECTA ? "Existe" : "No existe");
 console.log("TOKEN MERCADO PAGO:", MP_ACCESS_TOKEN ? "Existe" : "No existe");

@@ -10,7 +10,7 @@ import { useAuth } from "../context/AuthContext";
 
 function PanelNegocio() {
   const { usuario } = useAuth();
-  const MONTO_TRAMITE = 100;
+  const MONTO_TRAMITE = 3;
 
   const [archivos, setArchivos] = useState([]);
   const [buscando, setBuscando] = useState(false);
@@ -24,6 +24,7 @@ function PanelNegocio() {
   const [misSolicitudes, setMisSolicitudes] = useState([]);
   const [procesandoPago, setProcesandoPago] = useState(false);
   const [detallePago, setDetallePago] = useState(null);
+  const [notificacionesPendientes, setNotificacionesPendientes] = useState(0);
 
   const [form, setForm] = useState({
     tipoTramite: "Nueva licencia",
@@ -108,6 +109,14 @@ function PanelNegocio() {
       );
 
       setMisSolicitudes(filtradas);
+
+      let totalNoLeidas = 0;
+      filtradas.forEach((s) => {
+        if (s.notificaciones) {
+          totalNoLeidas += s.notificaciones.filter((n) => !n.leida).length;
+        }
+      });
+      setNotificacionesPendientes(totalNoLeidas);
     } catch (error) {
       console.error(error);
       alert("No se pudieron cargar las solicitudes.");
@@ -559,6 +568,12 @@ function PanelNegocio() {
             Registra tu solicitud, realiza el pago y consulta el avance de tu expediente.
           </p>
         </div>
+
+        <div className="hero-card">
+          <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Monto del tramite</span>
+          <strong style={{ fontSize: "28px" }}>S/{MONTO_TRAMITE.toFixed(2)}</strong>
+          <small>Derecho de tramite municipal</small>
+        </div>
       </div>
 
       <div className="tabs-panel tabs-panel-modern">
@@ -570,7 +585,27 @@ function PanelNegocio() {
             setPaso("misSolicitudes");
           }}
         >
-          📂 Mis solicitudes
+          Mis solicitudes
+        </button>
+
+        <button
+          type="button"
+          className={paso === "notificaciones" ? "tab-active" : ""}
+          onClick={() => setPaso("notificaciones")}
+        >
+          Notificaciones {notificacionesPendientes > 0 && (
+            <span style={{
+              background: "#dc2626",
+              color: "white",
+              padding: "2px 7px",
+              borderRadius: "999px",
+              fontSize: "11px",
+              fontWeight: 800,
+              marginLeft: "6px",
+            }}>
+              {notificacionesPendientes}
+            </span>
+          )}
         </button>
 
         <button
@@ -578,7 +613,7 @@ function PanelNegocio() {
           className={paso === "solicitud" ? "tab-active" : ""}
           onClick={nuevaSolicitud}
         >
-          ➕ Nueva solicitud
+          Nueva solicitud
         </button>
       </div>
 
@@ -597,10 +632,23 @@ function PanelNegocio() {
 
           {misSolicitudes.length === 0 ? (
             <div className="empty-state empty-state-modern">
-              <div className="empty-icon">📄</div>
-              <h3>Aún no has enviado solicitudes</h3>
-              <p>Cuando registres una solicitud de licencia, aparecerá aquí.</p>
-              <button type="button" className="btn-pago" onClick={nuevaSolicitud}>
+              <div
+                style={{
+                  width: "80px",
+                  height: "80px",
+                  borderRadius: "50%",
+                  background: "linear-gradient(135deg, #eff6ff, #dbeafe)",
+                  display: "grid",
+                  placeItems: "center",
+                  margin: "0 auto 16px",
+                  fontSize: "36px",
+                }}
+              >
+                &#128196;
+              </div>
+              <h3>Aun no has enviado solicitudes</h3>
+              <p>Cuando registres una solicitud de licencia, aparecera aqui.</p>
+              <button type="button" className="btn-pago" onClick={nuevaSolicitud} style={{ marginTop: "8px" }}>
                 Crear primera solicitud
               </button>
             </div>
@@ -685,6 +733,67 @@ function PanelNegocio() {
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {paso === "notificaciones" && (
+        <section className="section-card section-card-modern">
+          <div className="section-header">
+            <div>
+              <h2>Mis notificaciones</h2>
+              <p>Actualizaciones sobre tus solicitudes de licencia.</p>
+            </div>
+          </div>
+
+          {(() => {
+            const todasLasNotis = [];
+            misSolicitudes.forEach((s) => {
+              if (s.notificaciones) {
+                s.notificaciones.forEach((n) => {
+                  todasLasNotis.push({ ...n, solicitudId: s.id, nombreNegocio: s.nombreNegocio, estado: s.estado });
+                });
+              }
+            });
+            todasLasNotis.sort((a, b) => b.fecha?.localeCompare(a.fecha) || 0);
+
+            if (todasLasNotis.length === 0) {
+              return (
+                <div className="empty-state">
+                  <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128276;</div>
+                  <h3>No tienes notificaciones</h3>
+                  <p>Cuando haya novedades en tus solicitudes, apareceran aqui.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div>
+                {todasLasNotis.map((n, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: "16px",
+                      border: `1px solid ${n.leida ? "#e2e8f0" : "#bfdbfe"}`,
+                      borderRadius: "14px",
+                      marginBottom: "10px",
+                      background: n.leida ? "#f8fafc" : "#eff6ff",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div>
+                        <strong style={{ color: "#1f3b57", fontSize: "15px" }}>{n.titulo}</strong>
+                        <p style={{ margin: "4px 0 0", fontSize: "14px", color: "#475569" }}>{n.mensaje}</p>
+                        <small style={{ color: "#94a3b8" }}>{n.fecha} | Expediente: {n.solicitudId}</small>
+                      </div>
+                      {!n.leida && (
+                        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#2563eb", flexShrink: 0, marginTop: "6px" }} />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </section>
       )}
 
@@ -1055,10 +1164,23 @@ function PanelNegocio() {
       )}
 
       {paso === "confirmacion" && (
-        <section className="section-card section-card-modern confirmacion">
-          <div className="success-circle">✓</div>
-          <h2>Solicitud registrada</h2>
-          <p>Tu solicitud fue enviada correctamente y los PDFs quedaron guardados.</p>
+        <section className="section-card section-card-modern confirmacion" style={{ textAlign: "center", padding: "50px 28px" }}>
+          <div
+            className="success-circle"
+            style={{
+              width: "80px",
+              height: "80px",
+              margin: "0 auto 20px",
+              fontSize: "40px",
+              boxShadow: "0 8px 30px rgba(22, 163, 74, 0.25)",
+            }}
+          >
+            &#10003;
+          </div>
+          <h2 style={{ fontSize: "28px", marginBottom: "8px" }}>Solicitud registrada</h2>
+          <p style={{ color: "#64748b", fontSize: "16px", maxWidth: "500px", margin: "0 auto 24px" }}>
+            Tu solicitud fue enviada correctamente y los PDFs quedaron guardados.
+          </p>
 
           <div className="resumen-pago resumen-pago-modern">
             <p><strong>Número de expediente:</strong> {expediente}</p>

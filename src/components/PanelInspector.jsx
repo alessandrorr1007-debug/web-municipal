@@ -6,45 +6,53 @@ import {
 
 function PanelInspector() {
   const [solicitudes, setSolicitudes] = useState([]);
-  const [pendientes, setPendientes] = useState([]);
+  const [hoy, setHoy] = useState([]);
   const [historial, setHistorial] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [enviandoId, setEnviandoId] = useState("");
   const [formularios, setFormularios] = useState({});
+  const [paso, setPaso] = useState("hoy");
 
-  const esPendienteInspeccion = (solicitud) => {
-    const estado = (solicitud.estado || "").toLowerCase();
-    const inspeccion = (solicitud.inspeccion || "").toLowerCase();
-
-    return (
-      estado.includes("inspección") ||
-      estado.includes("inspeccion") ||
-      inspeccion.includes("pendiente") ||
-      inspeccion.includes("sin inspección") ||
-      inspeccion.includes("sin inspeccion")
-    ) &&
-      solicitud.estado !== "Resultado enviado al funcionario" &&
-      solicitud.inspeccion !== "Aprobada" &&
-      solicitud.inspeccion !== "Rechazada";
+  const obtenerFechaHoy = () => {
+    return new Date().toLocaleDateString("es-PE");
   };
 
-  const esHistorialInspeccion = (solicitud) => {
+  const esInspeccionHoy = (s) => {
+    if (!s.fechaVisitaInspector) return false;
+    return s.fechaVisitaInspector === obtenerFechaHoy();
+  };
+
+  const esPendienteHoy = (s) => {
+    const estado = (s.estado || "").toLowerCase();
+    const fechaCorrecta = esInspeccionHoy(s);
+    const noProcesada =
+      s.estado !== "Resultado enviado al funcionario" &&
+      s.inspeccion !== "Aprobada" &&
+      s.inspeccion !== "Rechazada" &&
+      s.inspeccion !== "Reobservada";
+    const esPendiente =
+      estado.includes("inspeccion") ||
+      estado.includes("programada") ||
+      (s.inspeccion || "").toLowerCase().includes("pendiente");
+    return fechaCorrecta && noProcesada && esPendiente;
+  };
+
+  const esHistorial = (s) => {
     return (
-      solicitud.estado === "Resultado enviado al funcionario" ||
-      solicitud.inspeccion === "Aprobada" ||
-      solicitud.inspeccion === "Rechazada"
+      s.estado === "Resultado enviado al funcionario" ||
+      s.inspeccion === "Aprobada" ||
+      s.inspeccion === "Rechazada" ||
+      s.inspeccion === "Reobservada"
     );
   };
 
   const cargarSolicitudes = async () => {
     try {
       setCargando(true);
-
       const data = await obtenerSolicitudes();
-
       setSolicitudes(data);
-      setPendientes(data.filter(esPendienteInspeccion));
-      setHistorial(data.filter(esHistorialInspeccion));
+      setHoy(data.filter(esPendienteHoy));
+      setHistorial(data.filter(esHistorial));
     } catch (error) {
       console.error(error);
       alert("No se pudieron cargar las inspecciones.");
@@ -70,10 +78,7 @@ function PanelInspector() {
   const actualizarCampo = (id, campo, valor) => {
     setFormularios((prev) => ({
       ...prev,
-      [id]: {
-        ...prev[id],
-        [campo]: valor,
-      },
+      [id]: { ...prev[id], [campo]: valor },
     }));
   };
 
@@ -88,16 +93,14 @@ function PanelInspector() {
   const convertirImagenABase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-
       reader.onload = () => {
         resolve({
           nombre: file.name,
           tipo: file.type,
-          tamaño: file.size,
+          tamano: file.size,
           url: reader.result,
         });
       };
-
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
@@ -106,98 +109,124 @@ function PanelInspector() {
   const validarImagenes = (id, archivos) => {
     const actuales = formularios[id]?.evidencias || [];
     const nuevas = Array.from(archivos || []);
-
-    if (nuevas.length === 0) {
-      return [];
-    }
-
+    if (nuevas.length === 0) return [];
     if (actuales.length + nuevas.length > 2) {
-      alert("Solo puedes subir como máximo 2 fotos de evidencia.");
+      alert("Solo puedes subir como maximo 2 fotos de evidencia.");
       return [];
     }
-
-    const archivoNoImagen = nuevas.find(
-      (file) => !file.type.startsWith("image/")
-    );
-
-    if (archivoNoImagen) {
-      alert("Solo se permiten imágenes como evidencia.");
+    if (nuevas.find((f) => !f.type.startsWith("image/"))) {
+      alert("Solo se permiten imagenes como evidencia.");
       return [];
     }
-
-    const imagenMuyPesada = nuevas.find((file) => file.size > 500 * 1024);
-
-    if (imagenMuyPesada) {
-      alert("Cada imagen debe pesar como máximo 500 KB.");
+    if (nuevas.find((f) => f.size > 500 * 1024)) {
+      alert("Cada imagen debe pesar como maximo 500 KB.");
       return [];
     }
-
     return nuevas;
   };
 
   const manejarEvidencias = async (id, archivos) => {
-    const imagenesValidas = validarImagenes(id, archivos);
-
-    if (imagenesValidas.length === 0) return;
-
+    const validas = validarImagenes(id, archivos);
+    if (validas.length === 0) return;
     try {
-      const evidenciasConvertidas = await Promise.all(
-        imagenesValidas.map((file) => convertirImagenABase64(file))
-      );
-
-      const evidenciasActuales = formularios[id]?.evidencias || [];
-
-      actualizarCampo(id, "evidencias", [
-        ...evidenciasActuales,
-        ...evidenciasConvertidas,
-      ]);
-    } catch (error) {
-      console.error(error);
-      alert("No se pudieron cargar las imágenes.");
+      const convertidas = await Promise.all(validas.map(convertirImagenABase64));
+      const actuales = formularios[id]?.evidencias || [];
+      actualizarCampo(id, "evidencias", [...actuales, ...convertidas]);
+    } catch {
+      alert("No se pudieron cargar las imagenes.");
     }
-  };
-
-  const manejarDropImagenes = async (e, id) => {
-    e.preventDefault();
-    await manejarEvidencias(id, e.dataTransfer.files);
   };
 
   const quitarEvidencia = (id, index) => {
     const actuales = formularios[id]?.evidencias || [];
-    const nuevas = actuales.filter((_, i) => i !== index);
-    actualizarCampo(id, "evidencias", nuevas);
+    actualizarCampo(id, "evidencias", actuales.filter((_, i) => i !== index));
   };
 
-  const enviarResultadoInspector = async (solicitud) => {
+  const enviarResultado = async (solicitud, tipo) => {
     const formulario = formularios[solicitud.id] || {};
     const observacion = (formulario.observacion || "").trim();
     const recomendacion = formulario.recomendacion || "";
     const evidencias = formulario.evidencias || [];
 
     if (enviandoId) return;
-
     if (!observacion) {
-      alert("La observación del inspector es obligatoria.");
+      alert("La observacion del inspector es obligatoria.");
       return;
     }
-
     if (!recomendacion) {
-      alert("Debes elegir una recomendación: Aprobar o Rechazar.");
+      alert("Debes elegir una recomendacion: Aprobar o Rechazar.");
       return;
     }
-
     if (evidencias.length === 0) {
       alert("Debes subir al menos una foto como evidencia.");
       return;
     }
 
-    const inspeccion = recomendacion === "Aprobar" ? "Aprobada" : "Rechazada";
+    const esReobservacion = solicitud.cantidadReobservaciones >= 1;
+    const esSegundaReobservacion = solicitud.cantidadReobservaciones >= 1 && recomendacion === "Rechazar";
+
+    if (esSegundaReobservacion) {
+      const confirmar = confirm(
+        "Esta es la SEGUNDA reobservacion. Si rechazas, la solicitud quedara RECHAZADA DEFINITIVAMENTE. No habra mas oportunidades.\n\nDeseas continuar?"
+      );
+      if (!confirmar) return;
+    }
+
+    let estadoFinal;
+    let inspeccionFinal;
+
+    if (esSegundaReobservacion) {
+      estadoFinal = "Licencia rechazada";
+      inspeccionFinal = "Rechazada";
+    } else if (tipo === "reobservar" || (esReobservacion && recomendacion === "Rechazar")) {
+      const nuevaCantidad = (solicitud.cantidadReobservaciones || 0) + 1;
+      const fechaReprogramacion = new Date();
+      fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 30);
+      const nuevaFecha = fechaReprogramacion.toLocaleDateString("es-PE");
+
+      await actualizarSolicitud(solicitud.id, {
+        inspeccion: "Reobservada",
+        recomendacionInspector: recomendacion,
+        observacionInspector: observacion,
+        evidenciasInspector: evidencias,
+        fechaInspeccion: formatearFechaHora(),
+        resultadoInspeccion: "El inspector reobserva el local. El negocio debe corregir.",
+        estado: "Programada para inspeccion",
+        fechaVisitaInspector: nuevaFecha,
+        cantidadReobservaciones: nuevaCantidad,
+        historialReobservaciones: [
+          ...(solicitud.historialReobservaciones || []),
+          {
+            fecha: formatearFechaHora(),
+            observacion,
+            recomendacion,
+            evidencias: evidencias.length,
+          },
+        ],
+        notificaciones: [
+          ...(solicitud.notificaciones || []),
+          {
+            fecha: formatearFechaHora(),
+            titulo: "Inspeccion reobservada",
+            mensaje: `El inspector reobservo tu local. Debes corregir las observaciones. Nueva inspeccion programada para el ${nuevaFecha}.`,
+            leida: false,
+          },
+        ],
+      });
+
+      limpiarFormulario(solicitud.id);
+      alert(`Inspeccion reobservada. Nueva visita programada para ${nuevaFecha}.`);
+      await cargarSolicitudes();
+      return;
+    } else {
+      estadoFinal = "Resultado enviado al funcionario";
+      inspeccionFinal = recomendacion === "Aprobar" ? "Aprobada" : "Rechazada";
+    }
 
     try {
       setEnviandoId(solicitud.id);
-
       await actualizarSolicitud(solicitud.id, {
-        inspeccion,
+        inspeccion: inspeccionFinal,
         recomendacionInspector: recomendacion,
         observacionInspector: observacion,
         evidenciasInspector: evidencias,
@@ -206,392 +235,360 @@ function PanelInspector() {
           recomendacion === "Aprobar"
             ? "El inspector recomienda aprobar el licenciamiento."
             : "El inspector recomienda rechazar el licenciamiento.",
-        estado: "Resultado enviado al funcionario",
+        estado: estadoFinal,
+        notificaciones: [
+          ...(solicitud.notificaciones || []),
+          {
+            fecha: formatearFechaHora(),
+            titulo: "Inspeccion completada",
+            mensaje: `El inspector realizo la inspeccion y recomienda ${recomendacion.toLowerCase()}.`,
+            leida: false,
+          },
+        ],
       });
 
       limpiarFormulario(solicitud.id);
-      alert("Resultado de inspección enviado al funcionario.");
+      alert("Resultado enviado al funcionario.");
       await cargarSolicitudes();
     } catch (error) {
       console.error(error);
-      alert(
-        error.message ||
-          "No se pudo enviar el resultado al funcionario. Revisa la consola."
-      );
+      alert(error.message || "No se pudo enviar el resultado.");
     } finally {
       setEnviandoId("");
     }
   };
 
   const badgeClase = (estado = "") => {
-    const texto = estado.toLowerCase();
-
-    if (texto.includes("aprobada") || texto.includes("aprobar")) return "ok";
-    if (texto.includes("rechazada") || texto.includes("rechazar")) return "danger";
-    if (texto.includes("observada")) return "warning";
-    if (texto.includes("pendiente")) return "neutral";
+    const t = estado.toLowerCase();
+    if (t.includes("aprobada") || t.includes("aprobar")) return "ok";
+    if (t.includes("rechazada") || t.includes("rechazar")) return "danger";
+    if (t.includes("reobserva")) return "warning";
+    if (t.includes("pendiente")) return "neutral";
     return "info";
   };
 
-  const mostrarDocumentos = (solicitud) => {
-    if (solicitud.archivosPdf?.length > 0) {
+  const mostrarDocumentos = (s) => {
+    if (s.archivosPdf?.length > 0) {
       return (
         <div className="documentos-lista">
-          {solicitud.archivosPdf.map((pdf, index) => (
-            <a
-              key={index}
-              href={pdf.archivoUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              PDF {index + 1}
+          {s.archivosPdf.map((pdf, i) => (
+            <a key={i} href={pdf.archivoUrl} target="_blank" rel="noreferrer">
+              PDF {i + 1}
             </a>
           ))}
         </div>
       );
     }
-
-    if (solicitud.archivoUrl) {
-      return (
-        <a href={solicitud.archivoUrl} target="_blank" rel="noreferrer">
-          Ver PDF
-        </a>
-      );
+    if (s.archivoUrl) {
+      return <a href={s.archivoUrl} target="_blank" rel="noreferrer">Ver PDF</a>;
     }
-
     return "Sin PDF";
   };
-
-  const inspeccionesAprobadas = historial.filter(
-    (s) => s.inspeccion === "Aprobada"
-  ).length;
-
-  const inspeccionesRechazadas = historial.filter(
-    (s) => s.inspeccion === "Rechazada"
-  ).length;
 
   return (
     <div className="panel panel-inspector">
       <div className="inspector-hero">
         <div>
-          <span className="eyebrow">Área de inspección municipal</span>
+          <span className="eyebrow">Area de inspeccion municipal</span>
           <h1>Panel Inspector</h1>
           <p>
-            Revisa los documentos del negocio, sube hasta 2 evidencias
-            fotográficas y envía tu recomendación al funcionario.
+            Revisa las inspecciones programadas para HOY, sube evidencias y envia tu recomendacion al funcionario.
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn-outline-light"
-          onClick={cargarSolicitudes}
-          disabled={cargando || !!enviandoId}
-        >
-          {cargando ? "Actualizando..." : "Actualizar"}
-        </button>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <div className="hero-card">
+            <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Hoy</span>
+            <strong style={{ fontSize: "28px" }}>{hoy.length}</strong>
+            <small>inspecciones</small>
+          </div>
+
+          <button type="button" className="btn-outline-light" onClick={cargarSolicitudes} disabled={cargando || !!enviandoId}>
+            {cargando ? "Actualizando..." : "Actualizar"}
+          </button>
+        </div>
       </div>
 
+      {hoy.length > 0 && (
+        <div
+          style={{
+            margin: "20px 34px 0",
+            padding: "16px 20px",
+            borderRadius: "14px",
+            background: "linear-gradient(135deg, #fef3c7, #fde68a)",
+            border: "1px solid #f59e0b",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <span style={{ fontSize: "24px" }}>&#128276;</span>
+          <div>
+            <strong style={{ color: "#92400e", fontSize: "15px" }}>
+              Tienes {hoy.length} inspeccion{hoy.length > 1 ? "es" : ""} programada{hoy.length > 1 ? "s" : ""} para hoy
+            </strong>
+            <p style={{ margin: "2px 0 0", color: "#a16207", fontSize: "13px" }}>
+              Revisa cada expediente, sube evidencias y envia tu recomendacion.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="stats-grid">
+        <div className="stat-card">
+          <span>Hoy</span>
+          <strong>{hoy.length}</strong>
+          <small>Inspecciones programadas</small>
+        </div>
+        <div className="stat-card">
+          <span>Historial</span>
+          <strong>{historial.length}</strong>
+          <small>Resultados enviados</small>
+        </div>
         <div className="stat-card">
           <span>Total</span>
           <strong>{solicitudes.length}</strong>
           <small>Solicitudes del sistema</small>
         </div>
-
-        <div className="stat-card">
-          <span>Pendientes</span>
-          <strong>{pendientes.length}</strong>
-          <small>Esperando inspección</small>
-        </div>
-
-        <div className="stat-card">
-          <span>Realizadas</span>
-          <strong>{historial.length}</strong>
-          <small>Resultados enviados</small>
-        </div>
-
-        <div className="stat-card">
-          <span>Aprobadas</span>
-          <strong>{inspeccionesAprobadas}</strong>
-          <small>Recomendadas para aprobar</small>
-        </div>
-
-        <div className="stat-card">
-          <span>Rechazadas</span>
-          <strong>{inspeccionesRechazadas}</strong>
-          <small>Recomendadas para rechazar</small>
-        </div>
       </div>
 
-      <section className="section-card">
-        <div className="section-header">
-          <div>
-            <h2>Inspecciones pendientes</h2>
-            <p>Solicitudes enviadas por el funcionario para revisión del local.</p>
-          </div>
-        </div>
+      <div className="tabs-panel">
+        <button type="button" className={paso === "hoy" ? "tab-active" : ""} onClick={() => setPaso("hoy")}>
+          Mis inspecciones de hoy
+        </button>
+        <button type="button" className={paso === "historial" ? "tab-active" : ""} onClick={() => setPaso("historial")}>
+          Historial
+        </button>
+      </div>
 
-        {pendientes.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">🔎</div>
-            <h3>No hay inspecciones pendientes</h3>
-            <p>
-              Cuando el funcionario derive una solicitud, aparecerá aquí para su
-              revisión.
-            </p>
+      {paso === "hoy" && (
+        <section className="section-card">
+          <div className="section-header">
+            <div>
+              <h2>Inspecciones del dia</h2>
+              <p>Solo se muestran las inspecciones programadas para hoy ({obtenerFechaHoy()}).</p>
+            </div>
           </div>
-        ) : (
-          <div className="inspector-grid">
-            {pendientes.map((solicitud) => {
-              const formulario = formularios[solicitud.id] || {};
-              const estaEnviando = enviandoId === solicitud.id;
 
-              return (
-                <article className="inspection-card" key={solicitud.id}>
-                  <div className="inspection-card-header">
-                    <div>
-                      <span className="badge info">{solicitud.id}</span>
-                      <h3>{solicitud.nombreNegocio}</h3>
-                      <p>{solicitud.razonSocial}</p>
+          {hoy.length === 0 ? (
+            <div className="empty-state">
+              <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128269;</div>
+              <h3>No tienes inspecciones programadas para hoy</h3>
+              <p>Las inspecciones programadas por el cajero o funcionario apareceran aqui el dia que les toque.</p>
+            </div>
+          ) : (
+            <div className="inspector-grid">
+              {hoy.map((solicitud) => {
+                const formulario = formularios[solicitud.id] || {};
+                const estaEnviando = enviandoId === solicitud.id;
+                const esReobservacion = (solicitud.cantidadReobservaciones || 0) >= 1;
+
+                return (
+                  <article className="inspection-card" key={solicitud.id}>
+                    <div className="inspection-card-header">
+                      <div>
+                        <span className="badge info">{solicitud.id}</span>
+                        <h3>{solicitud.nombreNegocio}</h3>
+                        <p>{solicitud.razonSocial}</p>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        {esReobservacion && (
+                          <span className="badge warning" style={{ marginBottom: "4px" }}>
+                            2da oportunidad ({solicitud.cantidadReobservaciones} reobservacion{solicitud.cantidadReobservaciones > 1 ? "es" : ""})
+                          </span>
+                        )}
+                        <span className={`badge ${solicitud.canalRegistro === "presencial" ? "info" : "ok"}`}>
+                          {solicitud.canalRegistro === "presencial" ? "Presencial" : "Online"}
+                        </span>
+                      </div>
                     </div>
 
-                    <span className="badge warning">Pendiente</span>
-                  </div>
+                    <div className="inspection-details">
+                      <p><strong>RUC:</strong> {solicitud.ruc}</p>
+                      <p><strong>Direccion:</strong> {solicitud.direccion}</p>
+                      <p><strong>Giro:</strong> {solicitud.giro}</p>
+                      <p><strong>Tipo:</strong> {solicitud.tipoTramite || "Nueva licencia"}</p>
+                      <p><strong>Programado por:</strong> {solicitud.nombreProgramador || "Sistema"}</p>
+                      <div>
+                        <strong>Documentos:</strong>
+                        {mostrarDocumentos(solicitud)}
+                      </div>
 
-                  <div className="inspection-details">
-                    <p>
-                      <strong>RUC:</strong> {solicitud.ruc}
-                    </p>
-
-                    <p>
-                      <strong>Dirección:</strong> {solicitud.direccion}
-                    </p>
-
-                    <p>
-                      <strong>Giro:</strong> {solicitud.giro}
-                    </p>
-
-                    <p>
-                      <strong>Tipo de trámite:</strong>{" "}
-                      {solicitud.tipoTramite || "Nueva licencia"}
-                    </p>
-
-                    <div>
-                      <strong>Documentos del negocio:</strong>
-                      {mostrarDocumentos(solicitud)}
+                      {esReobservacion && solicitud.historialReobservaciones?.length > 0 && (
+                        <div style={{ marginTop: "8px", padding: "10px", background: "#fef3c7", borderRadius: "10px", border: "1px solid #fde68a" }}>
+                          <strong style={{ color: "#92400e", fontSize: "13px" }}>Observaciones anteriores:</strong>
+                          {solicitud.historialReobservaciones.map((obs, i) => (
+                            <p key={i} style={{ margin: "4px 0 0", fontSize: "13px", color: "#a16207" }}>
+                              {obs.fecha}: {obs.observacion}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
 
-                  <div className="inspection-form">
-                    <label>
-                      Observación del inspector *
-                      <textarea
-                        value={formulario.observacion || ""}
-                        onChange={(e) =>
-                          actualizarCampo(
-                            solicitud.id,
-                            "observacion",
-                            e.target.value
-                          )
-                        }
-                        placeholder="Escribe la observación de la inspección..."
-                        rows="4"
-                        disabled={estaEnviando}
-                      />
-                    </label>
-
-                    <div
-                      className="drop-zone evidencias-drop"
-                      onDrop={(e) => manejarDropImagenes(e, solicitud.id)}
-                      onDragOver={(e) => e.preventDefault()}
-                    >
-                      <div className="empty-icon">🖼️</div>
-                      <p>Subir evidencias fotográficas</p>
-                      <span>
-                        Máximo 2 fotos de 500 KB. Puedes arrastrarlas aquí o seleccionarlas.
-                      </span>
-
-                      <label className="file-label">
-                        Elegir fotos
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={(e) =>
-                            manejarEvidencias(solicitud.id, e.target.files)
-                          }
+                    <div className="inspection-form">
+                      <label>
+                        Observacion del inspector *
+                        <textarea
+                          value={formulario.observacion || ""}
+                          onChange={(e) => actualizarCampo(solicitud.id, "observacion", e.target.value)}
+                          placeholder="Describe las condiciones del local, cumplimiento de normativas..."
+                          rows="4"
                           disabled={estaEnviando}
-                          hidden
                         />
+                      </label>
+
+                      <div
+                        className="drop-zone"
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          manejarEvidencias(solicitud.id, e.dataTransfer.files);
+                        }}
+                        onDragOver={(e) => e.preventDefault()}
+                      >
+                        <div style={{ fontSize: "28px", marginBottom: "6px" }}>&#128444;</div>
+                        <p>Evidencias fotograficas</p>
+                        <span>Maximo 2 fotos de 500 KB. Arrastra o selecciona.</span>
+                        <label className="file-label">
+                          Elegir fotos
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => manejarEvidencias(solicitud.id, e.target.files)}
+                            disabled={estaEnviando}
+                            hidden
+                          />
+                        </label>
+                      </div>
+
+                      {formulario.evidencias?.length > 0 && (
+                        <div className="evidencias-preview">
+                          {formulario.evidencias.map((img, i) => (
+                            <div key={i} className="evidencia-item">
+                              <img src={img.url} alt={`Evidencia ${i + 1}`} />
+                              <small>{img.nombre}</small>
+                              <button
+                                type="button"
+                                className="btn-quitar"
+                                onClick={() => quitarEvidencia(solicitud.id, i)}
+                                disabled={estaEnviando}
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <label>
+                        Recomendacion *
+                        <select
+                          value={formulario.recomendacion || ""}
+                          onChange={(e) => actualizarCampo(solicitud.id, "recomendacion", e.target.value)}
+                          disabled={estaEnviando}
+                        >
+                          <option value="">Seleccionar recomendacion</option>
+                          <option value="Aprobar">Aprobar</option>
+                          <option value="Rechazar">Rechazar{esReobservacion ? " (DEFINITIVO)" : ""}</option>
+                        </select>
                       </label>
                     </div>
 
-                    {formulario.evidencias?.length > 0 && (
-                      <div className="evidencias-preview">
-                        {formulario.evidencias.map((img, index) => (
-                          <div key={index} className="evidencia-item">
-                            <img
-                              src={img.url}
-                              alt={`Evidencia ${index + 1}`}
-                            />
-
-                            <small>{img.nombre}</small>
-
-                            <button
-                              type="button"
-                              className="btn-quitar"
-                              onClick={() =>
-                                quitarEvidencia(solicitud.id, index)
-                              }
-                              disabled={estaEnviando}
-                            >
-                              Quitar
-                            </button>
-                          </div>
-                        ))}
+                    {esReobservacion && (
+                      <div style={{ padding: "10px", background: "#fef3c7", borderRadius: "10px", border: "1px solid #fde68a", marginBottom: "12px" }}>
+                        <p style={{ margin: 0, fontSize: "13px", color: "#92400e" }}>
+                          &#9888; Esta es la 2da oportunidad. Si rechazas, la solicitud quedara cerrada sin posibilidad de reprogramacion.
+                        </p>
                       </div>
                     )}
 
-                    <label>
-                      Recomendación del inspector *
-                      <select
-                        value={formulario.recomendacion || ""}
-                        onChange={(e) =>
-                          actualizarCampo(
-                            solicitud.id,
-                            "recomendacion",
-                            e.target.value
-                          )
-                        }
+                    <div className="inspection-actions">
+                      <button
+                        type="button"
+                        className="btn-ok"
+                        onClick={() => enviarResultado(solicitud, "enviar")}
                         disabled={estaEnviando}
                       >
-                        <option value="">Seleccionar recomendación</option>
-                        <option value="Aprobar">Aprobar</option>
-                        <option value="Rechazar">Rechazar</option>
-                      </select>
-                    </label>
-                  </div>
+                        {estaEnviando ? "Enviando..." : "Enviar resultado"}
+                      </button>
 
-                  <div className="inspection-actions">
-                    <button
-                      type="button"
-                      className="btn-ok"
-                      onClick={() => enviarResultadoInspector(solicitud)}
-                      disabled={estaEnviando}
-                    >
-                      {estaEnviando
-                        ? "Enviando resultado..."
-                        : "Enviar resultado al funcionario"}
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="section-card">
-        <div className="section-header">
-          <div>
-            <h2>Historial de inspecciones</h2>
-            <p>Resultados registrados por el inspector municipal.</p>
-          </div>
-        </div>
-
-        {historial.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">📋</div>
-            <h3>Aún no hay inspecciones realizadas</h3>
-            <p>Cuando envíes una recomendación, aparecerá aquí.</p>
-          </div>
-        ) : (
-          <div className="tabla-container">
-            <table className="modern-table">
-              <thead>
-                <tr>
-                  <th>Expediente</th>
-                  <th>Negocio</th>
-                  <th>Trámite</th>
-                  <th>Documentos</th>
-                  <th>Recomendación</th>
-                  <th>Observación</th>
-                  <th>Evidencias</th>
-                  <th>Fecha</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {historial.map((solicitud) => (
-                  <tr key={solicitud.id}>
-                    <td>
-                      <strong>{solicitud.id}</strong>
-                      <small>RUC: {solicitud.ruc}</small>
-                    </td>
-
-                    <td>
-                      <strong>{solicitud.nombreNegocio}</strong>
-                      <small>{solicitud.direccion}</small>
-                    </td>
-
-                    <td>{solicitud.tipoTramite || "Nueva licencia"}</td>
-
-                    <td>{mostrarDocumentos(solicitud)}</td>
-
-                    <td>
-                      <span
-                        className={`badge ${badgeClase(
-                          solicitud.recomendacionInspector
-                        )}`}
-                      >
-                        {solicitud.recomendacionInspector || "Sin recomendación"}
-                      </span>
-                    </td>
-
-                    <td>
-                      {solicitud.observacionInspector || "Sin observación"}
-                    </td>
-
-                    <td>
-                      {solicitud.evidenciasInspector?.length > 0 ? (
-                        <div className="evidencias-tabla">
-                          {solicitud.evidenciasInspector.map((img, index) => (
-                            <a
-                              key={index}
-                              href={img.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Foto {index + 1}
-                            </a>
-                          ))}
-                        </div>
-                      ) : (
-                        "Sin evidencias"
+                      {esReobservacion && (
+                        <button
+                          type="button"
+                          className="btn-warning"
+                          onClick={() => enviarResultado(solicitud, "reobservar")}
+                          disabled={estaEnviando}
+                        >
+                          {estaEnviando ? "Enviando..." : "Reobservar (reprogramar)"}
+                        </button>
                       )}
-                    </td>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
-                    <td>{solicitud.fechaInspeccion || "Sin fecha"}</td>
-
-                    <td>
-                      <span
-                        className={`badge ${badgeClase(
-                          solicitud.recomendacionInspector ||
-                            solicitud.inspeccion
-                        )}`}
-                      >
-                        {solicitud.inspeccion || "Enviado"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {paso === "historial" && (
+        <section className="section-card">
+          <div className="section-header">
+            <div>
+              <h2>Historial de inspecciones</h2>
+              <p>Resultados que has registrado como inspector.</p>
+            </div>
           </div>
-        )}
-      </section>
+
+          {historial.length === 0 ? (
+            <div className="empty-state">
+              <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128203;</div>
+              <h3>Aun no hay inspecciones realizadas</h3>
+              <p>Cuando envies una recomendacion, aparecera aqui.</p>
+            </div>
+          ) : (
+            <div className="tabla-container">
+              <table className="modern-table">
+                <thead>
+                  <tr>
+                    <th>Expediente</th>
+                    <th>Negocio</th>
+                    <th>Tramite</th>
+                    <th>Recomendacion</th>
+                    <th>Observacion</th>
+                    <th>Evidencias</th>
+                    <th>Fecha</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historial.map((s) => (
+                    <tr key={s.id}>
+                      <td><strong>{s.id}</strong><small>RUC: {s.ruc}</small></td>
+                      <td><strong>{s.nombreNegocio}</strong><small>{s.direccion}</small></td>
+                      <td>{s.tipoTramite || "Nueva licencia"}</td>
+                      <td><span className={`badge ${badgeClase(s.recomendacionInspector)}`}>{s.recomendacionInspector || "Sin recomendacion"}</span></td>
+                      <td>{s.observacionInspector || "Sin observacion"}</td>
+                      <td>
+                        {s.evidenciasInspector?.length > 0 ? (
+                          <div className="evidencias-tabla">
+                            {s.evidenciasInspector.map((img, i) => (
+                              <a key={i} href={img.url} target="_blank" rel="noreferrer">Foto {i + 1}</a>
+                            ))}
+                          </div>
+                        ) : "Sin evidencias"}
+                      </td>
+                      <td>{s.fechaInspeccion || "Sin fecha"}</td>
+                      <td><span className={`badge ${badgeClase(s.inspeccion)}`}>{s.inspeccion || "Enviado"}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
