@@ -202,15 +202,15 @@ function PanelNegocio({ seccion }) {
 
       setForm((prev) => ({
         ...prev,
-        razonSocial: data.razonSocial || "",
-        nombreNegocio: data.nombreComercial || data.razonSocial || "",
+        razonSocial: data.nombreNegocio || "",
+        nombreNegocio: data.nombreComercial || data.nombreNegocio || "",
         direccion: data.direccion || "",
         estadoSunat: data.estado || "",
         condicionSunat: data.condicion || "",
         departamento: data.departamento || "",
         provincia: data.provincia || "",
         distrito: data.distrito || "",
-        giro: data.giro || "Actividad económica no especificada"
+        giro: data.giroComercial || "Actividad económica no especificada"
       }));
 
       if (data.esValido) {

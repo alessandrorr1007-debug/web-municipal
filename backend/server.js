@@ -194,23 +194,23 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
     const resBody = response.data;
     const data = resBody.data || resBody;
 
-    if (!data || (!data.numero_documento && !data.razon_social)) {
-      console.log("Sin datos o sin razon_social/numero_documento en la respuesta.");
+    if (!data || !data.razon_social || !data.numero_documento) {
+      console.log("Sin razon_social o numero_documento en la respuesta.");
       console.log("Resultado de la validación: NO VÁLIDO");
       console.log("Motivo: El RUC ingresado no se encuentra registrado en SUNAT.");
       return res.status(404).json({ error: "El RUC ingresado no se encuentra registrado en SUNAT." });
     }
 
-    const rucNum = data.numero_documento || data.ruc || ruc;
-    const razonSocial = data.razon_social || "";
-    const nombreComercial = data.nombre_comercial || razonSocial || "";
+    const rucNum = data.numero_documento;
+    const razonSocial = data.razon_social;
+    const nombreComercial = data.nombre_comercial || "";
     const estado = (data.estado || "").toUpperCase().trim();
     const condicion = (data.condicion || "").toUpperCase().trim();
     const direccion = data.direccion || "";
     const departamento = data.departamento || "";
     const provincia = data.provincia || "";
     const distrito = data.distrito || "";
-    const giro = data.actividad_economica || data.actividad || (data.actividades_economicas && data.actividades_economicas[0]) || "Actividad económica no especificada";
+    const giroComercial = data.actividad_economica || "Actividad económica no especificada";
 
     let esValido = true;
     let motivoRechazo = "";
@@ -226,11 +226,11 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
     const payload = {
       success: true,
       ruc: rucNum,
-      razonSocial,
-      nombreComercial,
-      giro,
-      estado,
-      condicion,
+      nombreNegocio: razonSocial,
+      nombreComercial: nombreComercial,
+      giroComercial: giroComercial,
+      estado: estado,
+      condicion: condicion,
       direccion,
       departamento,
       provincia,
