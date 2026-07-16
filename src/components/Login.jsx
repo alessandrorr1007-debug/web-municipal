@@ -91,8 +91,9 @@ function Login({ onVolver, modoInicial }) {
       setTiempoRestante(300);
       setCodigoIngresado("");
       setErrorCodigo("");
-    } catch {
-      setError("No se pudo enviar el código de verificación. Intenta de nuevo.");
+    } catch (err) {
+      console.error("[DEBUG] Error en registro:", err.message);
+      setError(`No se pudo enviar el código: ${err.message}`);
     } finally {
       setCargando(false);
     }

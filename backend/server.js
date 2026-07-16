@@ -189,19 +189,27 @@ app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
 });
 
 app.post("/api/enviar-codigo", async (req, res) => {
+  console.log("=== ENDPOINT /api/enviar-codigo ===");
+  console.log("Body recibido:", JSON.stringify(req.body));
+
   try {
     const { correo, codigo } = req.body;
 
     if (!correo || !codigo) {
+      console.error("Faltan parámetros:", { correo, codigo });
       return res.status(400).json({ error: "Faltan correo o código" });
     }
 
+    console.log("1. Parámetros OK - Email:", correo, "- Código:", codigo);
+
     if (!transporter) {
-      console.error("SMTP no configurado");
+      console.error("2. SMTP no configurado - transporter es null");
       return res.status(500).json({ error: "Servicio de correo no configurado" });
     }
 
-    await transporter.sendMail({
+    console.log("2. Transporter SMTP disponible");
+
+    const mailOptions = {
       from: `"Municipalidad de Trujillo" <${SMTP_EMAIL}>`,
       to: correo,
       subject: "Código de verificación - Sistema de Licencias",
@@ -226,13 +234,30 @@ app.post("/api/enviar-codigo", async (req, res) => {
           </p>
         </div>
       `,
-    });
+    };
 
-    console.log(`Correo enviado a: ${correo}`);
+    console.log("3. Llamando a transporter.sendMail()...");
+    console.log("   From:", mailOptions.from);
+    console.log("   To:", mailOptions.to);
+
+    const result = await transporter.sendMail(mailOptions);
+
+    console.log("4. sendMail() respondió OK:");
+    console.log("   messageId:", result.messageId);
+    console.log("   response:", result.response);
+    console.log("   accepted:", result.accepted);
+    console.log("   rejected:", result.rejected);
+
     res.json({ mensaje: "Correo enviado correctamente" });
   } catch (error) {
-    console.error("ERROR ENVIANDO CODIGO:", error.message);
-    res.status(500).json({ error: "No se pudo enviar el correo de verificación" });
+    console.error("=== ERROR ENVIANDO CORREO ===");
+    console.error("Tipo de error:", error.constructor.name);
+    console.error("Mensaje:", error.message);
+    console.error("Código:", error.code);
+    console.error("Comando:", error.command);
+    console.error("Stack completo:", error.stack);
+    console.error("=== FIN ERROR ===");
+    res.status(500).json({ error: "No se pudo enviar el correo de verificación", detalle: error.message });
   }
 });
 

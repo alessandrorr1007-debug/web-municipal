@@ -73,6 +73,8 @@ export const verificarCorreoExistente = async (correo) => {
 export const guardarCodigoVerificacion = async (correo) => {
   const codigo = Math.floor(100000 + Math.random() * 900000).toString();
 
+  console.log("[DEBUG] Generado código:", codigo, "para:", correo);
+
   const q = query(collection(db, "codigos_verificacion"), where("correo", "==", correo));
   const snapshot = await getDocs(q);
   for (const d of snapshot.docs) {
@@ -86,15 +88,25 @@ export const guardarCodigoVerificacion = async (correo) => {
     usado: false,
   });
 
+  console.log("[DEBUG] Código guardado en Firestore");
+
   const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const response = await fetch(`${apiUrl}/api/enviar-codigo`, {
+  const url = `${apiUrl}/api/enviar-codigo`;
+  console.log("[DEBUG] Llamando a:", url);
+
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ correo, codigo }),
   });
 
+  console.log("[DEBUG] Status HTTP:", response.status);
+  const texto = await response.text();
+  console.log("[DEBUG] Respuesta body:", texto);
+
   if (!response.ok) {
-    throw new Error("No se pudo enviar el correo de verificación");
+    console.error("[DEBUG] Error del backend:", texto);
+    throw new Error(`Error ${response.status}: ${texto}`);
   }
 
   return codigo;
