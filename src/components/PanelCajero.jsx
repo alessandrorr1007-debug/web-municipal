@@ -9,7 +9,7 @@ import { useAuth } from "../context/AuthContext";
 
 const MONTO_TRAMITE = 3;
 
-function PanelCajero() {
+function PanelCajero({ seccion }) {
   const { usuario } = useAuth();
 
   const [paso, setPaso] = useState("cola");

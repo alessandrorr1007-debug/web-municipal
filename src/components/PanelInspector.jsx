@@ -4,7 +4,7 @@ import {
   actualizarSolicitud,
 } from "../services/solicitudService";
 
-function PanelInspector() {
+function PanelInspector({ seccion }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [hoy, setHoy] = useState([]);
   const [historial, setHistorial] = useState([]);

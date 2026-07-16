@@ -3,24 +3,33 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 
 import { doc, setDoc, getDoc } from "firebase/firestore";
 
-export const registrarUsuario = async (nombre, correo, password, rol) => {
+export const registrarUsuario = async (datos) => {
   const credenciales = await createUserWithEmailAndPassword(
     auth,
-    correo,
-    password
+    datos.correo,
+    datos.password
   );
 
   const usuario = credenciales.user;
 
   const nuevoUsuario = {
     uid: usuario.uid,
-    nombre,
+    nombre: datos.nombre || "",
     correo: usuario.email,
-    rol,
+    rol: datos.rol || "negocio",
+    dni: datos.dni || "",
+    telefono: datos.telefono || "",
+    ruc: datos.ruc || "",
+    razonSocial: datos.razonSocial || "",
+    nombreComercial: datos.nombreComercial || "",
+    direccion: datos.direccion || "",
+    tipoNegocio: datos.tipoNegocio || "",
+    categoria: datos.categoria || "",
   };
 
   await setDoc(doc(db, "usuarios", usuario.uid), nuevoUsuario);
@@ -37,7 +46,7 @@ export const iniciarSesion = async (correo, password) => {
   const usuarioSnap = await getDoc(usuarioRef);
 
   if (!usuarioSnap.exists()) {
-    throw new Error("No existe información del usuario en Firestore");
+    throw new Error("No existe informacion del usuario en Firestore");
   }
 
   const data = usuarioSnap.data();
@@ -47,9 +56,21 @@ export const iniciarSesion = async (correo, password) => {
     correo: usuario.email,
     nombre: data.nombre || "",
     rol: data.rol || "",
+    dni: data.dni || "",
+    telefono: data.telefono || "",
+    ruc: data.ruc || "",
+    razonSocial: data.razonSocial || "",
+    nombreComercial: data.nombreComercial || "",
+    direccion: data.direccion || "",
+    tipoNegocio: data.tipoNegocio || "",
+    categoria: data.categoria || "",
   };
 };
 
 export const cerrarSesion = async () => {
   await signOut(auth);
+};
+
+export const enviarRecuperacion = async (correo) => {
+  await sendPasswordResetEmail(auth, correo);
 };

@@ -4,7 +4,7 @@ import {
   actualizarSolicitud,
 } from "../services/solicitudService";
 
-function PanelFuncionario() {
+function PanelFuncionario({ seccion }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [observacionesRechazo, setObservacionesRechazo] = useState({});

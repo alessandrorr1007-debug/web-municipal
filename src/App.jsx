@@ -1,6 +1,9 @@
+import { useState } from "react";
 import "./style.css";
 
+import LandingPage from "./components/LandingPage";
 import Login from "./components/Login";
+import Sidebar from "./components/Sidebar";
 import PanelNegocio from "./components/PanelNegocio";
 import PanelCajero from "./components/PanelCajero";
 import PanelFuncionario from "./components/PanelFuncionario";
@@ -11,9 +14,14 @@ import { cerrarSesion } from "./services/authService";
 
 function App() {
   const { usuario, cargando } = useAuth();
+  const [vista, setVista] = useState("landing");
+  const [seccion, setSeccion] = useState("inicio");
+  const [sidebarAbierto, setSidebarAbierto] = useState(true);
 
   const salir = async () => {
     await cerrarSesion();
+    setVista("landing");
+    setSeccion("inicio");
   };
 
   const rolEtiqueta = {
@@ -33,6 +41,7 @@ function App() {
   if (cargando) {
     return (
       <div className="loading">
+        <div className="spinner" />
         <span style={{ color: "#1f3b57", fontWeight: 700, fontSize: "18px" }}>
           Cargando sistema...
         </span>
@@ -40,157 +49,133 @@ function App() {
     );
   }
 
-  if (!usuario) {
-    return <Login />;
+  if (!usuario || vista === "landing") {
+    return (
+      <LandingPage
+        onLogin={() => setVista("login")}
+        onRegister={() => setVista("login")}
+      />
+    );
   }
+
+  if (vista === "login" && !usuario) {
+    return (
+      <Login
+        onVolver={() => setVista("landing")}
+      />
+    );
+  }
+
+  const seccionesPorRol = {
+    negocio: ["inicio", "nueva-solicitud", "mis-solicitudes", "notificaciones", "mi-cuenta"],
+    cajero: ["inicio", "nueva-solicitud", "historial", "estadisticas"],
+    funcionario: ["inicio", "solicitudes", "notificaciones", "estadisticas", "reportes"],
+    inspector: ["inicio", "inspecciones-hoy", "historial", "estadisticas"],
+  };
+
+  const renderSeccion = () => {
+    if (usuario.rol === "negocio") {
+      switch (seccion) {
+        case "nueva-solicitud": return <PanelNegocio seccion="nueva-solicitud" />;
+        case "mis-solicitudes": return <PanelNegocio seccion="mis-solicitudes" />;
+        case "notificaciones": return <PanelNegocio seccion="notificaciones" />;
+        case "mi-cuenta": return <PanelNegocio seccion="mi-cuenta" />;
+        default: return <PanelNegocio seccion="inicio" />;
+      }
+    }
+    if (usuario.rol === "cajero") {
+      switch (seccion) {
+        case "nueva-solicitud": return <PanelCajero seccion="nueva-solicitud" />;
+        case "historial": return <PanelCajero seccion="historial" />;
+        case "estadisticas": return <PanelCajero seccion="estadisticas" />;
+        default: return <PanelCajero seccion="inicio" />;
+      }
+    }
+    if (usuario.rol === "funcionario") {
+      switch (seccion) {
+        case "solicitudes": return <PanelFuncionario seccion="solicitudes" />;
+        case "notificaciones": return <PanelFuncionario seccion="notificaciones" />;
+        case "reportes": return <PanelFuncionario seccion="reportes" />;
+        case "estadisticas": return <PanelFuncionario seccion="estadisticas" />;
+        default: return <PanelFuncionario seccion="inicio" />;
+      }
+    }
+    if (usuario.rol === "inspector") {
+      switch (seccion) {
+        case "inspecciones-hoy": return <PanelInspector seccion="inspecciones-hoy" />;
+        case "historial": return <PanelInspector seccion="historial" />;
+        case "estadisticas": return <PanelInspector seccion="estadisticas" />;
+        default: return <PanelInspector seccion="inicio" />;
+      }
+    }
+    return (
+      <div className="section-card" style={{ textAlign: "center", padding: "60px 28px" }}>
+        <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#fee2e2", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "32px" }}>&#9888;</div>
+        <h2 style={{ color: "#1f3b57", marginBottom: "8px" }}>Rol no reconocido</h2>
+        <p style={{ color: "#64748b", maxWidth: "400px", margin: "0 auto" }}>Tu usuario no tiene un rol valido asignado. Contacta al administrador.</p>
+      </div>
+    );
+  };
 
   return (
     <div className="dashboard">
-      <header className="topbar">
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <div
-            style={{
-              width: "42px",
-              height: "42px",
-              borderRadius: "12px",
-              background: "rgba(255,255,255,0.15)",
-              display: "grid",
-              placeItems: "center",
-              fontSize: "20px",
-              backdropFilter: "blur(8px)",
-              border: "1px solid rgba(255,255,255,0.2)",
-            }}
-          >
-            &#9881;
-          </div>
-          <div>
-            <h2 style={{ fontSize: "18px", fontWeight: 800, letterSpacing: "-0.02em" }}>
-              Municipalidad de Trujillo
-            </h2>
-            <p style={{ fontSize: "13px", color: "#93c5fd", margin: 0 }}>
-              Sistema de Licencias de Funcionamiento
-            </p>
-          </div>
-        </div>
+      <Sidebar
+        usuario={usuario}
+        rolEtiqueta={rolEtiqueta}
+        rolColor={rolColor}
+        seccion={seccion}
+        onCambiarSeccion={setSeccion}
+        abierto={sidebarAbierto}
+        onToggle={() => setSidebarAbierto(!sidebarAbierto)}
+        secciones={seccionesPorRol[usuario.rol] || []}
+      />
 
-        <div className="topbar-user">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              background: "rgba(255,255,255,0.1)",
-              padding: "8px 16px",
-              borderRadius: "14px",
-              border: "1px solid rgba(255,255,255,0.15)",
-              backdropFilter: "blur(8px)",
-            }}
-          >
-            <div
-              style={{
-                width: "34px",
-                height: "34px",
-                borderRadius: "50%",
-                background: rolColor[usuario.rol] || "#6366f1",
-                display: "grid",
-                placeItems: "center",
-                color: "white",
-                fontWeight: 800,
-                fontSize: "14px",
-              }}
+      <div className={`dashboard-main ${sidebarAbierto ? "sidebar-open" : "sidebar-closed"}`}>
+        <header className="topbar">
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <button
+              type="button"
+              onClick={() => setSidebarAbierto(!sidebarAbierto)}
+              className="sidebar-toggle"
             >
-              {usuario.nombre?.charAt(0)?.toUpperCase() || "U"}
-            </div>
+              &#9776;
+            </button>
             <div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  color: "white",
-                }}
-              >
-                {usuario.nombre || "Usuario"}
+              <h2 style={{ fontSize: "18px", fontWeight: 800, letterSpacing: "-0.02em" }}>
+                {seccion.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+              </h2>
+              <p style={{ fontSize: "13px", color: "#93c5fd", margin: 0 }}>
+                Municipalidad de Trujillo
               </p>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  color: rolColor[usuario.rol] || "#6366f1",
-                  background: "white",
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                {rolEtiqueta[usuario.rol] || usuario.rol}
-              </span>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={salir}
-            style={{
-              background: "rgba(255,255,255,0.12)",
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.25)",
-              backdropFilter: "blur(8px)",
-              fontSize: "13px",
-              fontWeight: 600,
-            }}
-          >
-            Cerrar sesion
-          </button>
-        </div>
-      </header>
-
-      <main className="content">
-        {usuario.rol === "negocio" && <PanelNegocio />}
-
-        {usuario.rol === "cajero" && <PanelCajero />}
-
-        {usuario.rol === "funcionario" && <PanelFuncionario />}
-
-        {usuario.rol === "inspector" && <PanelInspector />}
-
-        {!["negocio", "cajero", "funcionario", "inspector"].includes(usuario.rol) && (
-          <div className="section-card" style={{ textAlign: "center", padding: "60px 28px" }}>
-            <div
-              style={{
-                width: "72px",
-                height: "72px",
-                borderRadius: "50%",
-                background: "#fee2e2",
-                display: "grid",
-                placeItems: "center",
-                margin: "0 auto 20px",
-                fontSize: "32px",
-              }}
-            >
-              &#9888;
+          <div className="topbar-user">
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.1)", padding: "8px 16px", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(8px)" }}>
+              <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: rolColor[usuario.rol] || "#6366f1", display: "grid", placeItems: "center", color: "white", fontWeight: 800, fontSize: "14px" }}>
+                {usuario.nombre?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+              <div>
+                <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "white" }}>{usuario.nombre || "Usuario"}</p>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: rolColor[usuario.rol] || "#6366f1", background: "white", padding: "2px 8px", borderRadius: "999px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {rolEtiqueta[usuario.rol] || usuario.rol}
+                </span>
+              </div>
             </div>
-            <h2 style={{ color: "#1f3b57", marginBottom: "8px" }}>Rol no reconocido</h2>
-            <p style={{ color: "#64748b", maxWidth: "400px", margin: "0 auto" }}>
-              Tu usuario no tiene un rol valido asignado. Contacta al administrador.
-            </p>
+            <button type="button" onClick={salir} style={{ background: "rgba(255,255,255,0.12)", color: "white", border: "1px solid rgba(255,255,255,0.25)", backdropFilter: "blur(8px)", fontSize: "13px", fontWeight: 600 }}>
+              Cerrar sesion
+            </button>
           </div>
-        )}
-      </main>
+        </header>
 
-      <footer
-        style={{
-          padding: "20px 40px",
-          textAlign: "center",
-          color: "#94a3b8",
-          fontSize: "13px",
-          borderTop: "1px solid #e2e8f0",
-          background: "white",
-        }}
-      >
-        Sistema Municipal de Licencias v1.0 &mdash; Municipalidad de Trujillo &copy; {new Date().getFullYear()}
-      </footer>
+        <main className="content">
+          {renderSeccion()}
+        </main>
+
+        <footer style={{ padding: "20px 40px", textAlign: "center", color: "#94a3b8", fontSize: "13px", borderTop: "1px solid #e2e8f0", background: "white" }}>
+          Sistema Municipal de Licencias v1.0 &mdash; Municipalidad de Trujillo &copy; {new Date().getFullYear()}
+        </footer>
+      </div>
     </div>
   );
 }
