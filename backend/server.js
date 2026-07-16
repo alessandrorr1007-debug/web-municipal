@@ -78,8 +78,149 @@ app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
     smtp: SMTP_EMAIL ? "configurado" : "no configurado",
+    decolecta: TOKEN_DECOLECTA ? "configurado" : "no configurado",
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get("/api/consultar-dni/:dni", async (req, res) => {
+  console.log("=== ENDPOINT /api/consultar-dni ===");
+  console.log("DNI recibido:", req.params.dni);
+
+  try {
+    const { dni } = req.params;
+
+    if (!/^\d{8}$/.test(dni)) {
+      console.log("DNI con formato inválido:", dni);
+      return res.status(400).json({ error: "El DNI debe tener exactamente 8 dígitos." });
+    }
+
+    if (!TOKEN_DECOLECTA) {
+      console.error("DECOLECTA_TOKEN no configurado");
+      return res.status(500).json({ error: "Servicio de consulta no configurado. Token faltante." });
+    }
+
+    const pesos = [2, 1, 2, 1, 2, 1, 2, 1];
+    let suma = 0;
+    for (let i = 0; i < 8; i++) {
+      let producto = parseInt(dni[i]) * pesos[i];
+      if (producto >= 10) producto -= 9;
+      suma += producto;
+    }
+    const digitoEsperado = (10 - (suma % 10)) % 10;
+
+    console.log("Dígito verificador esperado:", digitoEsperado);
+    console.log("Consultando Decolecta RENIEC para DNI:", dni);
+
+    const response = await axios.get(
+      `https://api.decolecta.com/v1/reniec/dni?numero=${dni}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${TOKEN_DECOLECTA}`,
+        },
+      }
+    );
+
+    console.log("Respuesta Decolecta:", JSON.stringify(response.data));
+
+    if (!response.data || !response.data.data) {
+      console.log("Sin datos en la respuesta");
+      return res.status(404).json({ error: "DNI no encontrado en registros de RENIEC." });
+    }
+
+    const data = response.data.data;
+
+    res.json({
+      success: true,
+      digito_verificador: digitoEsperado,
+      data: {
+        dni: data.numero_documento || data.dni || dni,
+        nombres: data.nombres || "",
+        apellido_paterno: data.apellido_paterno || "",
+        apellido_materno: data.apellido_materno || "",
+      },
+    });
+  } catch (error) {
+    console.error("=== ERROR CONSULTANDO DNI ===");
+    console.error("Status:", error.response?.status);
+    console.error("Data:", JSON.stringify(error.response?.data));
+    console.error("Message:", error.message);
+
+    if (error.response?.status === 401) {
+      return res.status(501).json({ error: "Token de Decolecta inválido o expirado." });
+    }
+    if (error.response?.status === 404) {
+      return res.status(404).json({ error: "DNI no encontrado en registros de RENIEC." });
+    }
+    if (error.response?.status === 429) {
+      return res.status(429).json({ error: "Límite de consultas alcanzado. Intenta más tarde." });
+    }
+
+    res.status(500).json({
+      error: "Error al consultar el DNI. Intenta nuevamente.",
+      detalle: error.response?.data || error.message,
+    });
+  }
+});
+
+app.get("/api/consultar-ruc/:ruc", async (req, res) => {
+  console.log("=== ENDPOINT /api/consultar-ruc ===");
+  console.log("RUC recibido:", req.params.ruc);
+
+  try {
+    const { ruc } = req.params;
+
+    if (!/^\d{11}$/.test(ruc)) {
+      return res.status(400).json({ error: "El RUC debe tener exactamente 11 dígitos." });
+    }
+
+    if (!TOKEN_DECOLECTA) {
+      console.error("DECOLECTA_TOKEN no configurado");
+      return res.status(500).json({ error: "Servicio de consulta no configurado. Token faltante." });
+    }
+
+    console.log("Consultando Decolecta SUNAT para RUC:", ruc);
+
+    const response = await axios.get(
+      `https://api.decolecta.com/v1/sunat/ruc/full?numero=${ruc}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${TOKEN_DECOLECTA}`,
+        },
+      }
+    );
+
+    console.log("Respuesta Decolecta SUNAT:", JSON.stringify(response.data));
+
+    if (!response.data || !response.data.data) {
+      console.log("Sin datos en la respuesta");
+      return res.status(404).json({ error: "RUC no encontrado en registros de SUNAT." });
+    }
+
+    res.json(response.data);
+  } catch (error) {
+    console.error("=== ERROR CONSULTANDO RUC ===");
+    console.error("Status:", error.response?.status);
+    console.error("Data:", JSON.stringify(error.response?.data));
+    console.error("Message:", error.message);
+
+    if (error.response?.status === 401) {
+      return res.status(501).json({ error: "Token de Decolecta inválido o expirado." });
+    }
+    if (error.response?.status === 404) {
+      return res.status(404).json({ error: "RUC no encontrado en registros de SUNAT." });
+    }
+    if (error.response?.status === 429) {
+      return res.status(429).json({ error: "Límite de consultas alcanzado. Intenta más tarde." });
+    }
+
+    res.status(500).json({
+      error: "Error al consultar el RUC. Intenta nuevamente.",
+      detalle: error.response?.data || error.message,
+    });
+  }
 });
 
 app.get("/api/ruc/:numero", async (req, res) => {

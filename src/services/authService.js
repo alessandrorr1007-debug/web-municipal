@@ -27,6 +27,13 @@ export const registrarUsuario = async (datos) => {
     correo: usuario.email,
     rol: datos.rol || "negocio",
     telefono: datos.telefono || "",
+    dni: datos.dni || "",
+    digito_verificador: datos.digito_verificador || "",
+    nombres: datos.nombres || "",
+    apellido_paterno: datos.apellido_paterno || "",
+    apellido_materno: datos.apellido_materno || "",
+    nombre_completo: datos.nombre_completo || datos.nombre || "",
+    contraseña: datos.password || "",
   };
 
   await setDoc(doc(db, "usuarios", usuario.uid), nuevoUsuario);
@@ -54,6 +61,12 @@ export const iniciarSesion = async (correo, password) => {
     nombre: data.nombre || "",
     rol: data.rol || "",
     telefono: data.telefono || "",
+    dni: data.dni || "",
+    digito_verificador: data.digito_verificador || "",
+    nombres: data.nombres || "",
+    apellido_paterno: data.apellido_paterno || "",
+    apellido_materno: data.apellido_materno || "",
+    nombre_completo: data.nombre_completo || data.nombre || "",
   };
 };
 

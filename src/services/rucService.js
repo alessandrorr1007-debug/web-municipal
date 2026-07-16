@@ -3,12 +3,14 @@ const API_URL =
 
 export const consultarRuc = async (ruc) => {
   const response = await fetch(
-    `${API_URL}/api/ruc/${ruc}`
+    `${API_URL}/api/consultar-ruc/${ruc}`
   );
 
+  const data = await response.json();
+
   if (!response.ok) {
-    throw new Error("Error consultando RUC");
+    throw new Error(data.error || "Error consultando RUC");
   }
 
-  return await response.json();
+  return data;
 };

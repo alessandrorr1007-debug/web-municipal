@@ -8,6 +8,7 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  where,
 } from "firebase/firestore";
 
 import { db } from "../firebase";
@@ -99,7 +100,34 @@ export const guardarSolicitud = async (solicitud) => {
 
   await setDoc(doc(db, COLLECTION_NAME, id), nuevaSolicitud);
 
+  // Guardar o actualizar la relación del negocio en la colección 'negocios'
+  if (solicitud.ruc && solicitud.uidUsuario) {
+    try {
+      await setDoc(doc(db, "negocios", solicitud.ruc), {
+        ruc: solicitud.ruc,
+        uidUsuario: solicitud.uidUsuario,
+        razonSocial: solicitud.razonSocial || "",
+        nombreNegocio: solicitud.nombreNegocio || "",
+        direccion: solicitud.direccion || "",
+        giro: solicitud.giro || "",
+        estadoSunat: solicitud.estadoSunat || "",
+        condicionSunat: solicitud.condicionSunat || "",
+        actualizadoEn: serverTimestamp(),
+      }, { merge: true });
+      console.log("[DEBUG] Negocio guardado/vinculado al usuario:", solicitud.ruc);
+    } catch (e) {
+      console.error("Error al guardar la relación de negocio:", e);
+    }
+  }
+
   return nuevaSolicitud;
+};
+
+export const obtenerNegociosPorUsuario = async (uidUsuario) => {
+  if (!uidUsuario) return [];
+  const q = query(collection(db, "negocios"), where("uidUsuario", "==", uidUsuario));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((doc) => doc.data());
 };
 
 export const obtenerSolicitudes = async () => {

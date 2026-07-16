@@ -7,6 +7,7 @@ import {
   guardarCodigoVerificacion,
   verificarCodigoVerificacion,
 } from "../services/authService";
+import { consultarDni, calcularDigitoVerificador } from "../services/dniService";
 import { useAuth } from "../context/AuthContext";
 
 function Login({ onVolver, modoInicial }) {
@@ -25,6 +26,13 @@ function Login({ onVolver, modoInicial }) {
   const [pasoRecuperacion, setPasoRecuperacion] = useState("correo");
   const [codigoRecuperacion, setCodigoRecuperacion] = useState("");
   const [errorRecuperacion, setErrorRecuperacion] = useState("");
+
+  const [dni, setDni] = useState("");
+  const [digitoVerificador, setDigitoVerificador] = useState("");
+  const [dniValidado, setDniValidado] = useState(false);
+  const [nombres, setNombres] = useState("");
+  const [apellidoPaterno, setApellidoPaterno] = useState("");
+  const [apellidoMaterno, setApellidoMaterno] = useState("");
 
   const [pasoRegistro, setPasoRegistro] = useState("formulario");
   const [correoVerificar, setCorreoVerificar] = useState("");
@@ -72,7 +80,10 @@ function Login({ onVolver, modoInicial }) {
     e.preventDefault();
     setError("");
 
-    if (nombre.trim().length < 3) { setError("El nombre debe tener al menos 3 caracteres."); return; }
+    if (!dniValidado) {
+      setError("Primero debes validar tu identidad con DNI.");
+      return;
+    }
     if (!correo) { setError("Ingresa tu correo electrónico."); return; }
     if (!telefono || telefono.length < 9) { setError("Ingresa un número de teléfono válido de 9 dígitos."); return; }
     if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return; }
@@ -126,6 +137,12 @@ function Login({ onVolver, modoInicial }) {
         password,
         rol: "negocio",
         telefono,
+        dni,
+        digito_verificador: digitoVerificador,
+        nombres,
+        apellido_paterno: apellidoPaterno,
+        apellido_materno: apellidoMaterno,
+        nombre_completo: nombre,
       });
 
       setPasoRegistro("exito");
@@ -198,12 +215,58 @@ function Login({ onVolver, modoInicial }) {
     }
   };
 
+  const resetDni = () => {
+    setDniValidado(false);
+    setDni("");
+    setDigitoVerificador("");
+    setNombre("");
+    setNombres("");
+    setApellidoPaterno("");
+    setApellidoMaterno("");
+    setError("");
+  };
+
+  const manejarConsultarDni = async () => {
+    setError("");
+    if (!dni || dni.length !== 8) {
+      setError("El DNI debe tener exactamente 8 dígitos.");
+      return;
+    }
+    if (!digitoVerificador || digitoVerificador.length !== 1) {
+      setError("El dígito verificador es obligatorio.");
+      return;
+    }
+
+    setCargando(true);
+    try {
+      const data = await consultarDni(dni);
+
+      if (String(data.digito_verificador_api) !== String(digitoVerificador)) {
+        setError("El dígito verificador ingresado no coincide con el registrado.");
+        setCargando(false);
+        return;
+      }
+
+      setNombres(data.nombres || "");
+      setApellidoPaterno(data.apellido_paterno || "");
+      setApellidoMaterno(data.apellido_materno || "");
+      setNombre(data.nombre_completo || "");
+      setDniValidado(true);
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "DNI no encontrado o error de conexión.");
+    } finally {
+      setCargando(false);
+    }
+  };
+
   const resetRegistro = () => {
     setPasoRegistro("formulario");
     setCodigoIngresado("");
     setErrorCodigo("");
     setTiempoRestante(0);
     setCorreoVerificar("");
+    resetDni();
   };
 
   const inputLabel = { display: "block", fontSize: "13px", fontWeight: 600, color: "#334155", marginBottom: "6px" };
@@ -432,67 +495,187 @@ function Login({ onVolver, modoInicial }) {
                   <form onSubmit={modo === "login" ? manejarLogin : manejarRegistro}>
                     {modo === "registro" && (
                       <div style={{ display: "grid", gap: "12px", marginBottom: "4px" }}>
-                        <div>
-                          <label style={inputLabel}>Nombre completo *</label>
-                          <input type="text" placeholder="Ej: Juan Perez Garcia" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+                        <div style={{ display: "grid", gridTemplateColumns: "3fr 1fr", gap: "10px" }}>
+                          <div>
+                            <label style={inputLabel}>DNI *</label>
+                            <input
+                              type="text"
+                              placeholder="8 dígitos"
+                              value={dni}
+                              onChange={(e) => {
+                                setDni(e.target.value.replace(/\D/g, "").slice(0, 8));
+                                setError("");
+                              }}
+                              disabled={dniValidado}
+                              maxLength="8"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label style={inputLabel}>Dígito *</label>
+                            <input
+                              type="text"
+                              placeholder="Ej: 5"
+                              value={digitoVerificador}
+                              onChange={(e) => {
+                                setDigitoVerificador(e.target.value.replace(/\D/g, "").slice(0, 1));
+                                setError("");
+                              }}
+                              disabled={dniValidado}
+                              maxLength="1"
+                              required
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label style={inputLabel}>Correo electrónico *</label>
-                          <input type="email" placeholder="tu@correo.com" value={correo} onChange={(e) => setCorreo(e.target.value)} required />
-                        </div>
-                        <div>
-                          <label style={inputLabel}>Número de teléfono *</label>
-                          <input type="text" placeholder="912345678" value={telefono} onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 9))} maxLength="9" required />
-                        </div>
+
+                        {!dniValidado ? (
+                          <button
+                            type="button"
+                            className="primary-btn"
+                            onClick={manejarConsultarDni}
+                            disabled={cargando}
+                            style={{ background: "#1f3b57", marginTop: "4px", padding: "14px" }}
+                          >
+                            {cargando ? "Consultando..." : "Consultar DNI"}
+                          </button>
+                        ) : (
+                          <>
+                            <div style={{ textAlign: "right", marginTop: "-6px" }}>
+                              <button
+                                type="button"
+                                onClick={resetDni}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "#2563eb",
+                                  fontSize: "12px",
+                                  cursor: "pointer",
+                                  textDecoration: "underline",
+                                  padding: 0
+                                }}
+                              >
+                                Cambiar DNI
+                              </button>
+                            </div>
+                            <div>
+                              <label style={inputLabel}>Nombre completo *</label>
+                              <input
+                                type="text"
+                                value={nombre}
+                                disabled
+                                required
+                                style={{ background: "#f1f5f9", cursor: "not-allowed" }}
+                              />
+                            </div>
+                            <div>
+                              <label style={inputLabel}>Correo electrónico *</label>
+                              <input
+                                type="email"
+                                placeholder="tu@correo.com"
+                                value={correo}
+                                onChange={(e) => setCorreo(e.target.value)}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label style={inputLabel}>Número de teléfono *</label>
+                              <input
+                                type="text"
+                                placeholder="912345678"
+                                value={telefono}
+                                onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                                maxLength="9"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label style={inputLabel}>Contraseña *</label>
+                              <input
+                                type="password"
+                                placeholder="Mínimo 6 caracteres"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                minLength={6}
+                              />
+                            </div>
+                            <div>
+                              <label style={inputLabel}>Confirmar contraseña *</label>
+                              <input
+                                type="password"
+                                placeholder="Repite tu contraseña"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                                minLength={6}
+                              />
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
 
                     {modo === "login" && (
-                      <div>
-                        <label style={inputLabel}>Correo electrónico</label>
-                        <input type="email" placeholder="tu@correo.com" value={correo} onChange={(e) => setCorreo(e.target.value)} required />
-                      </div>
-                    )}
-
-                    <div>
-                      <label style={inputLabel}>Contraseña</label>
-                      <input type="password" placeholder="Minimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
-                    </div>
-
-                    {modo === "registro" && (
-                      <div>
-                        <label style={inputLabel}>Confirmar contraseña *</label>
-                        <input type="password" placeholder="Repite tu contraseña" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} />
-                      </div>
-                    )}
-
-                    {modo === "login" && (
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#64748b", cursor: "pointer" }}>
-                          <input type="checkbox" style={{ width: "16px", height: "16px", accentColor: "#1f3b57" }} />
-                          Recordar sesión
-                        </label>
-                        <button type="button" onClick={() => { setMostrarRecuperar(true); setCorreoRecuperacion(correo); setError(""); }} style={{ background: "none", border: "none", color: "#2563eb", fontSize: "13px", cursor: "pointer", fontWeight: 600 }}>
-                          Olvidaste tu contraseña?
-                        </button>
+                      <div style={{ display: "grid", gap: "12px" }}>
+                        <div>
+                          <label style={inputLabel}>Correo electrónico</label>
+                          <input
+                            type="email"
+                            placeholder="tu@correo.com"
+                            value={correo}
+                            onChange={(e) => setCorreo(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label style={inputLabel}>Contraseña</label>
+                          <input
+                            type="password"
+                            placeholder="Mínimo 6 caracteres"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            minLength={6}
+                          />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#64748b", cursor: "pointer" }}>
+                            <input type="checkbox" style={{ width: "16px", height: "16px", accentColor: "#1f3b57" }} />
+                            Recordar sesión
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => { setMostrarRecuperar(true); setCorreoRecuperacion(correo); setError(""); }}
+                            style={{ background: "none", border: "none", color: "#2563eb", fontSize: "13px", cursor: "pointer", fontWeight: 600 }}
+                          >
+                            Olvidaste tu contraseña?
+                          </button>
+                        </div>
                       </div>
                     )}
 
                     {error && (
-                      <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                      <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", display: "flex", alignItems: "flex-start", gap: "10px", marginTop: "12px" }}>
                         <span style={{ fontSize: "16px", marginTop: "1px" }}>&#9888;</span>
                         <span>{error}</span>
                       </div>
                     )}
 
-                    <button className="primary-btn" type="submit" disabled={cargando} style={{ opacity: cargando ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "15px", fontSize: "15px", marginTop: "4px" }}>
-                      {cargando ? (
-                        <>
-                          <span style={{ display: "inline-block", width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                          {modo === "login" ? "Verificando credenciales..." : "Enviando código de verificación..."}
-                        </>
-                      ) : modo === "login" ? "Ingresar al sistema" : "Crear cuenta"}
-                    </button>
+                    {(modo === "login" || (modo === "registro" && dniValidado)) && (
+                      <button
+                        className="primary-btn"
+                        type="submit"
+                        disabled={cargando}
+                        style={{ opacity: cargando ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "15px", fontSize: "15px", marginTop: "16px" }}
+                      >
+                        {cargando ? (
+                          <>
+                            <span style={{ display: "inline-block", width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                            {modo === "login" ? "Verificando credenciales..." : "Enviando código de verificación..."}
+                          </>
+                        ) : modo === "login" ? "Ingresar al sistema" : "Crear cuenta"}
+                      </button>
+                    )}
                   </form>
 
                   <div style={{ marginTop: "24px", textAlign: "center", fontSize: "12px", color: "#94a3b8" }}>

@@ -4,6 +4,7 @@ import { crearPreferenciaPago } from "../services/pagoService";
 import {
   guardarSolicitud,
   obtenerSolicitudes,
+  obtenerNegociosPorUsuario,
 } from "../services/solicitudService";
 import { convertirPdfABase64 } from "../services/pdfService";
 import { useAuth } from "../context/AuthContext";
@@ -26,6 +27,7 @@ function PanelNegocio({ seccion }) {
   const [procesandoPago, setProcesandoPago] = useState(false);
   const [detallePago, setDetallePago] = useState(null);
   const [notificacionesPendientes, setNotificacionesPendientes] = useState(0);
+  const [negocios, setNegocios] = useState([]);
 
   const [form, setForm] = useState({
     tipoTramite: "Nueva licencia",
@@ -128,6 +130,29 @@ function PanelNegocio({ seccion }) {
     if (usuario) cargarMisSolicitudes();
   }, [usuario]);
 
+  const cargarNegocios = async () => {
+    try {
+      const list = await obtenerNegociosPorUsuario(usuario?.uid);
+      setNegocios(list);
+    } catch (error) {
+      console.error("Error al cargar negocios:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (usuario && seccion === "mi-cuenta") {
+      cargarNegocios();
+    }
+  }, [usuario, seccion]);
+
+  useEffect(() => {
+    if (seccion === "nueva-solicitud") {
+      nuevaSolicitud();
+    } else if (seccion === "mis-solicitudes") {
+      setPaso("misSolicitudes");
+    }
+  }, [seccion]);
+
   const manejarCambio = (e) => {
     let valor = e.target.value;
 
@@ -183,7 +208,7 @@ function PanelNegocio({ seccion }) {
       setRucValidado(true);
     } catch (error) {
       console.error(error);
-      setErrorRuc("No se pudo consultar el RUC.");
+      setErrorRuc(error.message || "No se pudo consultar el RUC.");
     } finally {
       setBuscando(false);
     }
@@ -768,7 +793,7 @@ function PanelNegocio({ seccion }) {
                   <div className="block-title"><span>2</span><div><h3>Validar RUC</h3><p>Busca el RUC para completar automáticamente los datos SUNAT.</p></div></div>
                   <div className="ruc-row ruc-row-modern">
                     <input type="text" name="ruc" placeholder="Ingrese RUC de 11 digitos" value={form.ruc} onChange={manejarCambio} maxLength="11" />
-                    <button type="button" onClick={buscarRuc} disabled={buscando}>{buscando ? "Buscando..." : "Buscar RUC"}</button>
+                    <button type="button" onClick={buscarRuc} disabled={buscando}>{buscando ? "Buscando..." : "Consultar SUNAT"}</button>
                   </div>
                   {errorRuc && <p className="error">{errorRuc}</p>}
                   {rucValidado && <p className="success">RUC validado correctamente.</p>}
@@ -918,9 +943,20 @@ function PanelNegocio({ seccion }) {
               <span style={{ color: "#64748b", fontSize: "14px" }}>Teléfono</span>
               <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.telefono || "No registrado"}</strong>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <span style={{ color: "#64748b", fontSize: "14px" }}>RUC</span>
-              <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.ruc || "No registrado"}</strong>
+            <div style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <span style={{ color: "#64748b", fontSize: "14px", display: "block", marginBottom: "8px" }}>Mis Negocios Registrados</span>
+              {negocios.length === 0 ? (
+                <span style={{ fontSize: "14px", color: "#64748b" }}>Ningún negocio registrado aún.</span>
+              ) : (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  {negocios.map((neg, idx) => (
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", borderTop: idx > 0 ? "1px solid #e2e8f0" : "none", paddingTop: idx > 0 ? "8px" : "0" }}>
+                      <span style={{ fontSize: "13px", color: "#0f172a", fontWeight: 600 }}>{neg.razonSocial || neg.nombreNegocio}</span>
+                      <span style={{ fontSize: "13px", color: "#64748b" }}>RUC: {neg.ruc}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
               <span style={{ color: "#64748b", fontSize: "14px" }}>Rol</span>
