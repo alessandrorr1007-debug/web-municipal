@@ -13,10 +13,10 @@ import {
   Preference,
 } from "mercadopago";
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+dotenv.config({ path: join(__dirname, ".env") });
 const distPath = join(__dirname, "..", "dist");
 
 const app = express();
