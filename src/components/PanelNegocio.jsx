@@ -9,6 +9,8 @@ import {
 import { convertirPdfABase64 } from "../services/pdfService";
 import { useAuth } from "../context/AuthContext";
 import Timeline from "./Timeline";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
 
 function PanelNegocio({ seccion }) {
   const { usuario } = useAuth();
@@ -186,19 +188,29 @@ function PanelNegocio({ seccion }) {
     try {
       setBuscando(true);
 
+      // 1. Verificar si el RUC ya está registrado en Firebase/Firestore
+      const qRuc = query(collection(db, "negocios"), where("ruc", "==", form.ruc.trim()));
+      const snapRuc = await getDocs(qRuc);
+      if (!snapRuc.empty) {
+        setErrorRuc("Este RUC ya se encuentra registrado.");
+        setRucValidado(false);
+        return;
+      }
+
+      // 2. Consultar RUC en el backend (SUNAT/Decolecta)
       const data = await consultarRuc(form.ruc.trim());
 
       setForm((prev) => ({
         ...prev,
         razonSocial: data.razonSocial || "",
-        nombreNegocio: data.razonSocial || "",
+        nombreNegocio: data.nombreComercial || data.razonSocial || "",
         direccion: data.direccion || "",
         estadoSunat: data.estado || "",
         condicionSunat: data.condicion || "",
         departamento: data.departamento || "",
         provincia: data.provincia || "",
         distrito: data.distrito || "",
-        giro: prev.giro || "Comercio"
+        giro: data.giro || "Actividad económica no especificada"
       }));
 
       if (data.esValido) {
@@ -209,7 +221,12 @@ function PanelNegocio({ seccion }) {
       }
     } catch (error) {
       console.error(error);
-      setErrorRuc(error.message || "No se pudo consultar el RUC.");
+      const msg = error.message || "";
+      if (msg.includes("no encontrado") || msg.includes("registrado") || msg.includes("404")) {
+        setErrorRuc("El RUC ingresado no se encuentra registrado en SUNAT.");
+      } else {
+        setErrorRuc(msg || "No se pudo consultar el RUC.");
+      }
     } finally {
       setBuscando(false);
     }
@@ -827,11 +844,11 @@ function PanelNegocio({ seccion }) {
                     </div>
                     <div>
                       <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Nombre comercial / de fantasía</label>
-                      <input type="text" name="nombreNegocio" placeholder="Nombre del negocio" value={form.nombreNegocio} onChange={manejarCambio} />
+                      <input type="text" name="nombreNegocio" placeholder="Nombre del negocio" value={form.nombreNegocio} readOnly disabled style={{ background: "#f1f5f9" }} />
                     </div>
                     <div>
                       <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Giro comercial</label>
-                      <input type="text" name="giro" placeholder="Giro comercial" value={form.giro} onChange={manejarCambio} />
+                      <input type="text" name="giro" placeholder="Giro comercial" value={form.giro} readOnly disabled style={{ background: "#f1f5f9" }} />
                     </div>
                   </div>
                   <div className="form-grid" style={{ marginTop: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>

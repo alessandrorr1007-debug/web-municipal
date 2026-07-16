@@ -197,34 +197,38 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
     if (!data || (!data.numero_documento && !data.razon_social)) {
       console.log("Sin datos o sin razon_social/numero_documento en la respuesta.");
       console.log("Resultado de la validación: NO VÁLIDO");
-      console.log("Motivo: RUC no encontrado en registros de SUNAT");
-      return res.status(404).json({ error: "RUC no encontrado en registros de SUNAT." });
+      console.log("Motivo: El RUC ingresado no se encuentra registrado en SUNAT.");
+      return res.status(404).json({ error: "El RUC ingresado no se encuentra registrado en SUNAT." });
     }
 
     const rucNum = data.numero_documento || data.ruc || ruc;
     const razonSocial = data.razon_social || "";
+    const nombreComercial = data.nombre_comercial || razonSocial || "";
     const estado = (data.estado || "").toUpperCase().trim();
     const condicion = (data.condicion || "").toUpperCase().trim();
     const direccion = data.direccion || "";
     const departamento = data.departamento || "";
     const provincia = data.provincia || "";
     const distrito = data.distrito || "";
+    const giro = data.actividad_economica || data.actividad || (data.actividades_economicas && data.actividades_economicas[0]) || "Actividad económica no especificada";
 
     let esValido = true;
     let motivoRechazo = "";
 
     if (estado !== "ACTIVO") {
       esValido = false;
-      motivoRechazo = "El RUC se encuentra inactivo o dado de baja en SUNAT. No es posible registrar una solicitud de licencia.";
+      motivoRechazo = "El RUC se encuentra inactivo. No puede continuar con el registro.";
     } else if (condicion !== "HABIDO") {
       esValido = false;
-      motivoRechazo = "El contribuyente no tiene una condición válida en SUNAT. Regularice su situación antes de solicitar una licencia.";
+      motivoRechazo = "El contribuyente no cumple las condiciones necesarias para registrarse.";
     }
 
     const payload = {
       success: true,
       ruc: rucNum,
       razonSocial,
+      nombreComercial,
+      giro,
       estado,
       condicion,
       direccion,
@@ -252,14 +256,14 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
       return res.status(501).json({ error: "Token de Decolecta inválido o expirado." });
     }
     if (error.response?.status === 404) {
-      return res.status(404).json({ error: "RUC no encontrado en registros de SUNAT." });
+      return res.status(404).json({ error: "El RUC ingresado no se encuentra registrado en SUNAT." });
     }
     if (error.response?.status === 429) {
       return res.status(429).json({ error: "Límite de consultas alcanzado. Intenta más tarde." });
     }
 
     res.status(500).json({
-      error: "Error al consultar el RUC. Intenta nuevamente.",
+      error: "El RUC ingresado no se encuentra registrado en SUNAT.",
       detalle: error.response?.data || error.message,
     });
   }
