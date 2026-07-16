@@ -4,9 +4,13 @@ import {
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  fetchSignInMethodsForEmail,
 } from "firebase/auth";
 
-import { doc, setDoc, getDoc, query, collection, where, getDocs } from "firebase/firestore";
+import {
+  doc, setDoc, getDoc, query, collection, where, getDocs,
+  addDoc, deleteDoc, updateDoc, Timestamp,
+} from "firebase/firestore";
 
 export const registrarUsuario = async (datos) => {
   const credenciales = await createUserWithEmailAndPassword(
@@ -22,14 +26,7 @@ export const registrarUsuario = async (datos) => {
     nombre: datos.nombre || "",
     correo: usuario.email,
     rol: datos.rol || "negocio",
-    dni: datos.dni || "",
     telefono: datos.telefono || "",
-    ruc: datos.ruc || "",
-    razonSocial: datos.razonSocial || "",
-    nombreComercial: datos.nombreComercial || "",
-    direccion: datos.direccion || "",
-    tipoNegocio: datos.tipoNegocio || "",
-    categoria: datos.categoria || "",
   };
 
   await setDoc(doc(db, "usuarios", usuario.uid), nuevoUsuario);
@@ -56,14 +53,7 @@ export const iniciarSesion = async (correo, password) => {
     correo: usuario.email,
     nombre: data.nombre || "",
     rol: data.rol || "",
-    dni: data.dni || "",
     telefono: data.telefono || "",
-    ruc: data.ruc || "",
-    razonSocial: data.razonSocial || "",
-    nombreComercial: data.nombreComercial || "",
-    direccion: data.direccion || "",
-    tipoNegocio: data.tipoNegocio || "",
-    categoria: data.categoria || "",
   };
 };
 
@@ -71,10 +61,57 @@ export const cerrarSesion = async () => {
   await signOut(auth);
 };
 
-export const verificarRucExistente = async (ruc) => {
-  const q = query(collection(db, "usuarios"), where("ruc", "==", ruc));
+export const verificarCorreoExistente = async (correo) => {
+  try {
+    const methods = await fetchSignInMethodsForEmail(auth, correo);
+    return methods.length > 0;
+  } catch {
+    return false;
+  }
+};
+
+export const guardarCodigoVerificacion = async (correo) => {
+  const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+
+  const q = query(collection(db, "codigos_verificacion"), where("correo", "==", correo));
   const snapshot = await getDocs(q);
-  return !snapshot.empty;
+  for (const d of snapshot.docs) {
+    await deleteDoc(doc(db, "codigos_verificacion", d.id));
+  }
+
+  await addDoc(collection(db, "codigos_verificacion"), {
+    correo,
+    codigo,
+    expiracion: Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000)),
+    usado: false,
+  });
+
+  return codigo;
+};
+
+export const verificarCodigoVerificacion = async (correo, codigoIngresado) => {
+  const q = query(
+    collection(db, "codigos_verificacion"),
+    where("correo", "==", correo),
+    where("codigo", "==", codigoIngresado),
+    where("usado", "==", false)
+  );
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) {
+    return { valido: false, mensaje: "Código incorrecto. Intenta de nuevo." };
+  }
+
+  const codigoDoc = snapshot.docs[0];
+  const data = codigoDoc.data();
+
+  if (data.expiracion.toDate() < new Date()) {
+    return { valido: false, mensaje: "El código ha expirado. Solicita uno nuevo." };
+  }
+
+  await updateDoc(doc(db, "codigos_verificacion", codigoDoc.id), { usado: true });
+
+  return { valido: true };
 };
 
 export const enviarRecuperacion = async (correo) => {
