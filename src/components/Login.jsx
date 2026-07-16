@@ -28,11 +28,11 @@ function Login({ onVolver, modoInicial }) {
   const [errorRecuperacion, setErrorRecuperacion] = useState("");
 
   const [dni, setDni] = useState("");
-  const [digitoVerificador, setDigitoVerificador] = useState("");
   const [dniValidado, setDniValidado] = useState(false);
   const [nombres, setNombres] = useState("");
   const [apellidoPaterno, setApellidoPaterno] = useState("");
   const [apellidoMaterno, setApellidoMaterno] = useState("");
+  const [successDni, setSuccessDni] = useState("");
 
   const [pasoRegistro, setPasoRegistro] = useState("formulario");
   const [correoVerificar, setCorreoVerificar] = useState("");
@@ -138,7 +138,7 @@ function Login({ onVolver, modoInicial }) {
         rol: "negocio",
         telefono,
         dni,
-        digito_verificador: digitoVerificador,
+        digito_verificador: "",
         nombres,
         apellido_paterno: apellidoPaterno,
         apellido_materno: apellidoMaterno,
@@ -218,22 +218,20 @@ function Login({ onVolver, modoInicial }) {
   const resetDni = () => {
     setDniValidado(false);
     setDni("");
-    setDigitoVerificador("");
     setNombre("");
     setNombres("");
     setApellidoPaterno("");
     setApellidoMaterno("");
     setError("");
+    setSuccessDni("");
   };
 
   const manejarConsultarDni = async () => {
     setError("");
+    setSuccessDni("");
+
     if (!dni || dni.length !== 8) {
       setError("El DNI debe tener exactamente 8 dígitos.");
-      return;
-    }
-    if (!digitoVerificador || digitoVerificador.length !== 1) {
-      setError("El dígito verificador es obligatorio.");
       return;
     }
 
@@ -241,20 +239,20 @@ function Login({ onVolver, modoInicial }) {
     try {
       const data = await consultarDni(dni);
 
-      if (String(data.digito_verificador_api) !== String(digitoVerificador)) {
-        setError("El dígito verificador ingresado no coincide con el registrado.");
-        setCargando(false);
-        return;
-      }
-
       setNombres(data.nombres || "");
       setApellidoPaterno(data.apellido_paterno || "");
       setApellidoMaterno(data.apellido_materno || "");
       setNombre(data.nombre_completo || "");
       setDniValidado(true);
+      setSuccessDni("✅ DNI encontrado correctamente.");
     } catch (err) {
       console.error(err);
-      setError(err?.message || "DNI no encontrado o error de conexión.");
+      const msg = err?.message || "";
+      if (msg.includes("no encontrado") || msg.includes("RENIEC") || msg.includes("404")) {
+        setError("❌ DNI no encontrado en RENIEC.");
+      } else {
+        setError("❌ No fue posible consultar RENIEC. Intente nuevamente.");
+      }
     } finally {
       setCargando(false);
     }
@@ -495,38 +493,28 @@ function Login({ onVolver, modoInicial }) {
                   <form onSubmit={modo === "login" ? manejarLogin : manejarRegistro}>
                     {modo === "registro" && (
                       <div style={{ display: "grid", gap: "12px", marginBottom: "4px" }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "3fr 1fr", gap: "10px" }}>
-                          <div>
-                            <label style={inputLabel}>DNI *</label>
-                            <input
-                              type="text"
-                              placeholder="8 dígitos"
-                              value={dni}
-                              onChange={(e) => {
-                                setDni(e.target.value.replace(/\D/g, "").slice(0, 8));
-                                setError("");
-                              }}
-                              disabled={dniValidado}
-                              maxLength="8"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label style={inputLabel}>Dígito *</label>
-                            <input
-                              type="text"
-                              placeholder="Ej: 5"
-                              value={digitoVerificador}
-                              onChange={(e) => {
-                                setDigitoVerificador(e.target.value.replace(/\D/g, "").slice(0, 1));
-                                setError("");
-                              }}
-                              disabled={dniValidado}
-                              maxLength="1"
-                              required
-                            />
-                          </div>
+                        <div style={{ marginBottom: "4px" }}>
+                          <label style={inputLabel}>DNI *</label>
+                          <input
+                            type="text"
+                            placeholder="Ingrese DNI de 8 dígitos"
+                            value={dni}
+                            onChange={(e) => {
+                              setDni(e.target.value.replace(/\D/g, "").slice(0, 8));
+                              setError("");
+                              setSuccessDni("");
+                            }}
+                            disabled={dniValidado}
+                            maxLength="8"
+                            required
+                          />
                         </div>
+
+                        {successDni && (
+                          <div style={{ background: "#f0fdf4", padding: "12px 16px", borderRadius: "10px", border: "1px solid #bbf7d0", fontSize: "14px", color: "#166534", display: "flex", alignItems: "flex-start", gap: "10px", marginTop: "4px" }}>
+                            <span>{successDni}</span>
+                          </div>
+                        )}
 
                         {!dniValidado ? (
                           <button
@@ -536,11 +524,11 @@ function Login({ onVolver, modoInicial }) {
                             disabled={cargando}
                             style={{ background: "#1f3b57", marginTop: "4px", padding: "14px" }}
                           >
-                            {cargando ? "Consultando..." : "Consultar DNI"}
+                            {cargando ? "Consultando..." : "Consultar RENIEC"}
                           </button>
                         ) : (
                           <>
-                            <div style={{ textAlign: "right", marginTop: "-6px" }}>
+                            <div style={{ textAlign: "right", marginTop: "2px" }}>
                               <button
                                 type="button"
                                 onClick={resetDni}
@@ -656,7 +644,7 @@ function Login({ onVolver, modoInicial }) {
 
                     {error && (
                       <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", display: "flex", alignItems: "flex-start", gap: "10px", marginTop: "12px" }}>
-                        <span style={{ fontSize: "16px", marginTop: "1px" }}>&#9888;</span>
+                        {!error.startsWith("❌") && <span style={{ fontSize: "16px", marginTop: "1px" }}>&#9888;</span>}
                         <span>{error}</span>
                       </div>
                     )}

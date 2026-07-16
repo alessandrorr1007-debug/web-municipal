@@ -31,7 +31,6 @@ export const consultarDni = async (dni) => {
     nombres: data.data.nombres,
     apellido_paterno: data.data.apellido_paterno,
     apellido_materno: data.data.apellido_materno,
-    digito_verificador_api: data.digito_verificador,
-    nombre_completo: `${data.data.apellido_paterno} ${data.data.apellido_materno}, ${data.data.nombres}`,
+    nombre_completo: data.data.nombre_completo || `${data.data.nombres} ${data.data.apellido_paterno} ${data.data.apellido_materno}`.trim(),
   };
 };

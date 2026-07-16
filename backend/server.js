@@ -100,16 +100,6 @@ app.get("/api/consultar-dni/:dni", async (req, res) => {
       return res.status(500).json({ error: "Servicio de consulta no configurado. Token faltante." });
     }
 
-    const pesos = [2, 1, 2, 1, 2, 1, 2, 1];
-    let suma = 0;
-    for (let i = 0; i < 8; i++) {
-      let producto = parseInt(dni[i]) * pesos[i];
-      if (producto >= 10) producto -= 9;
-      suma += producto;
-    }
-    const digitoEsperado = (10 - (suma % 10)) % 10;
-
-    console.log("Dígito verificador esperado:", digitoEsperado);
     console.log("Consultando Decolecta RENIEC para DNI:", dni);
 
     const response = await axios.get(
@@ -124,21 +114,22 @@ app.get("/api/consultar-dni/:dni", async (req, res) => {
 
     console.log("Respuesta Decolecta:", JSON.stringify(response.data));
 
-    if (!response.data || !response.data.data) {
-      console.log("Sin datos en la respuesta");
+    const resBody = response.data;
+    const data = resBody.data || resBody;
+
+    if (!data || !data.document_number) {
+      console.log("document_number no encontrado en la respuesta:", resBody);
       return res.status(404).json({ error: "DNI no encontrado en registros de RENIEC." });
     }
 
-    const data = response.data.data;
-
     res.json({
       success: true,
-      digito_verificador: digitoEsperado,
       data: {
-        dni: data.numero_documento || data.dni || dni,
-        nombres: data.nombres || "",
-        apellido_paterno: data.apellido_paterno || "",
-        apellido_materno: data.apellido_materno || "",
+        dni: data.document_number,
+        nombres: data.first_name || "",
+        apellido_paterno: data.first_last_name || "",
+        apellido_materno: data.second_last_name || "",
+        nombre_completo: data.full_name || `${data.first_name || ""} ${data.first_last_name || ""} ${data.second_last_name || ""}`.trim(),
       },
     });
   } catch (error) {
