@@ -44,7 +44,7 @@ function PanelFuncionario({ seccion }) {
 
   const derivarInspector = async (solicitud) => {
     if (!solicitud.fechaVisitaInspector) {
-      const fecha = prompt("Ingresa la fecha para la inspeccion (YYYY-MM-DD):");
+      const fecha = prompt("Ingresa la fecha para la inspección (YYYY-MM-DD):");
       if (!fecha) return;
 
       await actualizarSolicitud(solicitud.id, {
@@ -57,8 +57,8 @@ function PanelFuncionario({ seccion }) {
           ...(solicitud.notificaciones || []),
           {
             fecha: formatearFechaHora(),
-            titulo: "Inspeccion programada",
-            mensaje: `Se programo una inspeccion para el ${fecha}. Un inspector visitara tu local.`,
+            titulo: "Inspección programada",
+            mensaje: `Se programó una inspección para el ${fecha}. Un inspector visitará tu local.`,
             leida: false,
           },
         ],
@@ -233,14 +233,14 @@ function PanelFuncionario({ seccion }) {
           <small>Solicitudes en el sistema</small>
         </div>
         <div className="stat-card">
-          <span>En revision</span>
+          <span>En revisión</span>
           <strong>{pendientes}</strong>
-          <small>Esperando revision</small>
+          <small>Esperando revisión</small>
         </div>
         <div className="stat-card">
           <span>Programadas</span>
           <strong>{programadas}</strong>
-          <small>Inspeccion programada</small>
+          <small>Inspección programada</small>
         </div>
         <div className="stat-card">
           <span>Reobservadas</span>
@@ -298,9 +298,9 @@ function PanelFuncionario({ seccion }) {
                     <th>Canal</th>
                     <th>Documentos</th>
                     <th>Pago</th>
-                    <th>Inspeccion</th>
+                    <th>Inspección</th>
                     <th>Estado</th>
-                    <th>Decision</th>
+                    <th>Decisión</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -342,7 +342,7 @@ function PanelFuncionario({ seccion }) {
                           )}
                           {s.cantidadReobservaciones > 0 && (
                             <span className="badge warning" style={{ marginTop: "4px" }}>
-                              {s.cantidadReobservaciones} reobservacion{s.cantidadReobservaciones > 1 ? "es" : ""}
+                              {s.cantidadReobservaciones} reobservación{s.cantidadReobservaciones > 1 ? "es" : ""}
                             </span>
                           )}
                         </td>

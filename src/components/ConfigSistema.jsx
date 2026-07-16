@@ -6,7 +6,7 @@ import { db } from "../firebase";
 
 const CONFIG_DEFAULT = {
   nombreMunicipalidad: "Municipalidad Provincial de Trujillo",
-  direccionMunicipal: "Av. Espana Nro. 456, Centro de Trujillo",
+  direccionMunicipal: "Av. España Nro. 456, Centro de Trujillo",
   telefonoMunicipal: "(044) 234567",
   correoMunicipal: "tramites@mtrujillo.gob.pe",
   rucMunicipal: "20481265478",
@@ -20,8 +20,8 @@ const CONFIG_DEFAULT = {
   estadosLicencia: [
     "En revision",
     "Pago pendiente",
-    "Inspeccion programada",
-    "En inspeccion",
+    "Inspección programada",
+    "En inspección",
     "Resultado enviado al funcionario",
     "Observada - Pendiente de reparo",
     "Licencia aprobada",
@@ -31,11 +31,11 @@ const CONFIG_DEFAULT = {
 
   tiposNegocio: [
     "Comercio", "Restaurante", "Servicios", "Industria",
-    "Mineria", "Educacion", "Salud", "Otro",
+    "Minería", "Educación", "Salud", "Otro",
   ],
 
   categoriasEmpresa: [
-    "Microempresa", "Pequena empresa", "Mediana empresa", "Gran empresa",
+    "Microempresa", "Pequeña empresa", "Mediana empresa", "Gran empresa",
   ],
 
   horasInspeccion: [
@@ -81,11 +81,11 @@ function ConfigSistema() {
       await registrarAccion({
         usuario: usuario.nombre,
         usuarioId: usuario.uid,
-        accion: "Actualizar configuracion del sistema",
-        detalle: `Modifico parametros generales del sistema`,
+        accion: "Actualizar configuración del sistema",
+        detalle: `Modificó parámetros generales del sistema`,
       });
 
-      setMensaje("Configuracion guardada correctamente.");
+      setMensaje("Configuración guardada correctamente.");
       setTimeout(() => setMensaje(""), 3000);
     } catch (err) {
       alert("Error: " + err.message);
@@ -107,8 +107,8 @@ function ConfigSistema() {
     <div>
       <div className="admin-module-header">
         <div>
-          <h2>Configuracion del Sistema</h2>
-          <p>Parametros generales, precios, estados y horarios del sistema municipal.</p>
+          <h2>Configuración del Sistema</h2>
+          <p>Parámetros generales, precios, estados y horarios del sistema municipal.</p>
         </div>
         <button type="button" className="btn-primary" onClick={guardar} disabled={guardando}>
           {guardando ? "Guardando..." : "Guardar cambios"}
@@ -121,7 +121,7 @@ function ConfigSistema() {
 
       <div className="config-tabs">
         <button type="button" className={pestana === "general" ? "active" : ""} onClick={() => setPestana("general")}>General</button>
-        <button type="button" className={pestana === "tramite" ? "active" : ""} onClick={() => setPestana("tramite")}>Tramite</button>
+        <button type="button" className={pestana === "tramite" ? "active" : ""} onClick={() => setPestana("tramite")}>Trámite</button>
         <button type="button" className={pestana === "estados" ? "active" : ""} onClick={() => setPestana("estados")}>Estados</button>
         <button type="button" className={pestana === "horarios" ? "active" : ""} onClick={() => setPestana("horarios")}>Horarios</button>
       </div>
@@ -131,8 +131,8 @@ function ConfigSistema() {
           <h3>Datos de la Municipalidad</h3>
           <div className="config-grid">
             <div><label>Nombre</label><input type="text" value={config.nombreMunicipalidad} onChange={(e) => actualizarCampo("nombreMunicipalidad", e.target.value)} /></div>
-            <div><label>Direccion</label><input type="text" value={config.direccionMunicipal} onChange={(e) => actualizarCampo("direccionMunicipal", e.target.value)} /></div>
-            <div><label>Telefono</label><input type="text" value={config.telefonoMunicipal} onChange={(e) => actualizarCampo("telefonoMunicipal", e.target.value)} /></div>
+            <div><label>Dirección</label><input type="text" value={config.direccionMunicipal} onChange={(e) => actualizarCampo("direccionMunicipal", e.target.value)} /></div>
+            <div><label>Teléfono</label><input type="text" value={config.telefonoMunicipal} onChange={(e) => actualizarCampo("telefonoMunicipal", e.target.value)} /></div>
             <div><label>Correo</label><input type="email" value={config.correoMunicipal} onChange={(e) => actualizarCampo("correoMunicipal", e.target.value)} /></div>
             <div><label>RUC</label><input type="text" value={config.rucMunicipal} onChange={(e) => actualizarCampo("rucMunicipal", e.target.value)} /></div>
           </div>
@@ -141,31 +141,31 @@ function ConfigSistema() {
 
       {pestana === "tramite" && (
         <div className="config-section">
-          <h3>Parametros del Tramite</h3>
+          <h3>Parámetros del Trámite</h3>
           <div className="config-grid">
             <div>
-              <label>Monto del tramite (S/)</label>
+              <label>Monto del trámite (S/)</label>
               <input type="number" step="0.01" min="0" value={config.montoTramite} onChange={(e) => actualizarCampo("montoTramite", parseFloat(e.target.value) || 0)} />
-              <small>Monto que paga el solicitante por el derecho de tramite</small>
+              <small>Monto que paga el solicitante por el derecho de trámite</small>
             </div>
             <div>
-              <label>Vigencia de licencia (dias)</label>
+              <label>Vigencia de licencia (días)</label>
               <input type="number" min="1" value={config.vigenciaLicencia} onChange={(e) => actualizarCampo("vigenciaLicencia", parseInt(e.target.value) || 365)} />
-              <small>Duracion de la licencia en dias</small>
+              <small>Duración de la licencia en días</small>
             </div>
             <div>
-              <label>Dias antes de vencimiento para renovar</label>
+              <label>Días antes de vencimiento para renovar</label>
               <input type="number" min="1" value={config.diasParaRenovacion} onChange={(e) => actualizarCampo("diasParaRenovacion", parseInt(e.target.value) || 30)} />
             </div>
             <div>
               <label>Maximo de reobservaciones</label>
               <input type="number" min="1" max="3" value={config.maxReobservaciones} onChange={(e) => actualizarCampo("maxReobservaciones", parseInt(e.target.value) || 2)} />
-              <small>Numero maximo de reobservaciones antes del rechazo definitivo</small>
+              <small>Número maximo de reobservaciones antes del rechazo definitivo</small>
             </div>
             <div>
-              <label>Dias plazo para reparo</label>
+              <label>Días plazo para reparo</label>
               <input type="number" min="1" value={config.diasPlazoReparo} onChange={(e) => actualizarCampo("diasPlazoReparo", parseInt(e.target.value) || 30)} />
-              <small>Dias que tiene el negocio para corregir observaciones</small>
+              <small>Días que tiene el negocio para corregir observaciones</small>
             </div>
           </div>
         </div>
@@ -230,7 +230,7 @@ function ConfigSistema() {
 
       {pestana === "horarios" && (
         <div className="config-section">
-          <h3>Horarios de Inspeccion</h3>
+          <h3>Horarios de Inspección</h3>
           <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "16px" }}>Horarios disponibles para programar inspecciones.</p>
           <div className="config-horas-grid">
             {config.horasInspeccion.map((h, i) => (

@@ -68,7 +68,7 @@ function PanelCajero({ seccion }) {
     setErrorRuc("");
     setRucValidado(false);
     if (form.ruc.trim().length !== 11) {
-      setErrorRuc("El RUC debe tener 11 digitos.");
+      setErrorRuc("El RUC debe tener 11 dígitos.");
       return;
     }
     try {
@@ -87,7 +87,7 @@ function PanelCajero({ seccion }) {
       setRucValidado(true);
     } catch (error) {
       console.error(error);
-      setErrorRuc("No se pudo consultar el RUC. Verifica el numero.");
+      setErrorRuc("No se pudo consultar el RUC. Verifica el número.");
     } finally {
       setBuscandoRuc(false);
     }
@@ -101,7 +101,7 @@ function PanelCajero({ seccion }) {
 
   const programarVisita = () => {
     if (!fechaVisita) {
-      alert("Debe seleccionar una fecha para la inspeccion.");
+      alert("Debe seleccionar una fecha para la inspección.");
       return;
     }
     setPaso("confirmacion");
@@ -137,13 +137,13 @@ function PanelCajero({ seccion }) {
           {
             fecha: new Date().toLocaleString("es-PE"),
             titulo: "Solicitud registrada",
-            mensaje: `Tu solicitud fue registrada de forma presencial. Inspeccion programada para el ${fechaVisita}.`,
+            mensaje: `Tu solicitud fue registrada de forma presencial. Inspección programada para el ${fechaVisita}.`,
             leida: false,
           },
         ],
       });
 
-      alert(`Solicitud ${nueva.id} registrada correctamente.\nExpediente: ${nueva.id}\nInspeccion: ${fechaVisita}`);
+      alert(`Solicitud ${nueva.id} registrada correctamente.\nExpediente: ${nueva.id}\nInspección: ${fechaVisita}`);
 
       setPaso("cola");
       setForm({
@@ -208,7 +208,7 @@ function PanelCajero({ seccion }) {
           <span className="eyebrow">Caja municipal</span>
           <h1>Panel Cajero</h1>
           <p>
-            Recepciona solicitudes presenciales, valida RUC, cobra el derecho de tramite y programa inspecciones.
+            Recepciona solicitudes presenciales, valida RUC, cobra el derecho de trámite y programa inspecciones.
           </p>
         </div>
 
@@ -239,7 +239,7 @@ function PanelCajero({ seccion }) {
         <div className="stat-card">
           <span>Pendientes</span>
           <strong>{solicitudesPendientes.length}</strong>
-          <small>Esperando inspeccion</small>
+          <small>Esperando inspección</small>
         </div>
         <div className="stat-card">
           <span>Cerradas</span>
@@ -254,7 +254,7 @@ function PanelCajero({ seccion }) {
           className={paso === "cola" ? "tab-active" : ""}
           onClick={() => setPaso("cola")}
         >
-          Cola de atencion
+          Cola de atención
         </button>
         <button
           type="button"
@@ -294,8 +294,8 @@ function PanelCajero({ seccion }) {
         <section className="section-card">
           <div className="section-header">
             <div>
-              <h2>Cola de atencion</h2>
-              <p>Solicitudes registradas hoy y pendientes de inspeccion.</p>
+              <h2>Cola de atención</h2>
+              <p>Solicitudes registradas hoy y pendientes de inspección.</p>
             </div>
           </div>
 
@@ -303,7 +303,7 @@ function PanelCajero({ seccion }) {
             <div className="empty-state">
               <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128203;</div>
               <h3>No hay solicitudes en cola</h3>
-              <p>Cuando registres una solicitud presencial, aparecera aqui.</p>
+              <p>Cuando registres una solicitud presencial, aparecerá aquí.</p>
               <button type="button" className="btn-pago" onClick={() => setPaso("nueva")}>
                 Registrar nueva solicitud
               </button>
@@ -339,7 +339,7 @@ function PanelCajero({ seccion }) {
                           <th>Expediente</th>
                           <th>Negocio</th>
                           <th>RUC</th>
-                          <th>Fecha inspeccion</th>
+                          <th>Fecha inspección</th>
                           <th>Estado</th>
                           <th>Canal</th>
                         </tr>
@@ -374,7 +374,7 @@ function PanelCajero({ seccion }) {
           <div className="section-header">
             <div>
               <h2>Registrar solicitud presencial</h2>
-              <p>Recepciona al ciudadano, valida su RUC, cobra el tramite y programa la inspeccion.</p>
+              <p>Recepciona al ciudadano, valida su RUC, cobra el trámite y programa la inspección.</p>
             </div>
           </div>
 
@@ -410,13 +410,13 @@ function PanelCajero({ seccion }) {
               <div className="block-title">
                 <span>2</span>
                 <div>
-                  <h3>Tipo de tramite</h3>
-                  <p>Selecciona si es licencia nueva o renovacion.</p>
+                  <h3>Tipo de trámite</h3>
+                  <p>Selecciona si es licencia nueva o renovación.</p>
                 </div>
               </div>
               <select name="tipoTramite" value={form.tipoTramite} onChange={manejarCambio}>
                 <option value="Nueva licencia">Nueva licencia</option>
-                <option value="Renovacion anual">Renovacion anual</option>
+                <option value="Renovacion anual">Renovación anual</option>
               </select>
             </div>
 
@@ -432,7 +432,7 @@ function PanelCajero({ seccion }) {
                 <input
                   type="text"
                   name="ruc"
-                  placeholder="Ingrese RUC de 11 digitos"
+                  placeholder="Ingrese RUC de 11 dígitos"
                   value={form.ruc}
                   onChange={manejarCambio}
                   maxLength="11"
@@ -451,18 +451,18 @@ function PanelCajero({ seccion }) {
                   <span>4</span>
                   <div>
                     <h3>Datos del negocio</h3>
-                    <p>Verifica que la informacion obtenida sea correcta.</p>
+                    <p>Verifica que la información obtenida sea correcta.</p>
                   </div>
                 </div>
                 <div className="form-grid">
                   <input type="text" name="nombreNegocio" placeholder="Nombre del negocio" value={form.nombreNegocio} onChange={manejarCambio} />
-                  <input type="text" name="razonSocial" placeholder="Razon social" value={form.razonSocial} onChange={manejarCambio} />
-                  <input type="text" name="direccion" placeholder="Direccion del local" value={form.direccion} onChange={manejarCambio} />
+                  <input type="text" name="razonSocial" placeholder="Razón social" value={form.razonSocial} onChange={manejarCambio} />
+                  <input type="text" name="direccion" placeholder="Dirección del local" value={form.direccion} onChange={manejarCambio} />
                   <input type="text" name="giro" placeholder="Giro comercial" value={form.giro} onChange={manejarCambio} />
                 </div>
                 <div className="sunat-info" style={{ marginTop: "12px" }}>
                   <span>Estado SUNAT: <strong>{form.estadoSunat || "Pendiente"}</strong></span>
-                  <span>Condicion: <strong>{form.condicionSunat || "Pendiente"}</strong></span>
+                  <span>Condición: <strong>{form.condicionSunat || "Pendiente"}</strong></span>
                 </div>
               </div>
             )}
@@ -473,7 +473,7 @@ function PanelCajero({ seccion }) {
                   <span>5</span>
                   <div>
                     <h3>Pago en caja</h3>
-                    <p>Cobra el derecho de tramite al ciudadano y confirma el pago.</p>
+                    <p>Cobra el derecho de trámite al ciudadano y confirma el pago.</p>
                   </div>
                 </div>
                 {!pagoConfirmado ? (
@@ -488,7 +488,7 @@ function PanelCajero({ seccion }) {
                   <div style={{ background: "#ecfdf5", border: "1px solid #86efac", borderRadius: "16px", padding: "20px", textAlign: "center" }}>
                     <p style={{ fontSize: "24px", margin: "0 0 8px" }}>&#10003;</p>
                     <p style={{ fontSize: "16px", fontWeight: 700, color: "#166534", margin: "0 0 4px" }}>Pago confirmado</p>
-                    <p style={{ fontSize: "14px", color: "#166534", margin: 0 }}>Codigo de operacion: <strong>{codigoOperacion}</strong></p>
+                    <p style={{ fontSize: "14px", color: "#166534", margin: 0 }}>Código de operación: <strong>{codigoOperacion}</strong></p>
                   </div>
                 )}
               </div>
@@ -499,7 +499,7 @@ function PanelCajero({ seccion }) {
                 <div className="block-title">
                   <span>6</span>
                   <div>
-                    <h3>Programar inspeccion</h3>
+                    <h3>Programar inspección</h3>
                     <p>Selecciona la fecha para la visita del inspector al local.</p>
                   </div>
                 </div>
@@ -512,7 +512,7 @@ function PanelCajero({ seccion }) {
                 />
                 {fechaVisita && (
                   <p style={{ color: "#0f766e", fontSize: "14px", marginTop: "8px" }}>
-                    &#128197; Inspeccion programada para: <strong>{fechaVisita}</strong>
+                    &#128197; Inspección programada para: <strong>{fechaVisita}</strong>
                   </p>
                 )}
               </div>
@@ -526,7 +526,7 @@ function PanelCajero({ seccion }) {
                 disabled={guardando}
                 style={{ padding: "16px", fontSize: "16px", marginTop: "8px" }}
               >
-                {guardando ? "Registrando solicitud..." : "Registrar y programar inspeccion"}
+                {guardando ? "Registrando solicitud..." : "Registrar y programar inspección"}
               </button>
             )}
           </div>
@@ -545,8 +545,8 @@ function PanelCajero({ seccion }) {
           {solicitudes.length === 0 ? (
             <div className="empty-state">
               <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128202;</div>
-              <h3>No hay solicitudes aun</h3>
-              <p>Las solicitudes registradas apareceran aqui.</p>
+              <h3>No hay solicitudes aún</h3>
+              <p>Las solicitudes registradas aparecerán aquí.</p>
             </div>
           ) : (
             <div className="tabla-container">
@@ -556,10 +556,10 @@ function PanelCajero({ seccion }) {
                     <th>Expediente</th>
                     <th>Negocio</th>
                     <th>RUC</th>
-                    <th>Tramite</th>
+                    <th>Trámite</th>
                     <th>Canal</th>
                     <th>Pago</th>
-                    <th>Fecha inspeccion</th>
+                    <th>Fecha inspección</th>
                     <th>Estado</th>
                   </tr>
                 </thead>

@@ -80,7 +80,7 @@ function PanelAdmin({ seccion }) {
     <div>
       <div className="admin-hero">
         <div>
-          <span className="eyebrow" style={{ background: "rgba(255,255,255,0.15)", color: "white" }}>Panel de administracion</span>
+          <span className="eyebrow" style={{ background: "rgba(255,255,255,0.15)", color: "white" }}>Panel de administración</span>
           <h1>Bienvenido, {usuario.nombre}</h1>
           <p>Control total del sistema municipal de licencias.</p>
         </div>
@@ -204,7 +204,7 @@ function PanelAdmin({ seccion }) {
           </div>
 
           <div className="admin-panel-card" style={{ marginTop: "20px" }}>
-            <h3>Accesos rapidos</h3>
+            <h3>Accesos rápidos</h3>
             <div className="admin-shortcuts">
               <div className="admin-shortcut" onClick={() => {}}>
                 <div style={{ fontSize: "28px" }}>&#128101;</div>
@@ -218,12 +218,12 @@ function PanelAdmin({ seccion }) {
               </div>
               <div className="admin-shortcut">
                 <div style={{ fontSize: "28px" }}>&#128200;</div>
-                <strong>Auditoria</strong>
+                <strong>Auditoría</strong>
                 <span>{auditCount} registros</span>
               </div>
               <div className="admin-shortcut">
                 <div style={{ fontSize: "28px" }}>&#9881;</div>
-                <strong>Configuracion</strong>
+                <strong>Configuración</strong>
                 <span>Parametros</span>
               </div>
             </div>

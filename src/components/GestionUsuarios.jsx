@@ -135,7 +135,7 @@ function GestionUsuarios({ usuarios, onRecargar }) {
     <div>
       <div className="admin-module-header">
         <div>
-          <h2>Gestion de Usuarios Internos</h2>
+          <h2>Gestión de Usuarios Internos</h2>
           <p>Crea, edita y administra cajeros, funcionarios, inspectores y administradores.</p>
         </div>
         <button type="button" className="btn-primary" onClick={() => { limpiarForm(); setMostrarForm(true); }}>
@@ -170,7 +170,7 @@ function GestionUsuarios({ usuarios, onRecargar }) {
                   <input type="text" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
                 </div>
                 <div>
-                  <label>Correo electronico *</label>
+                  <label>Correo electrónico *</label>
                   <input type="email" value={form.correo} onChange={(e) => setForm({ ...form, correo: e.target.value })} required disabled={!!editando} />
                 </div>
                 <div>
@@ -178,7 +178,7 @@ function GestionUsuarios({ usuarios, onRecargar }) {
                   <input type="text" value={form.dni} onChange={(e) => setForm({ ...form, dni: e.target.value.replace(/\D/g, "").slice(0, 8) })} maxLength="8" />
                 </div>
                 <div>
-                  <label>Telefono</label>
+                  <label>Teléfono</label>
                   <input type="text" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, "").slice(0, 9) })} maxLength="9" />
                 </div>
                 <div>

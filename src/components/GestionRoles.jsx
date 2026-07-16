@@ -15,15 +15,15 @@ const TODOS_LOS_PERMISOS = [
   { id: "consultar_negocios", modulo: "Cajero", descripcion: "Consultar negocios registrados" },
   { id: "revisar_solicitudes", modulo: "Funcionario", descripcion: "Revisar solicitudes entrantes" },
   { id: "validar_documentos", modulo: "Funcionario", descripcion: "Validar documentos adjuntos" },
-  {id: "aprobar_observar_tramites", modulo: "Funcionario", descripcion: "Aprobar o observar tramites" },
+  {id: "aprobar_observar_tramites", modulo: "Funcionario", descripcion: "Aprobar o observar trámites" },
   { id: "programar_inspecciones", modulo: "Funcionario", descripcion: "Programar inspecciones" },
-  { id: "ver_inspecciones_diarias", modulo: "Inspector", descripcion: "Ver inspecciones del dia" },
-  { id: "registrar_resultados_inspeccion", modulo: "Inspector", descripcion: "Registrar resultados de inspeccion" },
+  { id: "ver_inspecciones_diarias", modulo: "Inspector", descripcion: "Ver inspecciones del día" },
+  { id: "registrar_resultados_inspeccion", modulo: "Inspector", descripcion: "Registrar resultados de inspección" },
   { id: "gestionar_usuarios", modulo: "Admin", descripcion: "Crear/editar/eliminar usuarios" },
   { id: "gestionar_roles", modulo: "Admin", descripcion: "Administrar roles y permisos" },
-  { id: "ver_auditoria", modulo: "Admin", descripcion: "Ver historial de auditoria" },
+  { id: "ver_auditoria", modulo: "Admin", descripcion: "Ver historial de auditoría" },
   { id: "configurar_sistema", modulo: "Admin", descripcion: "Configurar parametros del sistema" },
-  { id: "ver_estadisticas", modulo: "Admin", descripcion: "Ver estadisticas globales" },
+  { id: "ver_estadisticas", modulo: "Admin", descripcion: "Ver estadísticas globales" },
   { id: "gestionar_solicitudes", modulo: "Admin", descripcion: "Gestionar todas las solicitudes" },
 ];
 
@@ -60,7 +60,7 @@ function GestionRoles({ onRecargar }) {
         usuario: usuario.nombre,
         usuarioId: usuario.uid,
         accion: "Actualizar permisos de rol",
-        detalle: `Modifico permisos del rol ${ROL_ETIQUETAS[rol]}: ${nuevosPermisos.length} permisos`,
+        detalle: `Modificó permisos del rol ${ROL_ETIQUETAS[rol]}: ${nuevosPermisos.length} permisos`,
       });
 
       alert("Permisos guardados correctamente.");
@@ -77,7 +77,7 @@ function GestionRoles({ onRecargar }) {
     <div>
       <div className="admin-module-header">
         <div>
-          <h2>Gestion de Roles y Permisos</h2>
+          <h2>Gestión de Roles y Permisos</h2>
           <p>Define que acciones puede realizar cada rol en el sistema.</p>
         </div>
       </div>

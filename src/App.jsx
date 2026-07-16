@@ -56,15 +56,16 @@ function App() {
     return (
       <LandingPage
         onLogin={() => setVista("login")}
-        onRegister={() => setVista("login")}
+        onRegister={() => setVista("registro")}
       />
     );
   }
 
-  if (vista === "login" && !usuario) {
+  if ((vista === "login" || vista === "registro") && !usuario) {
     return (
       <Login
         onVolver={() => setVista("landing")}
+        modoInicial={vista === "registro" ? "registro" : "login"}
       />
     );
   }
@@ -125,7 +126,7 @@ function App() {
       <div className="section-card" style={{ textAlign: "center", padding: "60px 28px" }}>
         <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#fee2e2", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "32px" }}>&#9888;</div>
         <h2 style={{ color: "#1f3b57", marginBottom: "8px" }}>Rol no reconocido</h2>
-        <p style={{ color: "#64748b", maxWidth: "400px", margin: "0 auto" }}>Tu usuario no tiene un rol valido asignado. Contacta al administrador.</p>
+        <p style={{ color: "#64748b", maxWidth: "400px", margin: "0 auto" }}>Tu usuario no tiene un rol válido asignado. Contacta al administrador.</p>
       </div>
     );
   };
@@ -176,7 +177,7 @@ function App() {
               </div>
             </div>
             <button type="button" onClick={salir} style={{ background: "rgba(255,255,255,0.12)", color: "white", border: "1px solid rgba(255,255,255,0.25)", backdropFilter: "blur(8px)", fontSize: "13px", fontWeight: 600 }}>
-              Cerrar sesion
+              Cerrar sesión
             </button>
           </div>
         </header>

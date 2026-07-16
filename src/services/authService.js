@@ -46,7 +46,7 @@ export const iniciarSesion = async (correo, password) => {
   const usuarioSnap = await getDoc(usuarioRef);
 
   if (!usuarioSnap.exists()) {
-    throw new Error("No existe informacion del usuario en Firestore");
+    throw new Error("No existe información del usuario en Firestore");
   }
 
   const data = usuarioSnap.data();

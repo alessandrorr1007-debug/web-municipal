@@ -111,15 +111,15 @@ function PanelInspector({ seccion }) {
     const nuevas = Array.from(archivos || []);
     if (nuevas.length === 0) return [];
     if (actuales.length + nuevas.length > 2) {
-      alert("Solo puedes subir como maximo 2 fotos de evidencia.");
+      alert("Solo puedes subir como máximo 2 fotos de evidencia.");
       return [];
     }
     if (nuevas.find((f) => !f.type.startsWith("image/"))) {
-      alert("Solo se permiten imagenes como evidencia.");
+      alert("Solo se permiten imágenes como evidencia.");
       return [];
     }
     if (nuevas.find((f) => f.size > 500 * 1024)) {
-      alert("Cada imagen debe pesar como maximo 500 KB.");
+      alert("Cada imagen debe pesar como máximo 500 KB.");
       return [];
     }
     return nuevas;
@@ -133,7 +133,7 @@ function PanelInspector({ seccion }) {
       const actuales = formularios[id]?.evidencias || [];
       actualizarCampo(id, "evidencias", [...actuales, ...convertidas]);
     } catch {
-      alert("No se pudieron cargar las imagenes.");
+      alert("No se pudieron cargar las imágenes.");
     }
   };
 
@@ -150,11 +150,11 @@ function PanelInspector({ seccion }) {
 
     if (enviandoId) return;
     if (!observacion) {
-      alert("La observacion del inspector es obligatoria.");
+      alert("La observación del inspector es obligatoria.");
       return;
     }
     if (!recomendacion) {
-      alert("Debes elegir una recomendacion: Aprobar o Rechazar.");
+      alert("Debes elegir una recomendación: Aprobar o Rechazar.");
       return;
     }
     if (evidencias.length === 0) {
@@ -208,7 +208,7 @@ function PanelInspector({ seccion }) {
           {
             fecha: formatearFechaHora(),
             titulo: "Inspeccion reobservada",
-            mensaje: `El inspector reobservo tu local. Debes corregir las observaciones. Nueva inspeccion programada para el ${nuevaFecha}.`,
+            mensaje: `El inspector reobservó tu local. Debes corregir las observaciones. Nueva inspección programada para el ${nuevaFecha}.`,
             leida: false,
           },
         ],
@@ -241,7 +241,7 @@ function PanelInspector({ seccion }) {
           {
             fecha: formatearFechaHora(),
             titulo: "Inspeccion completada",
-            mensaje: `El inspector realizo la inspeccion y recomienda ${recomendacion.toLowerCase()}.`,
+            mensaje: `El inspector realizó la inspección y recomienda ${recomendacion.toLowerCase()}.`,
             leida: false,
           },
         ],
@@ -292,7 +292,7 @@ function PanelInspector({ seccion }) {
           <span className="eyebrow">Area de inspeccion municipal</span>
           <h1>Panel Inspector</h1>
           <p>
-            Revisa las inspecciones programadas para HOY, sube evidencias y envia tu recomendacion al funcionario.
+            Revisa las inspecciones programadas para HOY, sube evidencias y envía tu recomendación al funcionario.
           </p>
         </div>
 
@@ -328,7 +328,7 @@ function PanelInspector({ seccion }) {
               Tienes {hoy.length} inspeccion{hoy.length > 1 ? "es" : ""} programada{hoy.length > 1 ? "s" : ""} para hoy
             </strong>
             <p style={{ margin: "2px 0 0", color: "#a16207", fontSize: "13px" }}>
-              Revisa cada expediente, sube evidencias y envia tu recomendacion.
+              Revisa cada expediente, sube evidencias y envía tu recomendación.
             </p>
           </div>
         </div>
@@ -365,7 +365,7 @@ function PanelInspector({ seccion }) {
         <section className="section-card">
           <div className="section-header">
             <div>
-              <h2>Inspecciones del dia</h2>
+              <h2>Inspecciones del día</h2>
               <p>Solo se muestran las inspecciones programadas para hoy ({obtenerFechaHoy()}).</p>
             </div>
           </div>
@@ -405,7 +405,7 @@ function PanelInspector({ seccion }) {
 
                     <div className="inspection-details">
                       <p><strong>RUC:</strong> {solicitud.ruc}</p>
-                      <p><strong>Direccion:</strong> {solicitud.direccion}</p>
+                      <p><strong>Dirección:</strong> {solicitud.direccion}</p>
                       <p><strong>Giro:</strong> {solicitud.giro}</p>
                       <p><strong>Tipo:</strong> {solicitud.tipoTramite || "Nueva licencia"}</p>
                       <p><strong>Programado por:</strong> {solicitud.nombreProgramador || "Sistema"}</p>
@@ -447,8 +447,8 @@ function PanelInspector({ seccion }) {
                         onDragOver={(e) => e.preventDefault()}
                       >
                         <div style={{ fontSize: "28px", marginBottom: "6px" }}>&#128444;</div>
-                        <p>Evidencias fotograficas</p>
-                        <span>Maximo 2 fotos de 500 KB. Arrastra o selecciona.</span>
+                        <p>Evidencias fotográficas</p>
+                        <span>Máximo 2 fotos de 500 KB. Arrastra o selecciona.</span>
                         <label className="file-label">
                           Elegir fotos
                           <input
@@ -488,7 +488,7 @@ function PanelInspector({ seccion }) {
                           onChange={(e) => actualizarCampo(solicitud.id, "recomendacion", e.target.value)}
                           disabled={estaEnviando}
                         >
-                          <option value="">Seleccionar recomendacion</option>
+                           <option value="">Seleccionar recomendación</option>
                           <option value="Aprobar">Aprobar</option>
                           <option value="Rechazar">Rechazar{esReobservacion ? " (DEFINITIVO)" : ""}</option>
                         </select>
@@ -544,8 +544,8 @@ function PanelInspector({ seccion }) {
           {historial.length === 0 ? (
             <div className="empty-state">
               <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128203;</div>
-              <h3>Aun no hay inspecciones realizadas</h3>
-              <p>Cuando envies una recomendacion, aparecera aqui.</p>
+              <h3>Aún no hay inspecciones realizadas</h3>
+              <p>Cuando envíes una recomendación, aparecerá aquí.</p>
             </div>
           ) : (
             <div className="tabla-container">
@@ -568,7 +568,7 @@ function PanelInspector({ seccion }) {
                       <td><strong>{s.id}</strong><small>RUC: {s.ruc}</small></td>
                       <td><strong>{s.nombreNegocio}</strong><small>{s.direccion}</small></td>
                       <td>{s.tipoTramite || "Nueva licencia"}</td>
-                      <td><span className={`badge ${badgeClase(s.recomendacionInspector)}`}>{s.recomendacionInspector || "Sin recomendacion"}</span></td>
+                      <td><span className={`badge ${badgeClase(s.recomendacionInspector)}`}>{s.recomendacionInspector || "Sin recomendación"}</span></td>
                       <td>{s.observacionInspector || "Sin observacion"}</td>
                       <td>
                         {s.evidenciasInspector?.length > 0 ? (

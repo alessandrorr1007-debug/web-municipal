@@ -570,9 +570,9 @@ function PanelNegocio({ seccion }) {
               <p>Registra tu solicitud, realiza el pago y consulta el avance de tu expediente.</p>
             </div>
             <div className="hero-card">
-              <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Monto del tramite</span>
+              <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Monto del trámite</span>
               <strong style={{ fontSize: "28px" }}>S/{MONTO_TRAMITE.toFixed(2)}</strong>
-              <small>Derecho de tramite municipal</small>
+              <small>Derecho de trámite municipal</small>
             </div>
           </div>
 
@@ -590,7 +590,7 @@ function PanelNegocio({ seccion }) {
             <div style={{ background: "#fef3c7", padding: "20px", borderRadius: "14px", border: "1px solid #fde68a" }}>
               <div style={{ fontSize: "24px", marginBottom: "8px" }}>&#128197;</div>
               <strong style={{ fontSize: "24px", color: "#92400e" }}>{misSolicitudes.filter(s => s.estado === "En revision").length}</strong>
-              <p style={{ margin: "4px 0 0", color: "#92400e", fontSize: "13px" }}>En revision</p>
+              <p style={{ margin: "4px 0 0", color: "#92400e", fontSize: "13px" }}>En revisión</p>
             </div>
             <div style={{ background: "#f0fdf4", padding: "20px", borderRadius: "14px", border: "1px solid #bbf7d0" }}>
               <div style={{ fontSize: "24px", marginBottom: "8px" }}>&#9989;</div>
@@ -601,7 +601,7 @@ function PanelNegocio({ seccion }) {
 
           {misSolicitudes.length > 0 && (
             <div style={{ marginTop: "24px" }}>
-              <h3 style={{ color: "#0f172a", marginBottom: "12px" }}>Ultimas solicitudes</h3>
+              <h3 style={{ color: "#0f172a", marginBottom: "12px" }}>Últimas solicitudes</h3>
               {misSolicitudes.slice(0, 3).map((s) => (
                 <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
                   <div>
@@ -629,8 +629,8 @@ function PanelNegocio({ seccion }) {
           {misSolicitudes.length === 0 ? (
             <div className="empty-state empty-state-modern">
               <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "linear-gradient(135deg, #eff6ff, #dbeafe)", display: "grid", placeItems: "center", margin: "0 auto 16px", fontSize: "36px" }}>&#128196;</div>
-              <h3>Aun no has enviado solicitudes</h3>
-              <p>Cuando registres una solicitud de licencia, aparecera aqui.</p>
+              <h3>Aún no has enviado solicitudes</h3>
+              <p>Cuando registres una solicitud de licencia, aparecerá aquí.</p>
             </div>
           ) : (
             <div className="solicitudes-grid">
@@ -646,10 +646,10 @@ function PanelNegocio({ seccion }) {
                   <div className="solicitud-card-body">
                     <p><strong>RUC:</strong> {s.ruc}</p>
                     <p><strong>Negocio:</strong> {s.nombreNegocio}</p>
-                    <p><strong>Tramite:</strong> {s.tipoTramite || "Nueva licencia"}</p>
+                    <p><strong>Trámite:</strong> {s.tipoTramite || "Nueva licencia"}</p>
                     <p><strong>Fecha:</strong> {s.fecha}</p>
                     <p><strong>Pago:</strong> {s.estadoPago}</p>
-                    <p><strong>Inspeccion:</strong> {s.inspeccion || "Sin inspeccion"}</p>
+                    <p><strong>Inspección:</strong> {s.inspeccion || "Sin inspección"}</p>
                   </div>
 
                   <Timeline solicitud={s} />
@@ -665,7 +665,7 @@ function PanelNegocio({ seccion }) {
                   {s.estado === "Licencia rechazada" && (
                     <div className="motivo-rechazo">
                       <strong>Motivo:</strong>
-                      <p>{s.observacionFuncionario || "No se registro motivo del rechazo."}</p>
+                      <p>{s.observacionFuncionario || "No se registró motivo del rechazo."}</p>
                     </div>
                   )}
 
@@ -684,7 +684,7 @@ function PanelNegocio({ seccion }) {
                         <button type="button" className="btn-secundario" onClick={() => renovarLicencia(s)}>Renovar</button>
                       </>
                     ) : (
-                      <span className="text-muted">Licencia no disponible aun</span>
+                      <span className="text-muted">Licencia no disponible aún</span>
                     )}
                   </div>
                 </article>
@@ -719,7 +719,7 @@ function PanelNegocio({ seccion }) {
                 <div className="empty-state">
                   <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128276;</div>
                   <h3>No tienes notificaciones</h3>
-                  <p>Cuando haya novedades en tus solicitudes, apareceran aqui.</p>
+                  <p>Cuando haya novedades en tus solicitudes, aparecerán aquí.</p>
                 </div>
               );
             }
@@ -757,15 +757,15 @@ function PanelNegocio({ seccion }) {
 
               <div className="formulario formulario-modern">
                 <div className="form-block">
-                  <div className="block-title"><span>1</span><div><h3>Tipo de tramite</h3><p>Selecciona si registraras una licencia nueva o una renovacion.</p></div></div>
+                  <div className="block-title"><span>1</span><div><h3>Tipo de trámite</h3><p>Selecciona si registraras una licencia nueva o una renovación.</p></div></div>
                   <select name="tipoTramite" value={form.tipoTramite} onChange={manejarCambio}>
                     <option value="Nueva licencia">Nueva licencia</option>
-                    <option value="Renovacion anual">Renovacion anual</option>
+                    <option value="Renovación anual">Renovación anual</option>
                   </select>
                 </div>
 
                 <div className="form-block">
-                  <div className="block-title"><span>2</span><div><h3>Validar RUC</h3><p>Busca el RUC para completar automaticamente los datos SUNAT.</p></div></div>
+                  <div className="block-title"><span>2</span><div><h3>Validar RUC</h3><p>Busca el RUC para completar automáticamente los datos SUNAT.</p></div></div>
                   <div className="ruc-row ruc-row-modern">
                     <input type="text" name="ruc" placeholder="Ingrese RUC de 11 digitos" value={form.ruc} onChange={manejarCambio} maxLength="11" />
                     <button type="button" onClick={buscarRuc} disabled={buscando}>{buscando ? "Buscando..." : "Buscar RUC"}</button>
@@ -775,25 +775,25 @@ function PanelNegocio({ seccion }) {
                 </div>
 
                 <div className="form-block">
-                  <div className="block-title"><span>3</span><div><h3>Datos del negocio</h3><p>Verifica que la informacion obtenida sea correcta.</p></div></div>
+                  <div className="block-title"><span>3</span><div><h3>Datos del negocio</h3><p>Verifica que la información obtenida sea correcta.</p></div></div>
                   <div className="form-grid">
                     <input type="text" name="nombreNegocio" placeholder="Nombre del negocio" value={form.nombreNegocio} onChange={manejarCambio} />
-                    <input type="text" name="razonSocial" placeholder="Razon social" value={form.razonSocial} onChange={manejarCambio} />
-                    <input type="text" name="direccion" placeholder="Direccion del local" value={form.direccion} onChange={manejarCambio} />
+                    <input type="text" name="razonSocial" placeholder="Razón social" value={form.razonSocial} onChange={manejarCambio} />
+                    <input type="text" name="direccion" placeholder="Dirección del local" value={form.direccion} onChange={manejarCambio} />
                     <input type="text" name="giro" placeholder="Giro comercial" value={form.giro} onChange={manejarCambio} />
                   </div>
                   <div className="sunat-info sunat-info-modern">
                     <span>Estado SUNAT: <strong>{form.estadoSunat || "Pendiente"}</strong></span>
-                    <span>Condicion: <strong>{form.condicionSunat || "Pendiente"}</strong></span>
+                    <span>Condición: <strong>{form.condicionSunat || "Pendiente"}</strong></span>
                   </div>
                 </div>
 
                 <div className="form-block">
-                  <div className="block-title"><span>4</span><div><h3>Documentos PDF</h3><p>Sube los archivos del tramite. Puedes arrastrarlos aqui.</p></div></div>
+                  <div className="block-title"><span>4</span><div><h3>Documentos PDF</h3><p>Sube los archivos del trámite. Puedes arrastrarlos aquí.</p></div></div>
                   <div className="drop-zone drop-zone-modern" onDrop={manejarDrop} onDragOver={(e) => e.preventDefault()}>
                     <div className="empty-icon">&#128206;</div>
-                    <p>Subir documentos del tramite en PDF</p>
-                    <span>Maximo 5 PDFs. Arrastra tus archivos o seleccionalos.</span>
+                    <p>Subir documentos del trámite en PDF</p>
+                    <span>Máximo 5 PDFs. Arrastra tus archivos o seleccionalos.</span>
                     <label className="file-label">Elegir PDFs<input type="file" accept=".pdf" multiple onChange={manejarArchivos} hidden /></label>
                     {archivos.length > 0 && (
                       <div className="archivo-box">
@@ -817,21 +817,21 @@ function PanelNegocio({ seccion }) {
             <section className="section-card section-card-modern">
               <div className="section-header">
                 <div>
-                  <h2>Pago del tramite</h2>
+                  <h2>Pago del trámite</h2>
                   <p>Elige una opcion de pago para continuar con tu solicitud municipal.</p>
                 </div>
               </div>
 
               <div className="payment-layout">
                 <aside className="resumen-pago resumen-pago-modern">
-                  <h3>Resumen del tramite</h3>
-                  <p><strong>Tipo de tramite:</strong> {form.tipoTramite}</p>
+                  <h3>Resumen del trámite</h3>
+                  <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
                   <p><strong>RUC:</strong> {form.ruc}</p>
-                  <p><strong>Razon social:</strong> {form.razonSocial}</p>
+                  <p><strong>Razón social:</strong> {form.razonSocial}</p>
                   <p><strong>Documentos PDF:</strong> {archivos.length}</p>
                   <div className="monto-box"><span>Total a pagar</span><strong>S/{MONTO_TRAMITE.toFixed(2)}</strong></div>
                   <span className={`badge ${estadoPago === "Confirmado" ? "ok" : "warning"}`}>{estadoPago}</span>
-                  {detallePago?.id && <p className="text-muted"><strong>Operacion:</strong> {detallePago.id}</p>}
+                  {detallePago?.id && <p className="text-muted"><strong>Operación:</strong> {detallePago.id}</p>}
                 </aside>
 
                 <div className="detalle-pago detalle-pago-modern">
@@ -860,9 +860,9 @@ function PanelNegocio({ seccion }) {
                   ) : (
                     <div className="voucher-box success-voucher">
                       <h3>Pago registrado</h3>
-                      <p>El comprobante quedo asociado a esta solicitud.</p>
-                      {detallePago?.id && <p><strong>Codigo de operacion:</strong> {detallePago.id}</p>}
-                      <p><strong>Metodo:</strong> {metodoPago}</p>
+                      <p>El comprobante quedó asociado a esta solicitud.</p>
+                      {detallePago?.id && <p><strong>Código de operación:</strong> {detallePago.id}</p>}
+                      <p><strong>Método:</strong> {metodoPago}</p>
                     </div>
                   )}
                 </div>
@@ -881,9 +881,9 @@ function PanelNegocio({ seccion }) {
               <h2 style={{ fontSize: "28px", marginBottom: "8px" }}>Solicitud registrada</h2>
               <p style={{ color: "#64748b", fontSize: "16px", maxWidth: "500px", margin: "0 auto 24px" }}>Tu solicitud fue enviada correctamente y los PDFs quedaron guardados.</p>
               <div className="resumen-pago resumen-pago-modern">
-                <p><strong>Numero de expediente:</strong> {expediente}</p>
-                <p><strong>Tipo de tramite:</strong> {form.tipoTramite}</p>
-                <p><strong>Estado:</strong> En revision municipal</p>
+                <p><strong>Número de expediente:</strong> {expediente}</p>
+                <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
+                <p><strong>Estado:</strong> En revisión municipal</p>
                 <p><strong>Pago:</strong> {estadoPago}</p>
                 <p><strong>Monto:</strong> S/{MONTO_TRAMITE.toFixed(2)}</p>
               </div>
@@ -898,7 +898,7 @@ function PanelNegocio({ seccion }) {
           <div className="section-header">
             <div>
               <h2>Mi cuenta</h2>
-              <p>Informacion de tu perfil registrado.</p>
+              <p>Información de tu perfil registrado.</p>
             </div>
           </div>
           <div style={{ display: "grid", gap: "12px", maxWidth: "500px" }}>
@@ -915,7 +915,7 @@ function PanelNegocio({ seccion }) {
               <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.dni || "No registrado"}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <span style={{ color: "#64748b", fontSize: "14px" }}>Telefono</span>
+              <span style={{ color: "#64748b", fontSize: "14px" }}>Teléfono</span>
               <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.telefono || "No registrado"}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>

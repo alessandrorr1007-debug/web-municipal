@@ -2,10 +2,10 @@ import { useState } from "react";
 import { iniciarSesion, registrarUsuario, enviarRecuperacion } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 
-function Login({ onVolver }) {
+function Login({ onVolver, modoInicial }) {
   const { setUsuario } = useAuth();
 
-  const [modo, setModo] = useState("login");
+  const [modo, setModo] = useState(modoInicial || "login");
   const [nombre, setNombre] = useState("");
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
@@ -36,11 +36,11 @@ function Login({ onVolver }) {
       if (msg.includes("user-not-found") || msg.includes("invalid-credential")) {
         setError("No encontramos una cuenta con ese correo electronico.");
       } else if (msg.includes("wrong-password") || msg.includes("invalid-credential")) {
-        setError("La contrasena ingresada es incorrecta. Intenta de nuevo.");
+        setError("La contraseña ingresada es incorrecta. Intenta de nuevo.");
       } else if (msg.includes("too-many-requests")) {
         setError("Demasiados intentos. Espera unos minutos e intentalo de nuevo.");
       } else {
-        setError("No pudimos iniciar sesion. Verifica tus datos e intentalo de nuevo.");
+        setError("No pudimos iniciar sesión. Verifica tus datos e intenta de nuevo.");
       }
     } finally {
       setCargando(false);
@@ -52,9 +52,9 @@ function Login({ onVolver }) {
     setError("");
 
     if (nombre.trim().length < 3) { setError("El nombre debe tener al menos 3 caracteres."); return; }
-    if (!dni || dni.length < 8) { setError("Ingresa un DNI valido de 8 digitos."); return; }
+    if (!dni || dni.length < 8) { setError("Ingresa un DNI válido de 8 dígitos."); return; }
     if (!ruc || ruc.length !== 11) { setError("El RUC debe tener 11 digitos."); return; }
-    if (password.length < 6) { setError("La contrasena debe tener al menos 6 caracteres."); return; }
+    if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return; }
 
     setCargando(true);
     try {
@@ -68,7 +68,7 @@ function Login({ onVolver }) {
     } catch (err) {
       const msg = err?.message || "";
       if (msg.includes("email-already-in-use")) setError("Ya existe una cuenta con ese correo electronico.");
-      else if (msg.includes("weak-password")) setError("La contrasena es muy debil. Usa al menos 6 caracteres.");
+      else if (msg.includes("weak-password")) setError("La contraseña es muy débil. Usa al menos 6 caracteres.");
       else setError("No se pudo crear la cuenta. Verifica los datos e intentalo de nuevo.");
     } finally {
       setCargando(false);
@@ -92,12 +92,12 @@ function Login({ onVolver }) {
   const inputLabel = { display: "block", fontSize: "13px", fontWeight: 600, color: "#334155", marginBottom: "6px" };
 
   const pasos = [
-    { numero: "1", titulo: "Crea tu cuenta", descripcion: "Registrate como negocio para acceder al sistema municipal." },
+    { numero: "1", titulo: "Crea tu cuenta", descripcion: "Regístrate como negocio para acceder al sistema municipal." },
     { numero: "2", titulo: "Completa tu solicitud", descripcion: "Ingresa tu RUC, datos del local y adjunta tus documentos PDF." },
-    { numero: "3", titulo: "Realiza el pago", descripcion: "Paga el derecho de tramite y registra tu comprobante digital." },
-    { numero: "4", titulo: "Espera la inspeccion", descripcion: "Un inspector revisara tu local, observaciones y evidencias." },
-    { numero: "5", titulo: "Recibe tu resultado", descripcion: "El funcionario evaluara el informe y emitira la decision final." },
-    { numero: "6", titulo: "Descarga tu licencia", descripcion: "Si es aprobada, podras descargar tu licencia municipal." },
+    { numero: "3", titulo: "Realiza el pago", descripcion: "Paga el derecho de trámite y registra tu comprobante digital." },
+    { numero: "4", titulo: "Inspección", descripcion: "Un inspector revisará tu local, observaciones y evidencias." },
+    { numero: "5", titulo: "Recibe tu resultado", descripcion: "El funcionario evaluará el informe y emitirá la decisión final." },
+    { numero: "6", titulo: "Descarga tu licencia", descripcion: "Si es aprobada, podrás descargar tu licencia municipal." },
   ];
 
   return (
@@ -139,15 +139,15 @@ function Login({ onVolver }) {
           {mostrarRecuperar ? (
             <div>
               <button type="button" onClick={() => { setMostrarRecuperar(false); setError(""); setRecuperacionEnviada(false); }} style={{ background: "none", color: "#64748b", border: "none", cursor: "pointer", fontSize: "14px", marginBottom: "16px", padding: 0 }}>
-                &#8592; Volver al inicio de sesion
+                &#8592; Volver al inicio de sesión
               </button>
-              <h2 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "20px" }}>Recuperar contrasena</h2>
+              <h2 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "20px" }}>Recuperar contraseña</h2>
               <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "14px" }}>
-                Ingresa tu correo electronico y te enviaremos las instrucciones para restablecer tu contrasena.
+                Ingresa tu correo electrónico y te enviaremos las instrucciones para restablecer tu contraseña.
               </p>
               {!recuperacionEnviada ? (
                 <form onSubmit={manejarRecuperar}>
-                  <label style={inputLabel}>Correo electronico</label>
+                  <label style={inputLabel}>Correo electrónico</label>
                   <input type="email" placeholder="tu@correo.com" value={correoRecuperacion} onChange={(e) => setCorreoRecuperacion(e.target.value)} required />
                   {error && <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", marginTop: "12px" }}>&#9888; {error}</div>}
                   <button type="submit" disabled={cargando} className="primary-btn" style={{ marginTop: "16px", padding: "14px" }}>
@@ -168,17 +168,17 @@ function Login({ onVolver }) {
             <>
               <div style={{ textAlign: "center", marginBottom: "24px" }}>
                 <h2 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "22px" }}>
-                  {modo === "login" ? "Iniciar sesion" : "Crear cuenta"}
+                  {modo === "login" ? "Iniciar sesión" : "Crear cuenta"}
                 </h2>
                 <p style={{ margin: 0, color: "#64748b", fontSize: "14px" }}>
                   {modo === "login"
                     ? "Ingresa tus credenciales para acceder al sistema."
-                    : "Registrate para comenzar a solicitar licencias."}
+                    : "Regístrate para comenzar a solicitar licencias."}
                 </p>
               </div>
 
               <div className="tabs">
-                <button type="button" className={modo === "login" ? "active" : ""} onClick={() => { setModo("login"); setError(""); }}>Iniciar sesion</button>
+                <button type="button" className={modo === "login" ? "active" : ""} onClick={() => { setModo("login"); setError(""); }}>Iniciar sesión</button>
                 <button type="button" className={modo === "registro" ? "active" : ""} onClick={() => { setModo("registro"); setError(""); }}>Crear cuenta</button>
               </div>
 
@@ -205,7 +205,7 @@ function Login({ onVolver }) {
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                       <div>
-                        <label style={inputLabel}>Razon social</label>
+                        <label style={inputLabel}>Razón social</label>
                         <input type="text" placeholder="Razon social" value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} />
                       </div>
                       <div>
@@ -214,7 +214,7 @@ function Login({ onVolver }) {
                       </div>
                     </div>
                     <div>
-                      <label style={inputLabel}>Direccion del negocio</label>
+                      <label style={inputLabel}>Dirección del negocio</label>
                       <input type="text" placeholder="Av. Principal 123" value={direccionNeg} onChange={(e) => setDireccionNeg(e.target.value)} />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
@@ -247,12 +247,12 @@ function Login({ onVolver }) {
                 )}
 
                 <div>
-                  <label style={inputLabel}>Correo electronico</label>
+                  <label style={inputLabel}>Correo electrónico</label>
                   <input type="email" placeholder="tu@correo.com" value={correo} onChange={(e) => setCorreo(e.target.value)} required />
                 </div>
 
                 <div>
-                  <label style={inputLabel}>Contrasena</label>
+                  <label style={inputLabel}>Contraseña</label>
                   <input type="password" placeholder="Minimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
                 </div>
 
@@ -260,10 +260,10 @@ function Login({ onVolver }) {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#64748b", cursor: "pointer" }}>
                       <input type="checkbox" style={{ width: "16px", height: "16px", accentColor: "#1f3b57" }} />
-                      Recordar sesion
+                      Recordar sesión
                     </label>
                     <button type="button" onClick={() => { setMostrarRecuperar(true); setCorreoRecuperacion(correo); setError(""); }} style={{ background: "none", border: "none", color: "#2563eb", fontSize: "13px", cursor: "pointer", fontWeight: 600 }}>
-                      Olvidaste tu contrasena?
+                      Olvidaste tu contraseña?
                     </button>
                   </div>
                 )}
@@ -286,7 +286,7 @@ function Login({ onVolver }) {
               </form>
 
               <div style={{ marginTop: "24px", textAlign: "center", fontSize: "12px", color: "#94a3b8" }}>
-                <p style={{ margin: "0 0 4px" }}>Al continuar, aceptas los terminos y condiciones del sistema municipal.</p>
+                <p style={{ margin: "0 0 4px" }}>Al continuar, aceptas los términos y condiciones del sistema municipal.</p>
                 <p style={{ margin: 0 }}>Protegido por Firebase Authentication</p>
               </div>
             </>
