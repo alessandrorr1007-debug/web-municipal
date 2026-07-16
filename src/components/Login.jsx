@@ -9,6 +9,8 @@ import {
 } from "../services/authService";
 import { consultarDni } from "../services/dniService";
 import { useAuth } from "../context/AuthContext";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
 
 function Login({ onVolver, modoInicial }) {
   const { setUsuario } = useAuth();
@@ -91,22 +93,45 @@ function Login({ onVolver, modoInicial }) {
 
     setCargando(true);
     try {
-      const emailExiste = await verificarCorreoExistente(correo);
-      if (emailExiste) {
-        setError("Ya existe una cuenta con ese correo electrónico.");
+      // 1. Verificar DNI único en Firestore
+      const qDni = query(collection(db, "usuarios"), where("dni", "==", dni.trim()));
+      const snapDni = await getDocs(qDni);
+      if (!snapDni.empty) {
+        setError("DNI ya registrado. Este documento ya pertenece a una cuenta existente.");
         setCargando(false);
         return;
       }
 
-      await guardarCodigoVerificacion(correo);
-      setCorreoVerificar(correo);
+      // 2. Verificar Correo único en Firestore
+      const qCorreo = query(collection(db, "usuarios"), where("correo", "==", correo.trim()));
+      const snapCorreo = await getDocs(qCorreo);
+      if (!snapCorreo.empty) {
+        setError("Este correo electrónico ya está registrado.");
+        setCargando(false);
+        return;
+      }
+
+      // 3. Verificar Teléfono único en Firestore
+      const qTelefono = query(collection(db, "usuarios"), where("telefono", "==", telefono.trim()));
+      const snapTelefono = await getDocs(qTelefono);
+      if (!snapTelefono.empty) {
+        setError("Este número de teléfono ya está registrado.");
+        setCargando(false);
+        return;
+      }
+
+      // 4. Guardar código de verificación y enviar por correo con nombre de usuario
+      const nombreCompleto = nombre || `${nombres} ${apellidoPaterno} ${apellidoMaterno}`.trim() || "Ciudadano";
+      await guardarCodigoVerificacion(correo.trim(), nombreCompleto);
+      
+      setCorreoVerificar(correo.trim());
       setPasoRegistro("verificar");
       setTiempoRestante(300);
       setCodigoIngresado("");
       setErrorCodigo("");
     } catch (err) {
       console.error("[DEBUG] Error en registro:", err.message);
-      setError(`No se pudo enviar el código: ${err.message}`);
+      setError(err.message.includes("registrado") ? err.message : `No se pudo enviar el código: ${err.message}`);
     } finally {
       setCargando(false);
     }
@@ -162,7 +187,8 @@ function Login({ onVolver, modoInicial }) {
     setReenviando(true);
     setErrorCodigo("");
     try {
-      await guardarCodigoVerificacion(correoVerificar);
+      const nombreCompleto = nombre || `${nombres} ${apellidoPaterno} ${apellidoMaterno}`.trim() || "Ciudadano";
+      await guardarCodigoVerificacion(correoVerificar, nombreCompleto);
       setTiempoRestante(300);
       setCodigoIngresado("");
     } catch {
@@ -177,14 +203,14 @@ function Login({ onVolver, modoInicial }) {
     setError("");
     setCargando(true);
     try {
-      await enviarRecuperacion(correoRecuperacion);
+      await enviarRecuperacion(correoRecuperacion.trim());
       setPasoRecuperacion("verificar");
       setTiempoRestante(300);
       setCodigoRecuperacion("");
       setErrorRecuperacion("");
     } catch (err) {
       console.error("[DEBUG] Error recuperación:", err.message);
-      setError(`No se pudo enviar el código: ${err.message}`);
+      setError(err.message.includes("no pertenece") ? err.message : `No se pudo enviar el código: ${err.message}`);
     } finally {
       setCargando(false);
     }
@@ -237,7 +263,21 @@ function Login({ onVolver, modoInicial }) {
 
     setCargando(true);
     try {
+      // 1. Consultar RENIEC
       const data = await consultarDni(dni);
+
+      // 2. Verificar si el DNI ya está registrado en Firebase/Firestore
+      const qDni = query(collection(db, "usuarios"), where("dni", "==", dni.trim()));
+      const snapDni = await getDocs(qDni);
+      if (!snapDni.empty) {
+        setError("DNI ya registrado. Este documento ya pertenece a una cuenta existente.");
+        setNombres("");
+        setApellidoPaterno("");
+        setApellidoMaterno("");
+        setNombre("");
+        setDniValidado(false);
+        return;
+      }
 
       setNombres(data.nombres || "");
       setApellidoPaterno(data.apellido_paterno || "");

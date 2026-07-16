@@ -82,7 +82,13 @@ export const verificarCorreoExistente = async (correo) => {
   }
 };
 
-export const guardarCodigoVerificacion = async (correo) => {
+export const guardarCodigoVerificacion = async (correo, nombre = "Usuario") => {
+  const qUser = query(collection(db, "usuarios"), where("correo", "==", correo));
+  const snapUser = await getDocs(qUser);
+  if (!snapUser.empty) {
+    throw new Error("Este correo electrónico ya está registrado.");
+  }
+
   const codigo = Math.floor(100000 + Math.random() * 900000).toString();
 
   console.log("[DEBUG] Generado código:", codigo, "para:", correo);
@@ -109,7 +115,7 @@ export const guardarCodigoVerificacion = async (correo) => {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ correo, codigo }),
+    body: JSON.stringify({ correo, codigo, nombre }),
   });
 
   console.log("[DEBUG] Status HTTP:", response.status);
@@ -150,6 +156,14 @@ export const verificarCodigoVerificacion = async (correo, codigoIngresado) => {
 };
 
 export const enviarRecuperacion = async (correo) => {
+  const qUser = query(collection(db, "usuarios"), where("correo", "==", correo));
+  const snapUser = await getDocs(qUser);
+  if (snapUser.empty) {
+    throw new Error("El correo electrónico ingresado no pertenece a ninguna cuenta registrada.");
+  }
+  const userDoc = snapUser.docs[0].data();
+  const nombre = userDoc.nombre || "Usuario";
+
   const codigo = Math.floor(100000 + Math.random() * 900000).toString();
 
   console.log("[DEBUG] Recuperación - Código generado:", codigo, "para:", correo);
@@ -176,7 +190,7 @@ export const enviarRecuperacion = async (correo) => {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ correo, codigo }),
+    body: JSON.stringify({ correo, codigo, nombre }),
   });
 
   console.log("[DEBUG] Status HTTP:", response.status);

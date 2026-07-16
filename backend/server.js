@@ -376,14 +376,15 @@ app.post("/api/enviar-codigo", async (req, res) => {
   console.log("Body recibido:", JSON.stringify(req.body));
 
   try {
-    const { correo, codigo } = req.body;
+    const { correo, codigo, nombre } = req.body;
 
     if (!correo || !codigo) {
       console.error("Faltan parámetros:", { correo, codigo });
       return res.status(400).json({ error: "Faltan correo o código" });
     }
 
-    console.log("1. Parámetros OK - Email:", correo, "- Código:", codigo);
+    const nombreUsuario = nombre || "Ciudadano";
+    console.log("1. Parámetros OK - Email:", correo, "- Código:", codigo, "- Nombre:", nombreUsuario);
 
     if (!transporter) {
       console.error("2. SMTP no configurado - transporter es null");
@@ -393,28 +394,23 @@ app.post("/api/enviar-codigo", async (req, res) => {
     console.log("2. Transporter SMTP disponible");
 
     const mailOptions = {
-      from: `"Municipalidad de Trujillo" <${SMTP_EMAIL}>`,
+      from: `"Web Municipal" <${SMTP_EMAIL}>`,
       to: correo,
-      subject: "Código de verificación - Sistema de Licencias",
+      subject: "Código de verificación para crear tu cuenta",
+      text: `Hola ${nombreUsuario},\n\nTu código de verificación es:\n\n${codigo}\n\nEste código tiene una duración limitada.\n\nNo compartas este código con nadie.\n\nSi no solicitaste este código, puedes ignorar este mensaje.\n\nWeb Municipal.`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #f8fafc; border-radius: 16px;">
-          <div style="text-align: center; margin-bottom: 24px;">
-            <div style="width: 64px; height: 64px; background: #1f3b57; border-radius: 14px; display: inline-grid; place-items: center; color: white; font-size: 28px; font-weight: bold;">&#9881;</div>
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <p style="font-size: 16px; margin-bottom: 16px; color: #0f172a;">Hola <strong>${nombreUsuario}</strong>,</p>
+          <p style="font-size: 16px; margin-bottom: 16px; color: #334155;">Tu código de verificación es:</p>
+          <div style="font-size: 32px; font-weight: bold; color: #1e3a8a; letter-spacing: 4px; margin: 24px 0; background: #f1f5f9; padding: 16px; text-align: center; border-radius: 8px; border: 1px solid #cbd5e1;">
+            ${codigo}
           </div>
-          <h1 style="color: #0f172a; font-size: 22px; text-align: center; margin: 0 0 8px;">Verifica tu correo electrónico</h1>
-          <p style="color: #64748b; font-size: 14px; text-align: center; margin: 0 0 24px; line-height: 1.5;">
-            Usa el siguiente código de verificación para completar tu registro en el Sistema de Licencias Municipales.
+          <p style="font-size: 14px; color: #64748b; margin-bottom: 6px;">Este código tiene una duración limitada.</p>
+          <p style="font-size: 14px; color: #64748b; margin-bottom: 24px;">No compartas este código con nadie.</p>
+          <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-bottom: 8px;">
+            Si no solicitaste este código, puedes ignorar este mensaje.
           </p>
-          <div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
-            <p style="color: #64748b; font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px;">Código de verificación</p>
-            <p style="color: #1f3b57; font-size: 36px; font-weight: bold; letter-spacing: 8px; margin: 0;">${codigo}</p>
-          </div>
-          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0 0 8px;">
-            Este código expira en 5 minutos. Si no solicitaste este registro, ignora este correo.
-          </p>
-          <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">
-            Municipalidad de Trujillo &mdash; Sistema de Licencias v1.0
-          </p>
+          <p style="font-size: 14px; font-weight: bold; color: #1e3a8a; margin: 0;">Web Municipal.</p>
         </div>
       `,
     };
@@ -428,18 +424,11 @@ app.post("/api/enviar-codigo", async (req, res) => {
     console.log("4. sendMail() respondió OK:");
     console.log("   messageId:", result.messageId);
     console.log("   response:", result.response);
-    console.log("   accepted:", result.accepted);
-    console.log("   rejected:", result.rejected);
 
     res.json({ mensaje: "Correo enviado correctamente" });
   } catch (error) {
     console.error("=== ERROR ENVIANDO CORREO ===");
-    console.error("Tipo de error:", error.constructor.name);
     console.error("Mensaje:", error.message);
-    console.error("Código:", error.code);
-    console.error("Comando:", error.command);
-    console.error("Stack completo:", error.stack);
-    console.error("=== FIN ERROR ===");
     res.status(500).json({ error: "No se pudo enviar el correo de verificación", detalle: error.message });
   }
 });
@@ -448,13 +437,14 @@ app.post("/api/enviar-recuperacion", async (req, res) => {
   console.log("=== ENDPOINT /api/enviar-recuperacion ===");
 
   try {
-    const { correo, codigo } = req.body;
+    const { correo, codigo, nombre } = req.body;
 
     if (!correo || !codigo) {
       return res.status(400).json({ error: "Faltan correo o código" });
     }
 
-    console.log("1. Email destino:", correo, "- Código:", codigo);
+    const nombreUsuario = nombre || "Ciudadano";
+    console.log("1. Email destino:", correo, "- Código:", codigo, "- Nombre:", nombreUsuario);
 
     if (!transporter) {
       console.error("2. SMTP no configurado");
@@ -464,28 +454,22 @@ app.post("/api/enviar-recuperacion", async (req, res) => {
     console.log("2. Transporter SMTP disponible");
 
     const mailOptions = {
-      from: `"Municipalidad de Trujillo" <${SMTP_EMAIL}>`,
+      from: `"Web Municipal" <${SMTP_EMAIL}>`,
       to: correo,
-      subject: "Recuperación de contraseña - Municipalidad de Trujillo",
+      subject: "Código para restablecer tu contraseña",
+      text: `Hola ${nombreUsuario},\n\nTu código para recuperar tu contraseña es:\n\n${codigo}\n\nEste código tiene una duración limitada.\n\nSi no realizaste esta solicitud, ignora este mensaje.\n\nWeb Municipal.`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #f8fafc; border-radius: 16px;">
-          <div style="text-align: center; margin-bottom: 24px;">
-            <div style="width: 64px; height: 64px; background: #1f3b57; border-radius: 14px; display: inline-grid; place-items: center; color: white; font-size: 28px; font-weight: bold;">&#128274;</div>
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <p style="font-size: 16px; margin-bottom: 16px; color: #0f172a;">Hola <strong>${nombreUsuario}</strong>,</p>
+          <p style="font-size: 16px; margin-bottom: 16px; color: #334155;">Tu código para recuperar tu contraseña es:</p>
+          <div style="font-size: 32px; font-weight: bold; color: #1e3a8a; letter-spacing: 4px; margin: 24px 0; background: #f1f5f9; padding: 16px; text-align: center; border-radius: 8px; border: 1px solid #cbd5e1;">
+            ${codigo}
           </div>
-          <h1 style="color: #0f172a; font-size: 22px; text-align: center; margin: 0 0 8px;">Recuperar contraseña</h1>
-          <p style="color: #64748b; font-size: 14px; text-align: center; margin: 0 0 24px; line-height: 1.5;">
-            Recibimos una solicitud para restablecer la contraseña de tu cuenta en el Sistema de Licencias Municipales.
+          <p style="font-size: 14px; color: #64748b; margin-bottom: 24px;">Este código tiene una duración limitada.</p>
+          <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-bottom: 8px;">
+            Si no realizaste esta solicitud, ignora este mensaje.
           </p>
-          <div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
-            <p style="color: #64748b; font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px;">Tu código de verificación</p>
-            <p style="color: #1f3b57; font-size: 36px; font-weight: bold; letter-spacing: 8px; margin: 0;">${codigo}</p>
-          </div>
-          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0 0 8px;">
-            Este código expira en 5 minutos. Si no solicitaste este cambio, ignora este correo.
-          </p>
-          <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">
-            Municipalidad de Trujillo &mdash; Sistema de Licencias v1.0
-          </p>
+          <p style="font-size: 14px; font-weight: bold; color: #1e3a8a; margin: 0;">Web Municipal.</p>
         </div>
       `,
     };
@@ -495,15 +479,11 @@ app.post("/api/enviar-recuperacion", async (req, res) => {
 
     console.log("4. Correo de recuperación enviado:");
     console.log("   messageId:", result.messageId);
-    console.log("   accepted:", result.accepted);
 
     res.json({ mensaje: "Correo de recuperación enviado correctamente" });
   } catch (error) {
     console.error("=== ERROR ENVIANDO RECUPERACIÓN ===");
     console.error("Mensaje:", error.message);
-    console.error("Código:", error.code);
-    console.error("Stack:", error.stack);
-    console.error("=== FIN ERROR ===");
     res.status(500).json({ error: "No se pudo enviar el correo de recuperación", detalle: error.message });
   }
 });
