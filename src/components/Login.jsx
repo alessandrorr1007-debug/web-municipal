@@ -7,7 +7,7 @@ import {
   guardarCodigoVerificacion,
   verificarCodigoVerificacion,
 } from "../services/authService";
-import { consultarDni, calcularDigitoVerificador } from "../services/dniService";
+import { consultarDni } from "../services/dniService";
 import { useAuth } from "../context/AuthContext";
 
 function Login({ onVolver, modoInicial }) {

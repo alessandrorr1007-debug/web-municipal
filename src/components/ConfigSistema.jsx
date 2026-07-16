@@ -98,10 +98,6 @@ function ConfigSistema() {
     setConfig({ ...config, [campo]: valor });
   };
 
-  const actualizarLista = (campo, texto) => {
-    const items = texto.split(",").map((s) => s.trim()).filter(Boolean);
-    setConfig({ ...config, [campo]: items });
-  };
 
   return (
     <div>

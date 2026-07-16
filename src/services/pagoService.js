@@ -28,41 +28,6 @@ export const crearPreferenciaPago = async ({ ruc, razonSocial }) => {
   return response.json();
 };
 
-export const procesarPagoTarjeta = async ({
-  token,
-  issuerId,
-  paymentMethodId,
-  transactionAmount,
-  installments,
-  description,
-  payer,
-  ruc,
-  razonSocial,
-}) => {
-  const response = await fetch(`${API_URL}/api/pagos/procesar-tarjeta`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      token,
-      issuerId,
-      paymentMethodId,
-      transactionAmount,
-      installments,
-      description,
-      payer,
-      ruc,
-      razonSocial,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(await obtenerError(response));
-  }
-
-  return response.json();
-};
 
 export const verificarPago = async (paymentId) => {
   const response = await fetch(`${API_URL}/api/pagos/verificar/${paymentId}`);

@@ -1,4 +1,3 @@
-import { useState } from "react";
 
 const iconos = {
   inicio: "&#127968;",

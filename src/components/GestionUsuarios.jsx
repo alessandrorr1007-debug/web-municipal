@@ -86,7 +86,7 @@ function GestionUsuarios({ usuarios, onRecargar }) {
           } catch (authErr) {
             console.warn("No se pudo iniciar sesión para actualizar contraseña, intentando registrar usuario:", authErr.message);
             try {
-              const cred = await createUserWithEmailAndPassword(tempApp, form.correo, form.password.trim());
+              const cred = await createUserWithEmailAndPassword(tempAuth, form.correo, form.password.trim());
               updatePasswordSuccess = true;
             } catch (createErr) {
               console.error("No se pudo crear en Firebase Auth:", createErr);

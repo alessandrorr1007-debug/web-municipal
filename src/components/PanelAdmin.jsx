@@ -45,15 +45,15 @@ function PanelAdmin({ seccion }) {
     funcionarios: usuarios.filter((u) => u.rol === "funcionario").length,
     inspectores: usuarios.filter((u) => u.rol === "inspector").length,
     totalSolicitudes: solicitudes.length,
-    pendientes: solicitudes.filter((s) => ["En revision", "Pago pendiente"].includes(s.estado)).length,
-    inspeccionProgramada: solicitudes.filter((s) => s.estado === "Inspeccion programada" || s.estado === "En inspeccion").length,
-    aprobadas: solicitudes.filter((s) => s.estado === "Licencia aprobada").length,
-    rechazadas: solicitudes.filter((s) => s.estado === "Licencia rechazada").length,
-    observadas: solicitudes.filter((s) => (s.cantidadReobservaciones || 0) > 0).length,
-    pagosConfirmados: solicitudes.filter((s) => s.estadoPago === "Confirmado").length,
+    pendientes: solicitudes.filter((s) => ["En revision", "En revisión", "Pago pendiente", "Pendiente de pago"].includes(s.estado)).length,
+    inspeccionProgramada: solicitudes.filter((s) => ["Inspección programada", "Inspeccion programada", "En inspeccion", "Reprogramado"].includes(s.estado)).length,
+    aprobadas: solicitudes.filter((s) => ["Licencia emitida", "Aprobado", "Licencia aprobada"].includes(s.estado)).length,
+    rechazadas: solicitudes.filter((s) => ["Rechazado", "Licencia rechazada"].includes(s.estado)).length,
+    observadas: solicitudes.filter((s) => ["Observado", "Reprogramado"].includes(s.estado) || (s.cantidadReobservaciones || 0) > 0).length,
+    pagosConfirmados: solicitudes.filter((s) => s.estadoPago === "Confirmado" || s.estado === "Pagado").length,
     inspeccionesHoy: solicitudes.filter((s) => s.fechaVisitaInspector === hoy).length,
     licenciasVencidas: solicitudes.filter((s) => {
-      if (s.estado !== "Licencia aprobada" || !s.fechaExpiracionLicencia) return false;
+      if (!["Licencia emitida", "Aprobado", "Licencia aprobada"].includes(s.estado) || !s.fechaExpiracionLicencia) return false;
       return new Date(s.fechaExpiracionLicencia) < new Date();
     }).length,
     usuariosActivos: usuarios.filter((u) => u.estado === "activo").length,

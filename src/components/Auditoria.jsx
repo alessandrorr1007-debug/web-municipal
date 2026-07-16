@@ -50,7 +50,6 @@ function Auditoria() {
     return { icon: "&#8226;", color: "#64748b" };
   };
 
-  const usuariosUnicos = [...new Set(registros.map((r) => r.usuario).filter(Boolean))];
   const accionesUnicas = [...new Set(registros.map((r) => r.accion).filter(Boolean))];
 
   return (
