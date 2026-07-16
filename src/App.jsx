@@ -8,6 +8,7 @@ import PanelNegocio from "./components/PanelNegocio";
 import PanelCajero from "./components/PanelCajero";
 import PanelFuncionario from "./components/PanelFuncionario";
 import PanelInspector from "./components/PanelInspector";
+import PanelAdmin from "./components/PanelAdmin";
 
 import { useAuth } from "./context/AuthContext";
 import { cerrarSesion } from "./services/authService";
@@ -29,6 +30,7 @@ function App() {
     cajero: "Cajero",
     funcionario: "Funcionario",
     inspector: "Inspector",
+    administrador: "Administrador",
   };
 
   const rolColor = {
@@ -36,6 +38,7 @@ function App() {
     cajero: "#d97706",
     funcionario: "#0f766e",
     inspector: "#7c3aed",
+    administrador: "#dc2626",
   };
 
   if (cargando) {
@@ -71,6 +74,7 @@ function App() {
     cajero: ["inicio", "nueva-solicitud", "historial", "estadisticas"],
     funcionario: ["inicio", "solicitudes", "notificaciones", "estadisticas", "reportes"],
     inspector: ["inicio", "inspecciones-hoy", "historial", "estadisticas"],
+    administrador: ["inicio", "gestion-usuarios", "gestion-roles", "auditoria", "config-sistema"],
   };
 
   const renderSeccion = () => {
@@ -106,6 +110,15 @@ function App() {
         case "historial": return <PanelInspector seccion="historial" />;
         case "estadisticas": return <PanelInspector seccion="estadisticas" />;
         default: return <PanelInspector seccion="inicio" />;
+      }
+    }
+    if (usuario.rol === "administrador") {
+      switch (seccion) {
+        case "gestion-usuarios": return <PanelAdmin seccion="gestion-usuarios" />;
+        case "gestion-roles": return <PanelAdmin seccion="gestion-roles" />;
+        case "auditoria": return <PanelAdmin seccion="auditoria" />;
+        case "config-sistema": return <PanelAdmin seccion="config-sistema" />;
+        default: return <PanelAdmin seccion="inicio" />;
       }
     }
     return (

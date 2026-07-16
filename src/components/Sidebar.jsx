@@ -11,6 +11,10 @@ const iconos = {
   estadisticas: "&#128202;",
   reportes: "&#128196;",
   "mi-cuenta": "&#128100;",
+  "gestion-usuarios": "&#128101;",
+  "gestion-roles": "&#128272;",
+  auditoria: "&#128209;",
+  "config-sistema": "&#9881;",
 };
 
 const titulos = {
@@ -24,6 +28,10 @@ const titulos = {
   estadisticas: "Estadisticas",
   reportes: "Reportes",
   "mi-cuenta": "Mi Cuenta",
+  "gestion-usuarios": "Usuarios",
+  "gestion-roles": "Roles y Permisos",
+  auditoria: "Auditoria",
+  "config-sistema": "Configuracion",
 };
 
 function Sidebar({ usuario, rolEtiqueta, rolColor, seccion, onCambiarSeccion, abierto, onToggle, secciones }) {
