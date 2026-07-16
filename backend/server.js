@@ -3,6 +3,8 @@ import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 import {
   MercadoPagoConfig,
@@ -11,6 +13,9 @@ import {
 } from "mercadopago";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 
@@ -219,6 +224,13 @@ app.post("/api/enviar-codigo", async (req, res) => {
   }
 });
 
-app.listen(3000, () => {
-  console.log("Servidor corriendo en puerto 3000");
+const distPath = join(__dirname, "..", "dist");
+app.use(express.static(distPath));
+
+app.get("*", (req, res) => {
+  res.sendFile(join(distPath, "index.html"));
+});
+
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Servidor corriendo en puerto", process.env.PORT || 3000);
 });
