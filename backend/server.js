@@ -100,10 +100,11 @@ app.get("/api/consultar-dni/:dni", async (req, res) => {
       return res.status(500).json({ error: "Servicio de consulta no configurado. Token faltante." });
     }
 
-    console.log("Consultando Decolecta RENIEC para DNI:", dni);
+    const targetUrl = `https://api.decolecta.com/v1/reniec/dni?numero=${dni}`;
+    console.log("URL consultada:", targetUrl);
 
     const response = await axios.get(
-      `https://api.decolecta.com/v1/reniec/dni?numero=${dni}`,
+      targetUrl,
       {
         headers: {
           Accept: "application/json",
@@ -112,26 +113,35 @@ app.get("/api/consultar-dni/:dni", async (req, res) => {
       }
     );
 
-    console.log("Respuesta Decolecta:", JSON.stringify(response.data));
+    console.log("Código HTTP recibido:", response.status);
+    console.log("Respuesta completa de Decolecta:", JSON.stringify(response.data, null, 2));
 
     const resBody = response.data;
     const data = resBody.data || resBody;
 
-    if (!data || !data.document_number) {
-      console.log("document_number no encontrado en la respuesta:", resBody);
-      return res.status(404).json({ error: "DNI no encontrado en registros de RENIEC." });
+    if (!data || (!data.document_number && !data.full_name)) {
+      console.log("No se encontró información del ciudadano en la respuesta.");
+      return res.status(404).json({ error: "DNI no encontrado" });
     }
 
-    res.json({
+    const payload = {
       success: true,
+      dni: data.document_number || dni,
+      nombres: data.first_name || "",
+      apellidoPaterno: data.first_last_name || "",
+      apellidoMaterno: data.second_last_name || "",
+      nombreCompleto: data.full_name || `${data.first_name || ""} ${data.first_last_name || ""} ${data.second_last_name || ""}`.trim(),
       data: {
-        dni: data.document_number,
+        dni: data.document_number || dni,
         nombres: data.first_name || "",
         apellido_paterno: data.first_last_name || "",
         apellido_materno: data.second_last_name || "",
         nombre_completo: data.full_name || `${data.first_name || ""} ${data.first_last_name || ""} ${data.second_last_name || ""}`.trim(),
-      },
-    });
+      }
+    };
+
+    console.log("Objeto que se envía al frontend:", JSON.stringify(payload, null, 2));
+    res.json(payload);
   } catch (error) {
     console.error("=== ERROR CONSULTANDO DNI ===");
     console.error("Status:", error.response?.status);
@@ -142,7 +152,7 @@ app.get("/api/consultar-dni/:dni", async (req, res) => {
       return res.status(501).json({ error: "Token de Decolecta inválido o expirado." });
     }
     if (error.response?.status === 404) {
-      return res.status(404).json({ error: "DNI no encontrado en registros de RENIEC." });
+      return res.status(404).json({ error: "DNI no encontrado" });
     }
     if (error.response?.status === 429) {
       return res.status(429).json({ error: "Límite de consultas alcanzado. Intenta más tarde." });
