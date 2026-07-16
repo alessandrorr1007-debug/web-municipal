@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import fs from "fs";
 
 import {
   MercadoPagoConfig,
@@ -16,11 +17,14 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const distPath = join(__dirname, "..", "dist");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+const PORT = process.env.PORT || 3000;
 
 const TOKEN_DECOLECTA =
   process.env.DECOLECTA_TOKEN || process.env.VITE_DECOLECTA_TOKEN;
@@ -30,8 +34,14 @@ const MP_ACCESS_TOKEN =
 
 const MONTO_TRAMITE = 3;
 
-console.log("TOKEN DECOLECTA:", TOKEN_DECOLECTA ? "Existe" : "No existe");
-console.log("TOKEN MERCADO PAGO:", MP_ACCESS_TOKEN ? "Existe" : "No existe");
+const SMTP_EMAIL = process.env.SMTP_EMAIL || "";
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || "";
+
+console.log("=== SERVIDOR MUNICIPAL ===");
+console.log("PORT:", PORT);
+console.log("SMTP EMAIL:", SMTP_EMAIL ? "Configurado" : "No configurado");
+console.log("DIST path:", distPath);
+console.log("DIST exists:", fs.existsSync(distPath));
 
 const mpClient = new MercadoPagoConfig({
   accessToken: MP_ACCESS_TOKEN || "",
@@ -40,16 +50,37 @@ const mpClient = new MercadoPagoConfig({
 const payment = new Payment(mpClient);
 const preference = new Preference(mpClient);
 
-app.get("/", (req, res) => {
-  res.json({
-    mensaje: "Backend SUNAT y Mercado Pago activo",
-    monto: MONTO_TRAMITE,
+const transporter = SMTP_EMAIL && SMTP_PASSWORD
+  ? nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: SMTP_EMAIL,
+        pass: SMTP_PASSWORD,
+      },
+    })
+  : null;
+
+if (transporter) {
+  transporter.verify().then(() => {
+    console.log("SMTP: Conexion verificada correctamente");
+  }).catch((err) => {
+    console.error("SMTP: Error de conexion:", err.message);
   });
-});
+}
 
 /* =========================
-   API SUNAT
+   API ROUTES
 ========================= */
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    smtp: SMTP_EMAIL ? "configurado" : "no configurado",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 app.get("/api/ruc/:numero", async (req, res) => {
   try {
@@ -81,10 +112,6 @@ app.get("/api/ruc/:numero", async (req, res) => {
     });
   }
 });
-
-/* =========================
-   CREAR PREFERENCIA CHECKOUT PRO
-========================= */
 
 app.post("/api/pagos/crear-preferencia", async (req, res) => {
   try {
@@ -134,10 +161,6 @@ app.post("/api/pagos/crear-preferencia", async (req, res) => {
   }
 });
 
-/* =========================
-   VERIFICAR PAGO
-========================= */
-
 app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
   try {
     const { paymentId } = req.params;
@@ -165,31 +188,17 @@ app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
   }
 });
 
-const SMTP_EMAIL = process.env.SMTP_EMAIL;
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
-
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: SMTP_EMAIL,
-    pass: SMTP_PASSWORD,
-  },
-});
-
-console.log("SMTP EMAIL:", SMTP_EMAIL ? "Configurado" : "No configurado");
-
-/* =========================
-   ENVIAR CODIGO DE VERIFICACION
-========================= */
-
 app.post("/api/enviar-codigo", async (req, res) => {
   try {
     const { correo, codigo } = req.body;
 
     if (!correo || !codigo) {
       return res.status(400).json({ error: "Faltan correo o código" });
+    }
+
+    if (!transporter) {
+      console.error("SMTP no configurado");
+      return res.status(500).json({ error: "Servicio de correo no configurado" });
     }
 
     await transporter.sendMail({
@@ -219,6 +228,7 @@ app.post("/api/enviar-codigo", async (req, res) => {
       `,
     });
 
+    console.log(`Correo enviado a: ${correo}`);
     res.json({ mensaje: "Correo enviado correctamente" });
   } catch (error) {
     console.error("ERROR ENVIANDO CODIGO:", error.message);
@@ -226,13 +236,23 @@ app.post("/api/enviar-codigo", async (req, res) => {
   }
 });
 
-const distPath = join(__dirname, "..", "dist");
-app.use(express.static(distPath));
+/* =========================
+   STATIC FILES & SPA
+========================= */
+
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
 
 app.use((req, res) => {
-  res.sendFile(join(distPath, "index.html"));
+  const indexPath = join(distPath, "index.html");
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).json({ error: "Frontend no encontrado" });
+  }
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Servidor corriendo en puerto", process.env.PORT || 3000);
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en puerto ${PORT}`);
 });
