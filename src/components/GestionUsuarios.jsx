@@ -1,4 +1,12 @@
 import { useState } from "react";
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updatePassword,
+} from "firebase/auth";
+import { firebaseConfig } from "../firebase";
 import {
   crearUsuarioInterno,
   actualizarUsuario,
@@ -24,9 +32,19 @@ function GestionUsuarios({ usuarios, onRecargar }) {
     telefono: "",
     cargo: "",
     rol: "cajero",
+    password: "",
   });
 
   const rolesInternos = ["cajero", "funcionario", "inspector", "administrador"];
+  const inspectorExiste = usuarios.some((u) => u.rol === "inspector");
+
+  const rolesDisponibles = rolesInternos.filter((r) => {
+    if (r === "inspector") {
+      if (editando && editando.rol === "inspector") return true;
+      return !inspectorExiste;
+    }
+    return true;
+  });
 
   const usuariosFiltrados = usuarios.filter((u) => {
     if (filtroRol !== "todos" && u.rol !== filtroRol) return false;
@@ -43,7 +61,7 @@ function GestionUsuarios({ usuarios, onRecargar }) {
   });
 
   const limpiarForm = () => {
-    setForm({ nombre: "", correo: "", dni: "", telefono: "", cargo: "", rol: "cajero" });
+    setForm({ nombre: "", correo: "", dni: "", telefono: "", cargo: "", rol: "cajero", password: "" });
     setEditando(null);
     setMostrarForm(false);
   };
@@ -52,31 +70,91 @@ function GestionUsuarios({ usuarios, onRecargar }) {
     e.preventDefault();
     try {
       if (editando) {
-        await actualizarUsuario(editando.uid, {
+        let updatePasswordSuccess = false;
+        if (form.password && form.password.trim() !== "") {
+          if (form.password.trim().length < 6) {
+            alert("La contraseña debe tener al menos 6 caracteres.");
+            return;
+          }
+          const appName = `TempApp_${Date.now()}`;
+          const tempApp = initializeApp(firebaseConfig, appName);
+          const tempAuth = getAuth(tempApp);
+          try {
+            const cred = await signInWithEmailAndPassword(tempAuth, form.correo, editando.contraseña || "123456");
+            await updatePassword(cred.user, form.password.trim());
+            updatePasswordSuccess = true;
+          } catch (authErr) {
+            console.warn("No se pudo iniciar sesión para actualizar contraseña, intentando registrar usuario:", authErr.message);
+            try {
+              const cred = await createUserWithEmailAndPassword(tempApp, form.correo, form.password.trim());
+              updatePasswordSuccess = true;
+            } catch (createErr) {
+              console.error("No se pudo crear en Firebase Auth:", createErr);
+            }
+          } finally {
+            await tempApp.delete();
+          }
+        }
+
+        const cambios = {
           nombre: form.nombre,
           dni: form.dni,
           telefono: form.telefono,
           cargo: form.cargo,
           rol: form.rol,
           permisos: PERMISOS_POR_ROL[form.rol] || [],
-        });
+        };
+
+        if (updatePasswordSuccess) {
+          cambios.contraseña = form.password.trim();
+        }
+
+        await actualizarUsuario(editando.uid, cambios);
         await registrarAccion({
           usuario: usuario.nombre,
           usuarioId: usuario.uid,
           accion: "Actualizar usuario interno",
-          detalle: `Actualizo a ${form.nombre} (${ROL_ETIQUETAS[form.rol]})`,
+          detalle: `Actualizó a ${form.nombre} (${ROL_ETIQUETAS[form.rol]})` + (updatePasswordSuccess ? " y su contraseña" : ""),
         });
       } else {
+        if (!form.password || form.password.trim().length < 6) {
+          alert("La contraseña es requerida y debe tener al menos 6 caracteres.");
+          return;
+        }
+
+        const appName = `TempApp_${Date.now()}`;
+        const tempApp = initializeApp(firebaseConfig, appName);
+        const tempAuth = getAuth(tempApp);
+        let newUid;
+        try {
+          const cred = await createUserWithEmailAndPassword(tempAuth, form.correo, form.password.trim());
+          newUid = cred.user.uid;
+        } catch (authErr) {
+          alert("Error al registrar en Firebase Auth: " + authErr.message);
+          await tempApp.delete();
+          return;
+        } finally {
+          await tempApp.delete();
+        }
+
         await crearUsuarioInterno({
-          ...form,
+          uid: newUid,
+          nombre: form.nombre,
+          correo: form.correo,
+          dni: form.dni,
+          telefono: form.telefono,
+          cargo: form.cargo,
+          rol: form.rol,
+          contraseña: form.password.trim(),
           permisos: PERMISOS_POR_ROL[form.rol] || [],
           creadoPor: usuario.nombre,
         });
+
         await registrarAccion({
           usuario: usuario.nombre,
           usuarioId: usuario.uid,
           accion: "Crear usuario interno",
-          detalle: `Creo usuario ${form.nombre} (${ROL_ETIQUETAS[form.rol]})`,
+          detalle: `Creó usuario ${form.nombre} (${ROL_ETIQUETAS[form.rol]})`,
         });
       }
       limpiarForm();
@@ -94,6 +172,7 @@ function GestionUsuarios({ usuarios, onRecargar }) {
       telefono: u.telefono || "",
       cargo: u.cargo || "",
       rol: u.rol || "cajero",
+      password: "",
     });
     setEditando(u);
     setMostrarForm(true);
@@ -187,9 +266,24 @@ function GestionUsuarios({ usuarios, onRecargar }) {
                 </div>
                 <div>
                   <label>Rol *</label>
-                  <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value })} required>
-                    {rolesInternos.map((r) => <option key={r} value={r}>{ROL_ETIQUETAS[r]}</option>)}
+                  <select
+                    value={form.rol}
+                    onChange={(e) => setForm({ ...form, rol: e.target.value })}
+                    required
+                    disabled={editando && editando.rol === "inspector"}
+                  >
+                    {rolesDisponibles.map((r) => <option key={r} value={r}>{ROL_ETIQUETAS[r]}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label>{editando ? "Cambiar contraseña (opcional)" : "Contraseña *"}</label>
+                  <input
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    placeholder={editando ? "Dejar en blanco para no cambiar" : "Mínimo 6 caracteres"}
+                    required={!editando}
+                  />
                 </div>
               </div>
 

@@ -6,7 +6,7 @@ import { getFirestore } from "firebase/firestore";
 
 import { getStorage } from "firebase/storage";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyC_LEdrAj9R9epUNj9ZMhwE2al1TIfoUko",
 
   authDomain: "web-municipal-32860.firebaseapp.com",

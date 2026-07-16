@@ -32,44 +32,51 @@ function Timeline({ solicitud }) {
 
   if (solicitud.fechaVisitaInspector) {
     pasos.push({
-      titulo: "Inspeccion programada",
-      desc: `Fecha: ${solicitud.fechaVisitaInspector}${solicitud.nombreProgramador ? ` - Programado por: ${solicitud.nombreProgramador}` : ""}`,
+      titulo: "Inspección programada",
+      desc: `Fecha: ${solicitud.fechaVisitaInspector} a las ${solicitud.horaVisitaInspector || "08:00"}`,
       fecha: solicitud.fechaVisitaInspector,
-      estado: solicitud.inspeccion === "Completada" ? "completado" : solicitud.inspeccion === "Observada" ? "rechazado" : "activo",
+      estado: ["Aprobada", "Completada"].includes(solicitud.inspeccion)
+        ? "completado"
+        : ["Reobservada", "Observada", "Rechazada"].includes(solicitud.inspeccion)
+          ? "rechazado"
+          : "activo",
     });
   }
 
-  if (solicitud.inspeccion === "Completada" || solicitud.inspeccion === "Observada") {
+  if (["Aprobada", "Completada", "Reobservada", "Observada", "Rechazada"].includes(solicitud.inspeccion)) {
     pasos.push({
-      titulo: "Inspeccion realizada",
+      titulo: "Inspección realizada",
       desc: solicitud.resultadoInspeccion || solicitud.inspeccion,
       fecha: solicitud.fechaInspeccion || "",
-      estado: solicitud.inspeccion === "Observada" ? "rechazado" : "completado",
+      estado: ["Reobservada", "Observada", "Rechazada"].includes(solicitud.inspeccion) ? "rechazado" : "completado",
     });
   }
 
   if (solicitud.cantidadReobservaciones > 0) {
     pasos.push({
-      titulo: `Reobservacion${solicitud.cantidadReobservaciones > 1 ? "es" : ""} (${solicitud.cantidadReobservaciones})`,
+      titulo: `Reobservación (${solicitud.cantidadReobservaciones})`,
       desc: solicitud.observacionInspector || "Observaciones del inspector",
       fecha: solicitud.historialReobservaciones?.[solicitud.historialReobservaciones.length - 1]?.fecha || "",
-      estado: solicitud.cantidadReobservaciones >= 2 ? "rechazado" : "rechazado",
+      estado: "rechazado",
     });
   }
 
-  if (solicitud.decisionFuncionario) {
+  if (solicitud.decisionFuncionario || ["Aprobado", "Licencia emitida", "Rechazado"].includes(solicitud.estado)) {
+    const isApproved = ["Aprobada", "Aprobado", "Aprobado (Licencia emitida)"].includes(solicitud.decisionFuncionario) || ["Aprobado", "Licencia emitida"].includes(solicitud.estado);
     pasos.push({
-      titulo: "Decision del funcionario",
-      desc: `${solicitud.decisionFuncionario}${solicitud.observacionFuncionario ? ` - ${solicitud.observacionFuncionario}` : ""}`,
+      titulo: "Decisión del funcionario",
+      desc: isApproved
+        ? "Aprobado para emisión de licencia municipal"
+        : `Rechazado - Motivo: ${solicitud.observacionFuncionario || "Reobservación superada"}`,
       fecha: solicitud.fechaDecisionFuncionario || "",
-      estado: solicitud.decisionFuncionario === "Aprobado" ? "completado" : "rechazado",
+      estado: isApproved ? "completado" : "rechazado",
     });
   }
 
-  if (solicitud.decisionFuncionario === "Aprobado" && solicitud.numeroLicencia) {
+  if (solicitud.numeroLicencia || ["Licencia emitida"].includes(solicitud.estado)) {
     pasos.push({
       titulo: "Licencia emitida",
-      desc: `N° ${solicitud.numeroLicencia} - Vence: ${solicitud.fechaExpiracionLicencia || "N/A"}`,
+      desc: `N° ${solicitud.numeroLicencia || "LIC-GENERANDO"} - Vence: ${solicitud.fechaExpiracionLicencia || "N/A"}`,
       fecha: solicitud.fechaAprobacion || "",
       estado: "completado",
     });

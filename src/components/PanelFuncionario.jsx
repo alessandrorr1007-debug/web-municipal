@@ -9,6 +9,9 @@ function PanelFuncionario({ seccion }) {
   const [cargando, setCargando] = useState(false);
   const [observacionesRechazo, setObservacionesRechazo] = useState({});
   const [paso, setPaso] = useState("solicitudes");
+  const [solicitudAgendar, setSolicitudAgendar] = useState(null);
+  const [fechaAgendar, setFechaAgendar] = useState("");
+  const [horaAgendar, setHoraAgendar] = useState("08:00");
 
   const cargarSolicitudes = async () => {
     try {
@@ -42,35 +45,47 @@ function PanelFuncionario({ seccion }) {
     });
   };
 
-  const derivarInspector = async (solicitud) => {
-    if (!solicitud.fechaVisitaInspector) {
-      const fecha = prompt("Ingresa la fecha para la inspección (YYYY-MM-DD):");
-      if (!fecha) return;
+  const abrirAgendarModal = (sol) => {
+    setSolicitudAgendar(sol);
+    setFechaAgendar(sol.fechaVisitaInspector || "");
+    setHoraAgendar(sol.horaVisitaInspector || "08:00");
+  };
 
-      await actualizarSolicitud(solicitud.id, {
+  const agendarInspeccion = async () => {
+    if (!solicitudAgendar) return;
+    if (!fechaAgendar) {
+      alert("Debe seleccionar una fecha.");
+      return;
+    }
+    try {
+      setCargando(true);
+      await actualizarSolicitud(solicitudAgendar.id, {
         inspeccion: "Pendiente",
-        estado: "Programada para inspeccion",
-        fechaVisitaInspector: fecha,
+        estado: "Inspección programada",
+        fechaVisitaInspector: fechaAgendar,
+        horaVisitaInspector: horaAgendar,
         programadoPor: "funcionario",
         nombreProgramador: "Funcionario municipal",
         notificaciones: [
-          ...(solicitud.notificaciones || []),
+          ...(solicitudAgendar.notificaciones || []),
           {
             fecha: formatearFechaHora(),
             titulo: "Inspección programada",
-            mensaje: `Se programó una inspección para el ${fecha}. Un inspector visitará tu local.`,
+            mensaje: `Se programó una inspección para el ${fechaAgendar} a las ${horaAgendar}. Un inspector visitará tu local.`,
             leida: false,
           },
         ],
       });
-    } else {
-      await actualizarSolicitud(solicitud.id, {
-        inspeccion: "Pendiente",
-        estado: "Programada para inspeccion",
-      });
+      alert("Inspección programada exitosamente.");
+      setSolicitudAgendar(null);
+      setFechaAgendar("");
+      await cargarSolicitudes();
+    } catch (error) {
+      console.error(error);
+      alert("Error al programar inspección: " + error.message);
+    } finally {
+      setCargando(false);
     }
-
-    await cargarSolicitudes();
   };
 
   const aprobarLicencia = async (solicitud) => {
@@ -91,7 +106,7 @@ function PanelFuncionario({ seccion }) {
         : `LIC-${Date.now().toString().slice(-8)}`;
 
     await actualizarSolicitud(solicitud.id, {
-      estado: "Licencia aprobada",
+      estado: "Licencia emitida",
       decisionFuncionario: "Aprobada",
       observacionFuncionario: "",
       numeroLicencia,
@@ -102,7 +117,7 @@ function PanelFuncionario({ seccion }) {
       licenciaVigente: true,
       licenciaRenovada: esRenovacion,
       fechaRenovacion: esRenovacion ? fechaAprobacion : "",
-      resultadoFinal: "Licencia aprobada",
+      resultadoFinal: "Licencia emitida",
       notificaciones: [
         ...(solicitud.notificaciones || []),
         {
@@ -125,11 +140,11 @@ function PanelFuncionario({ seccion }) {
     }
 
     await actualizarSolicitud(solicitud.id, {
-      estado: "Licencia rechazada",
+      estado: "Rechazado",
       decisionFuncionario: "Rechazada",
       observacionFuncionario: observacion,
       fechaDecisionFuncionario: formatearFechaHora(),
-      resultadoFinal: "Licencia rechazada",
+      resultadoFinal: "Rechazado",
       notificaciones: [
         ...(solicitud.notificaciones || []),
         {
@@ -145,16 +160,16 @@ function PanelFuncionario({ seccion }) {
   };
 
   const puedeAprobar = (s) =>
-    s.estado === "Resultado enviado al funcionario" &&
-    (s.recomendacionInspector === "Aprobar" || s.recomendacionInspector === "Rechazar");
+    (s.estado === "Inspección realizada" || s.estado === "Resultado enviado al funcionario") &&
+    s.recomendacionInspector === "Aprobar";
 
   const solicitudCerrada = (s) =>
-    s.estado === "Licencia aprobada" || s.estado === "Licencia rechazada";
+    s.estado === "Aprobado" || s.estado === "Licencia emitida" || s.estado === "Rechazado" || s.estado === "Licencia aprobada" || s.estado === "Licencia rechazada";
 
   const licenciaVencida = (s) => {
     const fecha = s.fechaExpiracionLicencia || s.fechaVencimiento;
     if (!fecha) return false;
-    if (s.estado !== "Licencia aprobada") return false;
+    if (s.estado !== "Licencia emitida" && s.estado !== "Aprobado" && s.estado !== "Licencia aprobada") return false;
 
     const partes = fecha.split("/");
     if (partes.length === 3) {
@@ -366,15 +381,15 @@ function PanelFuncionario({ seccion }) {
                         </td>
                         <td>
                           <div className="action-stack">
-                            {s.estado === "En revision" && (
-                              <button type="button" onClick={() => derivarInspector(s)}>
-                                Programar inspeccion
+                            {["Pagado", "En revisión", "En revision", "Registrado"].includes(s.estado) && (
+                              <button type="button" onClick={() => abrirAgendarModal(s)}>
+                                Programar inspección
                               </button>
                             )}
 
-                            {s.estado === "Programada para inspeccion" && !s.fechaVisitaInspector && (
-                              <button type="button" onClick={() => derivarInspector(s)}>
-                                Asignar fecha
+                            {["Observado", "Reprogramado", "Inspección programada", "Programada para inspeccion"].includes(s.estado) && (
+                              <button type="button" className="btn-warning" onClick={() => abrirAgendarModal(s)}>
+                                Reprogramar inspección
                               </button>
                             )}
 
@@ -473,6 +488,60 @@ function PanelFuncionario({ seccion }) {
             );
           })()}
         </section>
+      )}
+
+      {solicitudAgendar && (
+        <div className="admin-form-modal" style={{ zIndex: 1000 }}>
+          <div className="admin-form-card" style={{ maxWidth: "450px" }}>
+            <div className="admin-form-header">
+              <h3>Agendar / Programar Inspección</h3>
+              <button type="button" onClick={() => setSolicitudAgendar(null)}>✕</button>
+            </div>
+            <div style={{ padding: "16px 0" }}>
+              <p style={{ margin: "0 0 16px", color: "#475569", fontSize: "14px" }}>
+                El local comercial <strong>{solicitudAgendar.nombreNegocio}</strong> (Exp: {solicitudAgendar.id}) será inspeccionado por el Inspector municipal único.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Fecha de visita *</label>
+                  <input
+                    type="date"
+                    value={fechaAgendar}
+                    onChange={(e) => setFechaAgendar(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Hora de visita *</label>
+                  <select
+                    value={horaAgendar}
+                    onChange={(e) => setHoraAgendar(e.target.value)}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    required
+                  >
+                    <option value="08:00">08:00 AM</option>
+                    <option value="09:00">09:00 AM</option>
+                    <option value="10:00">10:00 AM</option>
+                    <option value="11:00">11:00 AM</option>
+                    <option value="12:00">12:00 PM</option>
+                    <option value="14:00">02:00 PM</option>
+                    <option value="15:00">03:00 PM</option>
+                    <option value="16:00">04:00 PM</option>
+                    <option value="17:00">05:00 PM</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="admin-form-actions" style={{ marginTop: "20px" }}>
+              <button type="button" onClick={() => setSolicitudAgendar(null)}>Cancelar</button>
+              <button type="button" className="btn-primary" onClick={agendarInspeccion} disabled={cargando}>
+                {cargando ? "Agendando..." : "Programar Visita"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

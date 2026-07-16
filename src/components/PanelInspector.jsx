@@ -142,10 +142,10 @@ function PanelInspector({ seccion }) {
     actualizarCampo(id, "evidencias", actuales.filter((_, i) => i !== index));
   };
 
-  const enviarResultado = async (solicitud, tipo) => {
+  const enviarResultado = async (solicitud) => {
     const formulario = formularios[solicitud.id] || {};
     const observacion = (formulario.observacion || "").trim();
-    const recomendacion = formulario.recomendacion || "";
+    const resultado = formulario.resultado || "";
     const evidencias = formulario.evidencias || [];
 
     if (enviandoId) return;
@@ -153,8 +153,8 @@ function PanelInspector({ seccion }) {
       alert("La observación del inspector es obligatoria.");
       return;
     }
-    if (!recomendacion) {
-      alert("Debes elegir una recomendación: Aprobar o Rechazar.");
+    if (!resultado) {
+      alert("Debes elegir un resultado: Aprobado, Observado o No atendido.");
       return;
     }
     if (evidencias.length === 0) {
@@ -162,93 +162,117 @@ function PanelInspector({ seccion }) {
       return;
     }
 
-    const esReobservacion = solicitud.cantidadReobservaciones >= 1;
-    const esSegundaReobservacion = solicitud.cantidadReobservaciones >= 1 && recomendacion === "Rechazar";
-
-    if (esSegundaReobservacion) {
-      const confirmar = confirm(
-        "Esta es la SEGUNDA reobservacion. Si rechazas, la solicitud quedara RECHAZADA DEFINITIVAMENTE. No habra mas oportunidades.\n\nDeseas continuar?"
-      );
-      if (!confirmar) return;
-    }
-
-    let estadoFinal;
-    let inspeccionFinal;
-
-    if (esSegundaReobservacion) {
-      estadoFinal = "Licencia rechazada";
-      inspeccionFinal = "Rechazada";
-    } else if (tipo === "reobservar" || (esReobservacion && recomendacion === "Rechazar")) {
-      const nuevaCantidad = (solicitud.cantidadReobservaciones || 0) + 1;
-      const fechaReprogramacion = new Date();
-      fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 30);
-      const nuevaFecha = fechaReprogramacion.toLocaleDateString("es-PE");
-
-      await actualizarSolicitud(solicitud.id, {
-        inspeccion: "Reobservada",
-        recomendacionInspector: recomendacion,
-        observacionInspector: observacion,
-        evidenciasInspector: evidencias,
-        fechaInspeccion: formatearFechaHora(),
-        resultadoInspeccion: "El inspector reobserva el local. El negocio debe corregir.",
-        estado: "Programada para inspeccion",
-        fechaVisitaInspector: nuevaFecha,
-        cantidadReobservaciones: nuevaCantidad,
-        historialReobservaciones: [
-          ...(solicitud.historialReobservaciones || []),
-          {
-            fecha: formatearFechaHora(),
-            observacion,
-            recomendacion,
-            evidencias: evidencias.length,
-          },
-        ],
-        notificaciones: [
-          ...(solicitud.notificaciones || []),
-          {
-            fecha: formatearFechaHora(),
-            titulo: "Inspeccion reobservada",
-            mensaje: `El inspector reobservó tu local. Debes corregir las observaciones. Nueva inspección programada para el ${nuevaFecha}.`,
-            leida: false,
-          },
-        ],
-      });
-
-      limpiarFormulario(solicitud.id);
-      alert(`Inspeccion reobservada. Nueva visita programada para ${nuevaFecha}.`);
-      await cargarSolicitudes();
-      return;
-    } else {
-      estadoFinal = "Resultado enviado al funcionario";
-      inspeccionFinal = recomendacion === "Aprobar" ? "Aprobada" : "Rechazada";
-    }
+    const esReobservacion = (solicitud.cantidadReobservaciones || 0) >= 1;
 
     try {
       setEnviandoId(solicitud.id);
-      await actualizarSolicitud(solicitud.id, {
-        inspeccion: inspeccionFinal,
-        recomendacionInspector: recomendacion,
-        observacionInspector: observacion,
-        evidenciasInspector: evidencias,
-        fechaInspeccion: formatearFechaHora(),
-        resultadoInspeccion:
-          recomendacion === "Aprobar"
-            ? "El inspector recomienda aprobar el licenciamiento."
-            : "El inspector recomienda rechazar el licenciamiento.",
-        estado: estadoFinal,
-        notificaciones: [
-          ...(solicitud.notificaciones || []),
-          {
-            fecha: formatearFechaHora(),
-            titulo: "Inspeccion completada",
-            mensaje: `El inspector realizó la inspección y recomienda ${recomendacion.toLowerCase()}.`,
-            leida: false,
-          },
-        ],
-      });
+
+      if (resultado === "Aprobado") {
+        await actualizarSolicitud(solicitud.id, {
+          inspeccion: "Aprobada",
+          recomendacionInspector: "Aprobar",
+          observacionInspector: observacion,
+          evidenciasInspector: evidencias,
+          fechaInspeccion: formatearFechaHora(),
+          resultadoInspeccion: "El inspector aprueba las condiciones del local.",
+          estado: "Inspección realizada",
+          notificaciones: [
+            ...(solicitud.notificaciones || []),
+            {
+              fecha: formatearFechaHora(),
+              titulo: "Inspección aprobada",
+              mensaje: `El inspector aprobó tu local. Pendiente de decisión final del funcionario.`,
+              leida: false,
+            },
+          ],
+        });
+        alert("Resultado de aprobación enviado.");
+      } else if (resultado === "Observado") {
+        if (esReobservacion) {
+          await actualizarSolicitud(solicitud.id, {
+            inspeccion: "Rechazada",
+            recomendacionInspector: "Rechazar",
+            observacionInspector: observacion,
+            evidenciasInspector: evidencias,
+            fechaInspeccion: formatearFechaHora(),
+            resultadoInspeccion: "El inspector rechaza de forma definitiva tras múltiples observaciones.",
+            estado: "Rechazado",
+            notificaciones: [
+              ...(solicitud.notificaciones || []),
+              {
+                fecha: formatearFechaHora(),
+                titulo: "Trámite rechazado",
+                mensaje: `Tu solicitud fue rechazada definitivamente tras la segunda inspección fallida.`,
+                leida: false,
+              },
+            ],
+          });
+          alert("Solicitud rechazada definitivamente por segunda reobservación.");
+        } else {
+          const nuevaCantidad = 1;
+          const fechaReprogramacion = new Date();
+          fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 30);
+          const nuevaFecha = fechaReprogramacion.toLocaleDateString("es-PE");
+
+          await actualizarSolicitud(solicitud.id, {
+            inspeccion: "Reobservada",
+            recomendacionInspector: "Reobservar",
+            observacionInspector: observacion,
+            evidenciasInspector: evidencias,
+            fechaInspeccion: formatearFechaHora(),
+            resultadoInspeccion: "El inspector observa el local. Se reprograma visita en 30 días.",
+            estado: "Reprogramado",
+            fechaVisitaInspector: nuevaFecha,
+            cantidadReobservaciones: nuevaCantidad,
+            historialReobservaciones: [
+              ...(solicitud.historialReobservaciones || []),
+              {
+                fecha: formatearFechaHora(),
+                observacion,
+                recomendacion: "Reobservar",
+                evidencias: evidencias.length,
+              },
+            ],
+            notificaciones: [
+              ...(solicitud.notificaciones || []),
+              {
+                fecha: formatearFechaHora(),
+                titulo: "Inspección observada",
+                mensaje: `El inspector observó tu local. Se programó una nueva inspección para el ${nuevaFecha}.`,
+                leida: false,
+              },
+            ],
+          });
+          alert(`Solicitud observada. Nueva inspección programada para: ${nuevaFecha}`);
+        }
+      } else if (resultado === "No atendido") {
+        const fechaReprogramacion = new Date();
+        fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 7);
+        const nuevaFecha = fechaReprogramacion.toLocaleDateString("es-PE");
+
+        await actualizarSolicitud(solicitud.id, {
+          inspeccion: "Pendiente",
+          recomendacionInspector: "Reprogramar",
+          observacionInspector: observacion,
+          evidenciasInspector: evidencias,
+          fechaInspeccion: formatearFechaHora(),
+          resultadoInspeccion: "Visita no atendida. Se reprograma en 7 días.",
+          estado: "Reprogramado",
+          fechaVisitaInspector: nuevaFecha,
+          notificaciones: [
+            ...(solicitud.notificaciones || []),
+            {
+              fecha: formatearFechaHora(),
+              titulo: "Inspección no atendida",
+              mensaje: `El local no se encontraba disponible o no atendieron al inspector. Se reprogramó para el ${nuevaFecha}.`,
+              leida: false,
+            },
+          ],
+        });
+        alert(`Visita no atendida. Se reprogramó para: ${nuevaFecha}`);
+      }
 
       limpiarFormulario(solicitud.id);
-      alert("Resultado enviado al funcionario.");
       await cargarSolicitudes();
     } catch (error) {
       console.error(error);
@@ -404,6 +428,10 @@ function PanelInspector({ seccion }) {
                     </div>
 
                     <div className="inspection-details">
+                      <p><strong>Responsable:</strong> {solicitud.nombreSolicitante || "N/A"}</p>
+                      <p><strong>Teléfono:</strong> {solicitud.telefonoSolicitante || "N/A"}</p>
+                      <p><strong>Fecha visita:</strong> {solicitud.fechaVisitaInspector || "N/A"}</p>
+                      <p><strong>Hora visita:</strong> {solicitud.horaVisitaInspector || "Sin hora"}</p>
                       <p><strong>RUC:</strong> {solicitud.ruc}</p>
                       <p><strong>Dirección:</strong> {solicitud.direccion}</p>
                       <p><strong>Giro:</strong> {solicitud.giro}</p>
@@ -482,23 +510,24 @@ function PanelInspector({ seccion }) {
                       )}
 
                       <label>
-                        Recomendacion *
+                        Resultado *
                         <select
-                          value={formulario.recomendacion || ""}
-                          onChange={(e) => actualizarCampo(solicitud.id, "recomendacion", e.target.value)}
+                          value={formulario.resultado || ""}
+                          onChange={(e) => actualizarCampo(solicitud.id, "resultado", e.target.value)}
                           disabled={estaEnviando}
                         >
-                           <option value="">Seleccionar recomendación</option>
-                          <option value="Aprobar">Aprobar</option>
-                          <option value="Rechazar">Rechazar{esReobservacion ? " (DEFINITIVO)" : ""}</option>
+                           <option value="">Seleccionar resultado</option>
+                          <option value="Aprobado">Aprobado</option>
+                          <option value="Observado">Observado{esReobservacion ? " (RECHAZO DEFINITIVO)" : ""}</option>
+                          <option value="No atendido">No atendido</option>
                         </select>
                       </label>
                     </div>
 
                     {esReobservacion && (
-                      <div style={{ padding: "10px", background: "#fef3c7", borderRadius: "10px", border: "1px solid #fde68a", marginBottom: "12px" }}>
-                        <p style={{ margin: 0, fontSize: "13px", color: "#92400e" }}>
-                          &#9888; Esta es la 2da oportunidad. Si rechazas, la solicitud quedara cerrada sin posibilidad de reprogramacion.
+                      <div style={{ padding: "10px", background: "#fee2e2", borderRadius: "10px", border: "1px solid #fca5a5", marginBottom: "12px" }}>
+                        <p style={{ margin: 0, fontSize: "13px", color: "#991b1b", fontWeight: "bold" }}>
+                          ⚠️ Esta es la 2da oportunidad. Si marcas "Observado" nuevamente, la solicitud será rechazada de forma automática y definitiva.
                         </p>
                       </div>
                     )}
@@ -507,22 +536,11 @@ function PanelInspector({ seccion }) {
                       <button
                         type="button"
                         className="btn-ok"
-                        onClick={() => enviarResultado(solicitud, "enviar")}
+                        onClick={() => enviarResultado(solicitud)}
                         disabled={estaEnviando}
                       >
                         {estaEnviando ? "Enviando..." : "Enviar resultado"}
                       </button>
-
-                      {esReobservacion && (
-                        <button
-                          type="button"
-                          className="btn-warning"
-                          onClick={() => enviarResultado(solicitud, "reobservar")}
-                          disabled={estaEnviando}
-                        >
-                          {estaEnviando ? "Enviando..." : "Reobservar (reprogramar)"}
-                        </button>
-                      )}
                     </div>
                   </article>
                 );

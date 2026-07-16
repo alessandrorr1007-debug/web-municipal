@@ -319,8 +319,19 @@ function PanelNegocio({ seccion }) {
     }, 600);
   };
 
+  const iniciarPagoCaja = () => {
+    setMetodoPago("Pago presencial en caja");
+    setEstadoPago("Pendiente");
+    setDetallePago({
+      id: "PENDIENTE-CAJA",
+      status: "pending",
+      metodo: "caja_municipal",
+    });
+    alert("Opción de pago en caja seleccionada. Ya puedes enviar la solicitud.");
+  };
+
   const enviarSolicitud = async () => {
-    if (estadoPago !== "Confirmado") {
+    if (metodoPago !== "Pago presencial en caja" && estadoPago !== "Confirmado") {
       alert("Debe realizar y confirmar el pago antes de enviar la solicitud.");
       return;
     }
@@ -356,8 +367,8 @@ function PanelNegocio({ seccion }) {
         comprobantePago:
           estadoPago === "Confirmado"
             ? `Pago confirmado mediante ${metodoPago}`
-            : `Pago generado mediante ${metodoPago}`,
-        estado: "En revisión",
+            : (metodoPago === "Pago presencial en caja" ? "Pendiente de pago en caja" : `Pago generado mediante ${metodoPago}`),
+        estado: metodoPago === "Pago presencial en caja" ? "Pendiente de pago" : "En revisión",
         inspeccion: "Sin inspección",
         recomendacionInspector: "",
         observacionInspector: "",
@@ -450,7 +461,7 @@ function PanelNegocio({ seccion }) {
   };
 
   const licenciaVencida = (solicitud) => {
-    if (solicitud.estado !== "Licencia aprobada") return false;
+    if (!["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(solicitud.estado)) return false;
 
     const fechaExpiracion = new Date(obtenerFechaExpiracion(solicitud));
 
@@ -614,12 +625,12 @@ function PanelNegocio({ seccion }) {
             </div>
             <div style={{ background: "#fef3c7", padding: "20px", borderRadius: "14px", border: "1px solid #fde68a" }}>
               <div style={{ fontSize: "24px", marginBottom: "8px" }}>&#128197;</div>
-              <strong style={{ fontSize: "24px", color: "#92400e" }}>{misSolicitudes.filter(s => s.estado === "En revision").length}</strong>
+              <strong style={{ fontSize: "24px", color: "#92400e" }}>{misSolicitudes.filter(s => ["En revision", "En revisión"].includes(s.estado)).length}</strong>
               <p style={{ margin: "4px 0 0", color: "#92400e", fontSize: "13px" }}>En revisión</p>
             </div>
             <div style={{ background: "#f0fdf4", padding: "20px", borderRadius: "14px", border: "1px solid #bbf7d0" }}>
               <div style={{ fontSize: "24px", marginBottom: "8px" }}>&#9989;</div>
-              <strong style={{ fontSize: "24px", color: "#166534" }}>{misSolicitudes.filter(s => s.estado === "Licencia aprobada").length}</strong>
+              <strong style={{ fontSize: "24px", color: "#166534" }}>{misSolicitudes.filter(s => ["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado)).length}</strong>
               <p style={{ margin: "4px 0 0", color: "#166534", fontSize: "13px" }}>Aprobadas</p>
             </div>
           </div>
@@ -687,21 +698,21 @@ function PanelNegocio({ seccion }) {
                     </div>
                   )}
 
-                  {s.estado === "Licencia rechazada" && (
+                  {["Licencia rechazada", "Rechazado"].includes(s.estado) && (
                     <div className="motivo-rechazo">
                       <strong>Motivo:</strong>
-                      <p>{s.observacionFuncionario || "No se registró motivo del rechazo."}</p>
+                      <p>{s.observacionFuncionario || s.observacionInspector || "No se registró motivo del rechazo."}</p>
                     </div>
                   )}
 
-                  {s.estado === "Licencia aprobada" && (
+                  {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado) && (
                     <div className="vigencia-box">
                       <strong>Vence:</strong> {formatearFecha(obtenerFechaExpiracion(s))}
                     </div>
                   )}
 
                   <div className="solicitud-card-footer">
-                    {s.estado === "Licencia aprobada" ? (
+                    {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado) ? (
                       <>
                         {!licenciaVencida(s) && (
                           <button type="button" className="btn-ok" onClick={() => descargarLicencia(s)}>Descargar licencia</button>
@@ -880,6 +891,12 @@ function PanelNegocio({ seccion }) {
                           <p style={{ color: "#475569", lineHeight: "1.55" }}>Registra un comprobante demo para continuar el circuito.</p>
                           <button type="button" className="btn-secundario btn-full" onClick={iniciarPagoDemo} disabled={procesandoPago}>{procesandoPago ? "Registrando..." : "Confirmar pago demo"}</button>
                         </div>
+                        <div style={{ border: "1px solid #cbd5e1", background: "#f8fafc", borderRadius: "16px", padding: "20px" }}>
+                          <div style={{ fontSize: "28px", marginBottom: "8px" }}>🏛️</div>
+                          <h4 style={{ margin: "0 0 8px", color: "#334155" }}>Pago presencial en caja</h4>
+                          <p style={{ color: "#475569", lineHeight: "1.55" }}>Paga en efectivo o tarjeta en la caja de la Municipalidad.</p>
+                          <button type="button" className="btn-outline btn-full" onClick={iniciarPagoCaja} disabled={procesandoPago}>Seleccionar pago en caja</button>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -895,7 +912,7 @@ function PanelNegocio({ seccion }) {
 
               <div className="acciones-pago acciones-pago-modern">
                 <button type="button" onClick={() => setPaso("solicitud")}>Volver</button>
-                <button type="button" className="btn-pago" onClick={enviarSolicitud} disabled={guardando || estadoPago !== "Confirmado"}>{guardando ? "Guardando solicitud..." : "Enviar solicitud"}</button>
+                <button type="button" className="btn-pago" onClick={enviarSolicitud} disabled={guardando || (estadoPago !== "Confirmado" && metodoPago !== "Pago presencial en caja")}>{guardando ? "Guardando solicitud..." : "Enviar solicitud"}</button>
               </div>
             </section>
           )}

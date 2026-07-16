@@ -12,8 +12,23 @@ const MONTO_TRAMITE = 3;
 function PanelCajero({ seccion }) {
   const { usuario } = useAuth();
 
-  const [paso, setPaso] = useState("cola");
+  const [paso, setPaso] = useState("cobrar");
+  const [busquedaCajero, setBusquedaCajero] = useState("");
+  const [solicitudSeleccionada, setSolicitudSeleccionada] = useState(null);
+  const [mostrarComprobante, setMostrarComprobante] = useState(false);
   const [solicitudes, setSolicitudes] = useState([]);
+
+  useEffect(() => {
+    if (seccion === "nueva-solicitud") {
+      setPaso("nueva");
+    } else if (seccion === "historial") {
+      setPaso("historial");
+    } else if (seccion === "estadisticas") {
+      setPaso("estadisticas");
+    } else {
+      setPaso("cobrar");
+    }
+  }, [seccion]);
   const [cargando, setCargando] = useState(false);
   const [buscandoRuc, setBuscandoRuc] = useState(false);
   const [errorRuc, setErrorRuc] = useState("");
@@ -99,6 +114,40 @@ function PanelCajero({ seccion }) {
     setPagoConfirmado(true);
   };
 
+  const registrarCobroCaja = async (sol) => {
+    const cod = "CAJ-" + Date.now().toString().slice(-8);
+    try {
+      setCargando(true);
+      const cambios = {
+        estadoPago: "Confirmado",
+        estado: "Pagado",
+        comprobantePago: `Pago en caja - ${cod}`,
+        metodoPago: "Pago en caja",
+        montoPagado: MONTO_TRAMITE,
+        notificaciones: [
+          ...(sol.notificaciones || []),
+          {
+            fecha: new Date().toLocaleString("es-PE"),
+            titulo: "Pago realizado",
+            mensaje: `Se registró tu pago presencial por S/${MONTO_TRAMITE.toFixed(2)} con código ${cod}. Trámite pasa a revisión.`,
+            leida: false,
+          },
+        ],
+      };
+
+      await actualizarSolicitud(sol.id, cambios);
+      const actualizada = { ...sol, ...cambios };
+      setSolicitudSeleccionada(actualizada);
+      setMostrarComprobante(true);
+      await cargarSolicitudes();
+    } catch (err) {
+      console.error(err);
+      alert("Error al registrar pago en caja: " + err.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
   const programarVisita = () => {
     if (!fechaVisita) {
       alert("Debe seleccionar una fecha para la inspección.");
@@ -178,11 +227,33 @@ function PanelCajero({ seccion }) {
   });
 
   const solicitudesPendientes = solicitudes.filter(
-    (s) => s.estado === "En revision" || s.estado === "Programada para inspeccion"
+    (s) => s.estado === "En revision" || s.estado === "Programada para inspeccion" || s.estado === "En revisión" || s.estado === "Inspección programada"
   );
 
   const solicitudesCerradas = solicitudes.filter(
-    (s) => s.estado === "Licencia aprobada" || s.estado === "Licencia rechazada"
+    (s) => s.estado === "Licencia aprobada" || s.estado === "Licencia rechazada" || s.estado === "Aprobado" || s.estado === "Licencia emitida" || s.estado === "Rechazado"
+  );
+
+  const solicitudesPendientesPago = solicitudes.filter((s) => {
+    const esPendiente = s.estadoPago === "Pendiente" || s.estadoPago === "Pendiente de pago" || s.estado === "Pendiente de pago";
+    const noConfirmado = s.estadoPago !== "Confirmado";
+    return esPendiente && noConfirmado;
+  });
+
+  const solicitudesFiltradasCajero = solicitudesPendientesPago.filter((s) => {
+    if (!busquedaCajero.trim()) return true;
+    const q = busquedaCajero.toLowerCase();
+    return (
+      (s.id || "").toLowerCase().includes(q) ||
+      (s.correoUsuario || "").toLowerCase().includes(q) ||
+      (s.nombreSolicitante || "").toLowerCase().includes(q) ||
+      (s.dni || "").includes(q) ||
+      (s.ruc || "").includes(q)
+    );
+  });
+
+  const solicitudesPagadas = solicitudes.filter(
+    (s) => s.estadoPago === "Confirmado" && s.metodoPago === "Pago en caja"
   );
 
   const badgeClase = (estado = "") => {
@@ -251,10 +322,10 @@ function PanelCajero({ seccion }) {
       <div className="tabs-panel">
         <button
           type="button"
-          className={paso === "cola" ? "tab-active" : ""}
-          onClick={() => setPaso("cola")}
+          className={paso === "cobrar" ? "tab-active" : ""}
+          onClick={() => setPaso("cobrar")}
         >
-          Cola de atención
+          Cobros pendientes
         </button>
         <button
           type="button"
@@ -286,9 +357,90 @@ function PanelCajero({ seccion }) {
           className={paso === "historial" ? "tab-active" : ""}
           onClick={() => setPaso("historial")}
         >
-          Historial
+          Historial de pagos
+        </button>
+        <button
+          type="button"
+          className={paso === "cola" ? "tab-active" : ""}
+          onClick={() => setPaso("cola")}
+        >
+          Cola de atención
         </button>
       </div>
+
+      {paso === "cobrar" && (
+        <section className="section-card">
+          <div className="section-header">
+            <div>
+              <h2>Cobro de Derecho de Trámite</h2>
+              <p>Busca expedientes pendientes de pago y registra el abono presencial en caja (S/ 3.00).</p>
+            </div>
+          </div>
+
+          <div className="admin-filtros" style={{ margin: "0 0 20px" }}>
+            <input
+              type="text"
+              placeholder="Buscar por DNI, Correo, o Número de Expediente..."
+              value={busquedaCajero}
+              onChange={(e) => setBusquedaCajero(e.target.value)}
+              style={{ width: "100%", padding: "14px 20px", borderRadius: "12px", border: "1px solid #cbd5e1" }}
+            />
+          </div>
+
+          {solicitudesFiltradasCajero.length === 0 ? (
+            <div className="empty-state">
+              <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128179;</div>
+              <h3>No hay solicitudes pendientes de pago</h3>
+              <p>Las solicitudes que seleccionen pago en caja aparecerán aquí.</p>
+            </div>
+          ) : (
+            <div className="tabla-container">
+              <table className="modern-table">
+                <thead>
+                  <tr>
+                    <th>Expediente</th>
+                    <th>Solicitante</th>
+                    <th>Negocio</th>
+                    <th>Monto</th>
+                    <th>Estado Pago</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {solicitudesFiltradasCajero.map((s) => (
+                    <tr key={s.id}>
+                      <td><strong>{s.id}</strong><small>{s.fecha}</small></td>
+                      <td>
+                        <strong>{s.nombreSolicitante || "Sin nombre"}</strong>
+                        <small>{s.correoUsuario || "Sin correo"}</small>
+                      </td>
+                      <td>
+                        <strong>{s.nombreNegocio || "Sin negocio"}</strong>
+                        <small>RUC: {s.ruc || "N/A"}</small>
+                      </td>
+                      <td><strong>S/ 3.00</strong></td>
+                      <td>
+                        <span className="badge warning">Pendiente</span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-ok btn-sm"
+                          onClick={() => registrarCobroCaja(s)}
+                          disabled={cargando}
+                          style={{ padding: "8px 16px", borderRadius: "8px" }}
+                        >
+                          Registrar Pago
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {paso === "cola" && (
         <section className="section-card">
@@ -542,11 +694,11 @@ function PanelCajero({ seccion }) {
             </div>
           </div>
 
-          {solicitudes.length === 0 ? (
+          {solicitudesPagadas.length === 0 ? (
             <div className="empty-state">
               <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128202;</div>
-              <h3>No hay solicitudes aún</h3>
-              <p>Las solicitudes registradas aparecerán aquí.</p>
+              <h3>No hay solicitudes pagadas en caja aún</h3>
+              <p>Los comprobantes de pago registrados en caja aparecerán aquí.</p>
             </div>
           ) : (
             <div className="tabla-container">
@@ -559,12 +711,11 @@ function PanelCajero({ seccion }) {
                     <th>Trámite</th>
                     <th>Canal</th>
                     <th>Pago</th>
-                    <th>Fecha inspección</th>
-                    <th>Estado</th>
+                    <th>Acción</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {solicitudes.map((s) => (
+                  {solicitudesPagadas.map((s) => (
                     <tr key={s.id}>
                       <td><strong>{s.id}</strong><small>{s.fecha}</small></td>
                       <td><strong>{s.nombreNegocio}</strong><small>{s.razonSocial}</small></td>
@@ -575,9 +726,19 @@ function PanelCajero({ seccion }) {
                           {s.canalRegistro === "presencial" ? "Presencial" : "Online"}
                         </span>
                       </td>
-                      <td><span className={`badge ${s.estadoPago === "Confirmado" ? "ok" : "warning"}`}>{s.estadoPago || "Pendiente"}</span></td>
-                      <td>{s.fechaVisitaInspector || "---"}</td>
-                      <td><span className={`badge ${badgeClase(s.estado)}`}>{s.estado}</span></td>
+                      <td><span className="badge ok">Confirmado</span></td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-outline btn-sm"
+                          onClick={() => {
+                            setSolicitudSeleccionada(s);
+                            setMostrarComprobante(true);
+                          }}
+                        >
+                          Ver Recibo
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -585,6 +746,72 @@ function PanelCajero({ seccion }) {
             </div>
           )}
         </section>
+      )}
+
+      {mostrarComprobante && solicitudSeleccionada && (
+        <div className="admin-form-modal" style={{ zIndex: 1000 }}>
+          <div className="admin-form-card" style={{ maxWidth: "450px" }}>
+            <div className="admin-form-header" style={{ borderBottom: "2px dashed #cbd5e1" }}>
+              <div style={{ textAlign: "center", width: "100%" }}>
+                <span style={{ fontSize: "28px" }}>🏛️</span>
+                <h3 style={{ margin: "4px 0", color: "#1f3b57" }}>Municipalidad de Trujillo</h3>
+                <span style={{ fontSize: "11px", color: "#64748b" }}>RUC: 20481265478</span>
+              </div>
+              <button type="button" onClick={() => setMostrarComprobante(false)} style={{ position: "absolute", right: "20px", top: "20px" }}>✕</button>
+            </div>
+            <div style={{ padding: "20px 0", fontSize: "14px", color: "#334155" }}>
+              <h4 style={{ textAlign: "center", margin: "0 0 16px", color: "#0f766e", letterSpacing: "0.05em" }}>RECIBO DE CAJA MUNICIPAL</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", margin: "0 0 16px" }}>
+                <div>
+                  <span style={{ fontSize: "12px", color: "#64748b" }}>N° EXPEDIENTE</span>
+                  <p style={{ margin: 0, fontWeight: "bold" }}>{solicitudSeleccionada.id}</p>
+                </div>
+                <div>
+                  <span style={{ fontSize: "12px", color: "#64748b" }}>FECHA Y HORA</span>
+                  <p style={{ margin: 0, fontWeight: "bold" }}>{solicitudSeleccionada.fecha}</p>
+                </div>
+                <div>
+                  <span style={{ fontSize: "12px", color: "#64748b" }}>CONTRIBUYENTE</span>
+                  <p style={{ margin: 0, fontWeight: "bold" }}>{solicitudSeleccionada.nombreSolicitante || "N/A"}</p>
+                </div>
+                <div>
+                  <span style={{ fontSize: "12px", color: "#64748b" }}>RUC / DNI</span>
+                  <p style={{ margin: 0, fontWeight: "bold" }}>{solicitudSeleccionada.ruc || solicitudSeleccionada.dni || "N/A"}</p>
+                </div>
+                <div style={{ gridColumn: "span 2" }}>
+                  <span style={{ fontSize: "12px", color: "#64748b" }}>RAZÓN SOCIAL / NEGOCIO</span>
+                  <p style={{ margin: 0, fontWeight: "bold" }}>{solicitudSeleccionada.nombreNegocio || solicitudSeleccionada.razonSocial || "N/A"}</p>
+                </div>
+                <div>
+                  <span style={{ fontSize: "12px", color: "#64748b" }}>CONCEPTO</span>
+                  <p style={{ margin: 0, fontWeight: "bold" }}>Derecho de Trámite - Licencia</p>
+                </div>
+                <div>
+                  <span style={{ fontSize: "12px", color: "#64748b" }}>CÓD. OPERACIÓN</span>
+                  <p style={{ margin: 0, fontWeight: "bold", color: "#b45309" }}>{solicitudSeleccionada.comprobantePago?.split(" - ")[1] || "N/A"}</p>
+                </div>
+              </div>
+              <div style={{ borderTop: "2px dashed #cbd5e1", borderBottom: "2px dashed #cbd5e1", padding: "12px 0", textAlign: "center", margin: "16px 0" }}>
+                <span style={{ fontSize: "13px", color: "#64748b", textTransform: "uppercase" }}>Total Pagado</span>
+                <p style={{ margin: 0, fontSize: "28px", fontWeight: "800", color: "#166534" }}>S/ {Number(solicitudSeleccionada.montoPagado || 3).toFixed(2)}</p>
+              </div>
+              <p style={{ fontSize: "11px", color: "#94a3b8", textAlign: "center", margin: 0 }}>Cajero responsable: {solicitudSeleccionada.nombreProgramador || usuario?.nombre || "Cajero Municipal"}</p>
+            </div>
+            <div className="admin-form-actions" style={{ display: "flex", gap: "10px" }}>
+              <button type="button" onClick={() => setMostrarComprobante(false)} style={{ flex: 1 }}>Cerrar</button>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  alert("Imprimiendo recibo...\nOperación exitosa.");
+                }}
+              >
+                🖨️ Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

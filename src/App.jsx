@@ -72,7 +72,7 @@ function App() {
 
   const seccionesPorRol = {
     negocio: ["inicio", "nueva-solicitud", "mis-solicitudes", "notificaciones", "mi-cuenta"],
-    cajero: ["inicio", "nueva-solicitud", "historial", "estadisticas"],
+    cajero: ["inicio", "nueva-solicitud", "historial"],
     funcionario: ["inicio", "solicitudes", "notificaciones", "estadisticas", "reportes"],
     inspector: ["inicio", "inspecciones-hoy", "historial", "estadisticas"],
     administrador: ["inicio", "gestion-usuarios", "gestion-roles", "auditoria", "config-sistema"],
