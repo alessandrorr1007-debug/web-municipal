@@ -86,6 +86,17 @@ export const guardarCodigoVerificacion = async (correo) => {
     usado: false,
   });
 
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+  const response = await fetch(`${apiUrl}/api/enviar-codigo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correo, codigo }),
+  });
+
+  if (!response.ok) {
+    throw new Error("No se pudo enviar el correo de verificación");
+  }
+
   return codigo;
 };
 

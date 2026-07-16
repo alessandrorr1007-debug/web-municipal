@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
+import nodemailer from "nodemailer";
 
 import {
   MercadoPagoConfig,
@@ -156,6 +157,65 @@ app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
       error: "No se pudo verificar el pago",
       detalle: error.message,
     });
+  }
+});
+
+const SMTP_EMAIL = process.env.SMTP_EMAIL;
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: SMTP_EMAIL,
+    pass: SMTP_PASSWORD,
+  },
+});
+
+console.log("SMTP EMAIL:", SMTP_EMAIL ? "Existe" : "No existe");
+
+/* =========================
+   ENVIAR CODIGO DE VERIFICACION
+========================= */
+
+app.post("/api/enviar-codigo", async (req, res) => {
+  try {
+    const { correo, codigo } = req.body;
+
+    if (!correo || !codigo) {
+      return res.status(400).json({ error: "Faltan correo o código" });
+    }
+
+    await transporter.sendMail({
+      from: `"Municipalidad de Trujillo" <${SMTP_EMAIL}>`,
+      to: correo,
+      subject: "Código de verificación - Sistema de Licencias",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #f8fafc; border-radius: 16px;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <div style="width: 64px; height: 64px; background: #1f3b57; border-radius: 14px; display: inline-grid; place-items: center; color: white; font-size: 28px; font-weight: bold;">&#9881;</div>
+          </div>
+          <h1 style="color: #0f172a; font-size: 22px; text-align: center; margin: 0 0 8px;">Verifica tu correo electrónico</h1>
+          <p style="color: #64748b; font-size: 14px; text-align: center; margin: 0 0 24px; line-height: 1.5;">
+            Usa el siguiente código de verificación para completar tu registro en el Sistema de Licencias Municipales.
+          </p>
+          <div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #64748b; font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px;">Código de verificación</p>
+            <p style="color: #1f3b57; font-size: 36px; font-weight: bold; letter-spacing: 8px; margin: 0;">${codigo}</p>
+          </div>
+          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0 0 8px;">
+            Este código expira en 5 minutos. Si no solicitaste este registro, ignora este correo.
+          </p>
+          <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">
+            Municipalidad de Trujillo &mdash; Sistema de Licencias v1.0
+          </p>
+        </div>
+      `,
+    });
+
+    res.json({ mensaje: "Correo enviado correctamente" });
+  } catch (error) {
+    console.error("ERROR ENVIANDO CODIGO:", error.message);
+    res.status(500).json({ error: "No se pudo enviar el correo de verificación" });
   }
 });
 
