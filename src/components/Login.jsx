@@ -239,16 +239,21 @@ function Login({ onVolver, modoInicial }) {
     try {
       const data = await consultarDni(dni);
 
-      setNombres(data.nombres || "");
-      setApellidoPaterno(data.apellido_paterno || "");
-      setApellidoMaterno(data.apellido_materno || "");
+      if (!data.esMayorDeEdad) {
+        setError("❌ Solo las personas mayores de 18 años pueden registrarse en el Sistema Municipal de Licencias.");
+        setDniValidado(false);
+        return;
+      }
+
       setNombre(data.nombre_completo || "");
       setDniValidado(true);
       setSuccessDni("✅ DNI encontrado correctamente.");
     } catch (err) {
       console.error(err);
       const msg = err?.message || "";
-      if (msg.includes("no encontrado") || msg.includes("RENIEC") || msg.includes("404")) {
+      if (msg.includes("validar la mayoría de edad") || msg.includes("mayoría de edad")) {
+        setError("❌ No fue posible validar la mayoría de edad. Intente nuevamente.");
+      } else if (msg.includes("no encontrado") || msg.includes("RENIEC") || msg.includes("404")) {
         setError("❌ DNI no encontrado en RENIEC.");
       } else {
         setError("❌ No fue posible consultar RENIEC. Intente nuevamente.");

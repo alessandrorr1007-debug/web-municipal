@@ -124,20 +124,42 @@ app.get("/api/consultar-dni/:dni", async (req, res) => {
       return res.status(404).json({ error: "DNI no encontrado" });
     }
 
+    const birthDateStr = data.birth_date || data.birthdate || data.fecha_nacimiento || data.date_of_birth;
+    if (!birthDateStr) {
+      console.log("Fecha de nacimiento no encontrada en la respuesta de Decolecta.");
+      return res.status(400).json({ error: "No fue posible validar la mayoría de edad. Intente nuevamente." });
+    }
+
+    let birthDate;
+    if (birthDateStr.includes("-")) {
+      birthDate = new Date(birthDateStr);
+    } else if (birthDateStr.includes("/")) {
+      const parts = birthDateStr.split("/");
+      if (parts.length === 3) {
+        birthDate = new Date(parts[2], parts[1] - 1, parts[0]);
+      }
+    }
+
+    if (!birthDate || isNaN(birthDate.getTime())) {
+      console.log("Formato de fecha de nacimiento inválido:", birthDateStr);
+      return res.status(400).json({ error: "No fue posible validar la mayoría de edad. Intente nuevamente." });
+    }
+
+    const today = new Date();
+    let edad = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      edad--;
+    }
+
+    const esMayorDeEdad = edad >= 18;
+
     const payload = {
       success: true,
-      dni: data.document_number || dni,
-      nombres: data.first_name || "",
-      apellidoPaterno: data.first_last_name || "",
-      apellidoMaterno: data.second_last_name || "",
       nombreCompleto: data.full_name || `${data.first_name || ""} ${data.first_last_name || ""} ${data.second_last_name || ""}`.trim(),
-      data: {
-        dni: data.document_number || dni,
-        nombres: data.first_name || "",
-        apellido_paterno: data.first_last_name || "",
-        apellido_materno: data.second_last_name || "",
-        nombre_completo: data.full_name || `${data.first_name || ""} ${data.first_last_name || ""} ${data.second_last_name || ""}`.trim(),
-      }
+      dni: data.document_number || dni,
+      edad: edad,
+      esMayorDeEdad: esMayorDeEdad
     };
 
     console.log("Objeto que se envía al frontend:", JSON.stringify(payload, null, 2));

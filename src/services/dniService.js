@@ -27,10 +27,9 @@ export const consultarDni = async (dni) => {
   }
 
   return {
-    dni: data.data.dni,
-    nombres: data.data.nombres,
-    apellido_paterno: data.data.apellido_paterno,
-    apellido_materno: data.data.apellido_materno,
-    nombre_completo: data.data.nombre_completo || `${data.data.nombres} ${data.data.apellido_paterno} ${data.data.apellido_materno}`.trim(),
+    dni: data.dni,
+    nombre_completo: data.nombreCompleto,
+    edad: data.edad,
+    esMayorDeEdad: data.esMayorDeEdad,
   };
 };
