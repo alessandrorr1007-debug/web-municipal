@@ -138,5 +138,42 @@ export const verificarCodigoVerificacion = async (correo, codigoIngresado) => {
 };
 
 export const enviarRecuperacion = async (correo) => {
-  await sendPasswordResetEmail(auth, correo);
+  const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+
+  console.log("[DEBUG] Recuperación - Código generado:", codigo, "para:", correo);
+
+  const q = query(collection(db, "codigos_verificacion"), where("correo", "==", correo));
+  const snapshot = await getDocs(q);
+  for (const d of snapshot.docs) {
+    await deleteDoc(doc(db, "codigos_verificacion", d.id));
+  }
+
+  await addDoc(collection(db, "codigos_verificacion"), {
+    correo,
+    codigo,
+    expiracion: Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000)),
+    usado: false,
+  });
+
+  console.log("[DEBUG] Código de recuperación guardado en Firestore");
+
+  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const url = `${apiUrl}/api/enviar-recuperacion`;
+  console.log("[DEBUG] Llamando a:", url);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correo, codigo }),
+  });
+
+  console.log("[DEBUG] Status HTTP:", response.status);
+  const texto = await response.text();
+  console.log("[DEBUG] Respuesta:", texto);
+
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}: ${texto}`);
+  }
+
+  return codigo;
 };

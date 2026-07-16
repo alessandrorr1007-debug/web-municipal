@@ -261,6 +261,70 @@ app.post("/api/enviar-codigo", async (req, res) => {
   }
 });
 
+app.post("/api/enviar-recuperacion", async (req, res) => {
+  console.log("=== ENDPOINT /api/enviar-recuperacion ===");
+
+  try {
+    const { correo, codigo } = req.body;
+
+    if (!correo || !codigo) {
+      return res.status(400).json({ error: "Faltan correo o código" });
+    }
+
+    console.log("1. Email destino:", correo, "- Código:", codigo);
+
+    if (!transporter) {
+      console.error("2. SMTP no configurado");
+      return res.status(500).json({ error: "Servicio de correo no configurado" });
+    }
+
+    console.log("2. Transporter SMTP disponible");
+
+    const mailOptions = {
+      from: `"Municipalidad de Trujillo" <${SMTP_EMAIL}>`,
+      to: correo,
+      subject: "Recuperación de contraseña - Municipalidad de Trujillo",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #f8fafc; border-radius: 16px;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <div style="width: 64px; height: 64px; background: #1f3b57; border-radius: 14px; display: inline-grid; place-items: center; color: white; font-size: 28px; font-weight: bold;">&#128274;</div>
+          </div>
+          <h1 style="color: #0f172a; font-size: 22px; text-align: center; margin: 0 0 8px;">Recuperar contraseña</h1>
+          <p style="color: #64748b; font-size: 14px; text-align: center; margin: 0 0 24px; line-height: 1.5;">
+            Recibimos una solicitud para restablecer la contraseña de tu cuenta en el Sistema de Licencias Municipales.
+          </p>
+          <div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #64748b; font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px;">Tu código de verificación</p>
+            <p style="color: #1f3b57; font-size: 36px; font-weight: bold; letter-spacing: 8px; margin: 0;">${codigo}</p>
+          </div>
+          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0 0 8px;">
+            Este código expira en 5 minutos. Si no solicitaste este cambio, ignora este correo.
+          </p>
+          <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">
+            Municipalidad de Trujillo &mdash; Sistema de Licencias v1.0
+          </p>
+        </div>
+      `,
+    };
+
+    console.log("3. Llamando a transporter.sendMail()...");
+    const result = await transporter.sendMail(mailOptions);
+
+    console.log("4. Correo de recuperación enviado:");
+    console.log("   messageId:", result.messageId);
+    console.log("   accepted:", result.accepted);
+
+    res.json({ mensaje: "Correo de recuperación enviado correctamente" });
+  } catch (error) {
+    console.error("=== ERROR ENVIANDO RECUPERACIÓN ===");
+    console.error("Mensaje:", error.message);
+    console.error("Código:", error.code);
+    console.error("Stack:", error.stack);
+    console.error("=== FIN ERROR ===");
+    res.status(500).json({ error: "No se pudo enviar el correo de recuperación", detalle: error.message });
+  }
+});
+
 /* =========================
    STATIC FILES & SPA
 ========================= */
