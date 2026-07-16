@@ -169,14 +169,16 @@ const SMTP_EMAIL = process.env.SMTP_EMAIL;
 const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
   auth: {
     user: SMTP_EMAIL,
     pass: SMTP_PASSWORD,
   },
 });
 
-console.log("SMTP EMAIL:", SMTP_EMAIL ? "Existe" : "No existe");
+console.log("SMTP EMAIL:", SMTP_EMAIL ? "Configurado" : "No configurado");
 
 /* =========================
    ENVIAR CODIGO DE VERIFICACION
@@ -227,7 +229,7 @@ app.post("/api/enviar-codigo", async (req, res) => {
 const distPath = join(__dirname, "..", "dist");
 app.use(express.static(distPath));
 
-app.get("*", (req, res) => {
+app.use((req, res) => {
   res.sendFile(join(distPath, "index.html"));
 });
 
