@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { consultarRuc } from "../services/rucService";
+import { consultarDni } from "../services/dniService";
 import { crearPreferenciaPago } from "../services/pagoService";
 import {
   guardarSolicitud,
@@ -22,6 +23,32 @@ function PanelNegocio({ seccion }) {
   const [errorRuc, setErrorRuc] = useState("");
   const [successRuc, setSuccessRuc] = useState("");
   const [rucValidado, setRucValidado] = useState(false);
+  
+  // Estados para validación de DNI del Solicitante
+  const [dniValidado, setDniValidado] = useState(false);
+  const [dniSolicitante, setDniSolicitante] = useState("");
+  const [nombresSolicitante, setNombresSolicitante] = useState("");
+  const [apellidosSolicitante, setApellidosSolicitante] = useState("");
+  const [fechaNacimientoSolicitante, setFechaNacimientoSolicitante] = useState("");
+  const [errorDni, setErrorDni] = useState("");
+  const [successDni, setSuccessDni] = useState("");
+  const [buscandoDni, setBuscandoDni] = useState(false);
+
+  // Estados para documentos específicos
+  const [docIdentidad, setDocIdentidad] = useState(null);
+  const [docFichaRuc, setDocFichaRuc] = useState(null);
+  const [docAcreditaLocal, setDocAcreditaLocal] = useState(null);
+  const [tipoPropiedadLocal, setTipoPropiedadLocal] = useState("Contrato de alquiler");
+  const [docPlano, setDocPlano] = useState(null);
+  const [docDj, setDocDj] = useState(null);
+  const [docSanitario, setDocSanitario] = useState(null);
+  const [docDigemid, setDocDigemid] = useState(null);
+  const [docRepresentacion, setDocRepresentacion] = useState(null);
+  const [relacionSolicitante, setRelacionSolicitante] = useState("Dueño");
+
+  // Paso del wizard de nueva solicitud (1=DNI, 2=RUC, 3=Tipo, 4=Documentos)
+  const [wizardPaso, setWizardPaso] = useState(1);
+
   const [paso, setPaso] = useState("misSolicitudes");
   const [metodoPago, setMetodoPago] = useState("");
   const [estadoPago, setEstadoPago] = useState("Sin pago");
@@ -159,6 +186,41 @@ function PanelNegocio({ seccion }) {
     }
   }, [seccion]);
 
+  const buscarDni = async () => {
+    setErrorDni("");
+    setSuccessDni("");
+    setDniValidado(false);
+    setNombresSolicitante("");
+    setApellidosSolicitante("");
+    setFechaNacimientoSolicitante("");
+
+    if (!/^\d{8}$/.test(dniSolicitante.trim())) {
+      setErrorDni("El DNI debe tener exactamente 8 dígitos.");
+      return;
+    }
+
+    try {
+      setBuscandoDni(true);
+      const data = await consultarDni(dniSolicitante.trim());
+      setNombresSolicitante(data.nombres || "");
+      const apellidos = [data.apellido_paterno, data.apellido_materno].filter(Boolean).join(" ");
+      setApellidosSolicitante(apellidos);
+      setFechaNacimientoSolicitante(data.fecha_nacimiento || "");
+      setDniValidado(true);
+      setSuccessDni("Identidad verificada correctamente.");
+    } catch (error) {
+      console.error(error);
+      const msg = error.message || "";
+      if (msg.includes("no encontrado") || msg.includes("404")) {
+        setErrorDni("DNI no encontrado. Verifique el número ingresado.");
+      } else {
+        setErrorDni(msg || "Error al consultar el DNI. Intente nuevamente.");
+      }
+    } finally {
+      setBuscandoDni(false);
+    }
+  };
+
   const manejarCambio = (e) => {
     let valor = e.target.value;
 
@@ -267,8 +329,8 @@ function PanelNegocio({ seccion }) {
   };
 
   const continuarPago = () => {
-    if (!form.tipoTramite) {
-      alert("Debe seleccionar el tipo de trámite.");
+    if (!dniValidado) {
+      alert("Debe validar el DNI del solicitante.");
       return;
     }
 
@@ -277,13 +339,9 @@ function PanelNegocio({ seccion }) {
       return;
     }
 
-    if (archivos.length === 0) {
-      alert("Debe subir al menos un documento PDF.");
-      return;
-    }
-
-    if (!form.nombreNegocio || !form.razonSocial || !form.direccion) {
-      alert("Complete todos los campos obligatorios.");
+    const docObligatorios = [docIdentidad, docFichaRuc, docAcreditaLocal, docPlano, docDj];
+    if (docObligatorios.some((d) => !d)) {
+      alert("Debe subir todos los documentos obligatorios antes de continuar.");
       return;
     }
 
@@ -354,22 +412,43 @@ function PanelNegocio({ seccion }) {
       return;
     }
 
-    if (archivos.length === 0) {
+    // Recopilar todos los documentos cargados en un arreglo unificado
+    const todosLosDocs = [
+      docIdentidad,
+      docFichaRuc,
+      docAcreditaLocal,
+      docPlano,
+      docDj,
+      docSanitario,
+      docDigemid,
+      docRepresentacion,
+      ...archivos,
+    ].filter(Boolean);
+
+    if (todosLosDocs.length === 0) {
       alert("Debe subir al menos un PDF antes de enviar la solicitud.");
       return;
     }
+
+    // Determinar tipo de contribuyente según RUC
+    const tipoContribuyente = form.ruc.startsWith("20") ? "Persona Jurídica" : "Persona Natural";
 
     try {
       setGuardando(true);
 
       const pdfsSubidos = await Promise.all(
-        archivos.map((archivo) => convertirPdfABase64(archivo))
+        todosLosDocs.map((archivo) => convertirPdfABase64(archivo))
       );
 
       const nueva = await guardarSolicitud({
         uidUsuario: usuario?.uid || "",
         correoUsuario: usuario?.correo || "",
         tipoTramite: form.tipoTramite,
+        // Datos del solicitante (RENIEC)
+        dniSolicitante,
+        nombresSolicitante,
+        apellidosSolicitante,
+        // Datos del negocio (SUNAT)
         ruc: form.ruc,
         nombreNegocio: form.nombreNegocio,
         razonSocial: form.razonSocial,
@@ -380,16 +459,21 @@ function PanelNegocio({ seccion }) {
         departamento: form.departamento,
         provincia: form.provincia,
         distrito: form.distrito,
+        // Tipo de contribuyente y relación
+        tipoContribuyente,
+        relacionSolicitante,
+        // Documentos
         archivosPdf: pdfsSubidos,
         archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
         archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
+        // Pago
         metodoPago,
         estadoPago,
         comprobantePago:
           estadoPago === "Confirmado"
             ? `Pago confirmado mediante ${metodoPago}`
             : (metodoPago === "Pago presencial en caja" ? "Pendiente de pago en caja" : `Pago generado mediante ${metodoPago}`),
-        estado: metodoPago === "Pago presencial en caja" ? "Pendiente de pago" : "En revisión",
+        estado: metodoPago === "Pago presencial en caja" ? "Pendiente de revisión" : "Pendiente de revisión",
         inspeccion: "Sin inspección",
         recomendacionInspector: "",
         observacionInspector: "",
@@ -416,14 +500,35 @@ function PanelNegocio({ seccion }) {
 
   const nuevaSolicitud = () => {
     setPaso("solicitud");
+    setWizardPaso(1);
     setMetodoPago("");
     setEstadoPago("Sin pago");
     setArchivos([]);
     setRucValidado(false);
     setErrorRuc("");
+    setSuccessRuc("");
     setExpediente("");
     setDetallePago(null);
     setProcesandoPago(false);
+    // Limpiar estados de DNI
+    setDniValidado(false);
+    setDniSolicitante("");
+    setNombresSolicitante("");
+    setApellidosSolicitante("");
+    setFechaNacimientoSolicitante("");
+    setErrorDni("");
+    setSuccessDni("");
+    // Limpiar documentos
+    setDocIdentidad(null);
+    setDocFichaRuc(null);
+    setDocAcreditaLocal(null);
+    setDocPlano(null);
+    setDocDj(null);
+    setDocSanitario(null);
+    setDocDigemid(null);
+    setDocRepresentacion(null);
+    setRelacionSolicitante("Dueño");
+    setTipoPropiedadLocal("Contrato de alquiler");
     localStorage.removeItem("mp_pago_estado");
     localStorage.removeItem("mp_pago_pendiente");
 
@@ -436,6 +541,9 @@ function PanelNegocio({ seccion }) {
       giro: "",
       estadoSunat: "",
       condicionSunat: "",
+      departamento: "",
+      provincia: "",
+      distrito: "",
     });
   };
 
@@ -803,114 +911,510 @@ function PanelNegocio({ seccion }) {
 
       {seccion === "nueva-solicitud" && (
         <>
-          {paso === "solicitud" && (
-            <section className="section-card section-card-modern">
-              <div className="section-header">
-                <div>
-                  <h2>Nueva solicitud</h2>
-                  <p>Completa los datos del negocio y adjunta hasta 5 documentos PDF.</p>
-                </div>
-              </div>
+          {paso === "solicitud" && (() => {
+            // Helper: subir un doc específico (PDF, max 5MB)
+            const subirDoc = (setter) => (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              if (file.type !== "application/pdf") {
+                alert("Solo se permiten archivos en formato PDF.");
+                return;
+              }
+              if (file.size > 5 * 1024 * 1024) {
+                alert("El archivo no debe superar los 5 MB.");
+                return;
+              }
+              setter(file);
+            };
 
-              <div className="formulario formulario-modern">
-                <div className="form-block">
-                  <div className="block-title"><span>1</span><div><h3>Tipo de trámite</h3><p>Selecciona si registraras una licencia nueva o una renovación.</p></div></div>
-                  <select name="tipoTramite" value={form.tipoTramite} onChange={manejarCambio}>
-                    <option value="Nueva licencia">Nueva licencia</option>
-                    <option value="Renovación anual">Renovación anual</option>
-                  </select>
-                </div>
+            // Determinar si RUC es persona natural (comienza con 10)
+            const esPersonaNatural = form.ruc.startsWith("10");
+            const esPersonaJuridica = form.ruc.startsWith("20");
 
-                <div className="form-block">
-                  <div className="block-title"><span>2</span><div><h3>Validar RUC</h3><p>Busca el RUC para completar automáticamente los datos SUNAT.</p></div></div>
-                  <div className="ruc-row ruc-row-modern">
-                    <input type="text" name="ruc" placeholder="Ingrese RUC de 11 digitos" value={form.ruc} onChange={manejarCambio} maxLength="11" />
-                    <button type="button" onClick={buscarRuc} disabled={buscando}>{buscando ? "Buscando..." : "Consultar SUNAT"}</button>
-                  </div>
-                  {errorRuc && <p className="error" style={{ color: "#dc2626", fontWeight: "600", marginTop: "8px" }}>{errorRuc}</p>}
-                  {successRuc && <p className="success" style={{ color: "#166534", fontWeight: "600", marginTop: "8px" }}>{successRuc}</p>}
-                </div>
+            // Verificar si el DNI coincide con el RUC (persona natural: 10 + DNI + dígito = 11 dígitos)
+            const dniEnRuc = esPersonaNatural && form.ruc.length === 11
+              ? form.ruc.slice(2, 10) === dniSolicitante.trim()
+              : true;
 
-                <div className="form-block">
-                  <div className="block-title"><span>3</span><div><h3>Datos del negocio</h3><p>Verifica que la información obtenida sea correcta.</p></div></div>
-                  <div className="form-grid">
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Razón social</label>
-                      <input type="text" name="razonSocial" placeholder="Razón social" value={form.razonSocial} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Dirección fiscal</label>
-                      <input type="text" name="direccion" placeholder="Dirección del local" value={form.direccion} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Nombre comercial / de fantasía</label>
-                      <input type="text" name="nombreNegocio" placeholder="Nombre del negocio" value={form.nombreNegocio} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Giro comercial</label>
-                      <input type="text" name="giro" placeholder="Giro comercial" value={form.giro} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
-                  </div>
-                  <div className="form-grid" style={{ marginTop: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Estado SUNAT</label>
-                      <input type="text" name="estadoSunat" placeholder="Estado SUNAT" value={form.estadoSunat} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Condición SUNAT</label>
-                      <input type="text" name="condicionSunat" placeholder="Condición SUNAT" value={form.condicionSunat} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Departamento</label>
-                      <input type="text" name="departamento" placeholder="Departamento" value={form.departamento} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Provincia</label>
-                      <input type="text" name="provincia" placeholder="Provincia" value={form.provincia} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", display: "block", marginBottom: "4px" }}>Distrito</label>
-                      <input type="text" name="distrito" placeholder="Distrito" value={form.distrito} readOnly disabled style={{ background: "#f1f5f9" }} />
-                    </div>
+            // Giro requiere doc sanitario
+            const giroNormalizado = (form.giro || "").toLowerCase();
+            const requiereDocSanitario = giroNormalizado.includes("restaurante") ||
+              giroNormalizado.includes("alimento") || giroNormalizado.includes("comida") ||
+              giroNormalizado.includes("bar") || giroNormalizado.includes("cocina") ||
+              giroNormalizado.includes("cafeteria") || giroNormalizado.includes("cafetera");
+            const requiereDocDigemid = giroNormalizado.includes("farmacia") ||
+              giroNormalizado.includes("botica") || giroNormalizado.includes("medicamento") ||
+              giroNormalizado.includes("droguería");
+            const requiereDocRepresentacion = esPersonaJuridica &&
+              (relacionSolicitante === "Representante legal" || relacionSolicitante === "Apoderado");
+
+            // Indicador de progreso
+            const pasoLabels = ["Datos del solicitante", "Datos del negocio", "Tipo de contribuyente", "Documentos"];
+
+            return (
+              <section className="section-card section-card-modern">
+                <div className="section-header">
+                  <div>
+                    <h2>Nueva solicitud de licencia</h2>
+                    <p>Complete cada paso para registrar su solicitud de funcionamiento.</p>
                   </div>
                 </div>
 
-                <div className="form-block">
-                  <div className="block-title"><span>4</span><div><h3>Documentos PDF</h3><p>Sube los archivos del trámite. Puedes arrastrarlos aquí.</p></div></div>
-                  <div className="drop-zone drop-zone-modern" onDrop={manejarDrop} onDragOver={(e) => e.preventDefault()}>
-                    <div className="empty-icon">&#128206;</div>
-                    <p>Subir documentos del trámite en PDF</p>
-                    <span>Máximo 5 PDFs. Arrastra tus archivos o seleccionalos.</span>
-                    <label className="file-label">Elegir PDFs<input type="file" accept=".pdf" multiple onChange={manejarArchivos} hidden /></label>
-                    {archivos.length > 0 && (
-                      <div className="archivo-box">
-                        {archivos.map((file, index) => (
-                          <div key={index} className="archivo-item">
-                            <p className="archivo-seleccionado">PDF {index + 1}: {file.name}</p>
-                            <button type="button" className="btn-quitar" onClick={() => quitarArchivo(index)}>Quitar</button>
+                {/* Indicador de pasos */}
+                <div style={{ display: "flex", alignItems: "center", gap: "0", marginBottom: "32px", padding: "0 4px" }}>
+                  {pasoLabels.map((label, idx) => {
+                    const num = idx + 1;
+                    const activo = wizardPaso === num;
+                    const completado = wizardPaso > num;
+                    return (
+                      <div key={num} style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                          <div style={{
+                            width: "36px", height: "36px", borderRadius: "50%", display: "flex",
+                            alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "15px",
+                            flexShrink: 0,
+                            background: completado ? "#16a34a" : activo ? "#1e3a8a" : "#e2e8f0",
+                            color: completado || activo ? "#fff" : "#64748b",
+                            boxShadow: activo ? "0 0 0 4px #dbeafe" : "none",
+                            transition: "all 0.2s"
+                          }}>
+                            {completado ? "✓" : num}
+                          </div>
+                          <span style={{ fontSize: "10px", fontWeight: "600", color: activo ? "#1e3a8a" : completado ? "#16a34a" : "#94a3b8", textAlign: "center", lineHeight: 1.2, maxWidth: "70px" }}>{label}</span>
+                        </div>
+                        {idx < pasoLabels.length - 1 && (
+                          <div style={{ flex: 1, height: "3px", background: completado ? "#16a34a" : "#e2e8f0", margin: "0 4px", marginBottom: "20px", borderRadius: "2px", transition: "background 0.3s" }} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="formulario formulario-modern">
+
+                  {/* ═══════════════════════════════════════════
+                      PASO 1 — DATOS DEL SOLICITANTE (DNI)
+                  ═══════════════════════════════════════════ */}
+                  {wizardPaso >= 1 && (
+                    <div className="form-block" style={{ border: wizardPaso === 1 ? "2px solid #2563eb" : "1px solid #e2e8f0", borderRadius: "14px", padding: "20px", marginBottom: "16px" }}>
+                      <div className="block-title">
+                        <span style={{ background: dniValidado ? "#16a34a" : wizardPaso === 1 ? "#1e3a8a" : "#64748b" }}>1</span>
+                        <div>
+                          <h3>Datos del solicitante</h3>
+                          <p>Ingrese su DNI para verificar su identidad en RENIEC.</p>
+                        </div>
+                        {dniValidado && <span style={{ marginLeft: "auto", background: "#dcfce7", color: "#16a34a", padding: "4px 12px", borderRadius: "999px", fontSize: "13px", fontWeight: "700", flexShrink: 0 }}>✓ Verificado</span>}
+                      </div>
+
+                      <div className="ruc-row ruc-row-modern" style={{ marginTop: "12px" }}>
+                        <input
+                          type="text"
+                          placeholder="Número de DNI (8 dígitos)"
+                          value={dniSolicitante}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, "").slice(0, 8);
+                            setDniSolicitante(v);
+                            setDniValidado(false);
+                            setErrorDni("");
+                            setSuccessDni("");
+                            setNombresSolicitante("");
+                            setApellidosSolicitante("");
+                          }}
+                          maxLength="8"
+                          disabled={wizardPaso > 1}
+                          style={{ background: wizardPaso > 1 ? "#f1f5f9" : undefined }}
+                        />
+                        <button type="button" onClick={buscarDni} disabled={buscandoDni || wizardPaso > 1}>
+                          {buscandoDni ? "Consultando..." : "Consultar RENIEC"}
+                        </button>
+                      </div>
+
+                      {errorDni && <p style={{ color: "#dc2626", fontWeight: "600", marginTop: "8px", fontSize: "14px" }}>{errorDni}</p>}
+                      {successDni && <p style={{ color: "#16a34a", fontWeight: "600", marginTop: "8px", fontSize: "14px" }}>✓ {successDni}</p>}
+
+                      {dniValidado && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "14px" }}>
+                          <div>
+                            <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Nombres</label>
+                            <input type="text" value={nombresSolicitante} readOnly disabled style={{ background: "#f1f5f9" }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Apellidos</label>
+                            <input type="text" value={apellidosSolicitante} readOnly disabled style={{ background: "#f1f5f9" }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {wizardPaso === 1 && dniValidado && (
+                        <button
+                          type="button"
+                          className="btn-pago"
+                          onClick={() => setWizardPaso(2)}
+                          style={{ marginTop: "16px", background: "#1e3a8a" }}
+                        >
+                          Continuar →
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ═══════════════════════════════════════════
+                      PASO 2 — DATOS DEL NEGOCIO (RUC)
+                  ═══════════════════════════════════════════ */}
+                  {wizardPaso >= 2 && (
+                    <div className="form-block" style={{ border: wizardPaso === 2 ? "2px solid #2563eb" : "1px solid #e2e8f0", borderRadius: "14px", padding: "20px", marginBottom: "16px" }}>
+                      <div className="block-title">
+                        <span style={{ background: rucValidado ? "#16a34a" : wizardPaso === 2 ? "#1e3a8a" : "#64748b" }}>2</span>
+                        <div>
+                          <h3>Datos del negocio</h3>
+                          <p>Ingrese el RUC para consultar la información en SUNAT.</p>
+                        </div>
+                        {rucValidado && <span style={{ marginLeft: "auto", background: "#dcfce7", color: "#16a34a", padding: "4px 12px", borderRadius: "999px", fontSize: "13px", fontWeight: "700", flexShrink: 0 }}>✓ SUNAT Válido</span>}
+                      </div>
+
+                      {/* Tipo de trámite */}
+                      <div style={{ marginTop: "12px", marginBottom: "14px" }}>
+                        <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Tipo de trámite</label>
+                        <select name="tipoTramite" value={form.tipoTramite} onChange={manejarCambio} disabled={wizardPaso > 2} style={{ background: wizardPaso > 2 ? "#f1f5f9" : undefined }}>
+                          <option value="Nueva licencia">Nueva licencia</option>
+                          <option value="Renovación anual">Renovación anual</option>
+                        </select>
+                      </div>
+
+                      <div className="ruc-row ruc-row-modern">
+                        <input
+                          type="text"
+                          name="ruc"
+                          placeholder="Ingrese RUC de 11 dígitos"
+                          value={form.ruc}
+                          onChange={manejarCambio}
+                          maxLength="11"
+                          disabled={wizardPaso > 2}
+                          style={{ background: wizardPaso > 2 ? "#f1f5f9" : undefined }}
+                        />
+                        <button type="button" onClick={buscarRuc} disabled={buscando || wizardPaso > 2}>
+                          {buscando ? "Buscando..." : "Consultar SUNAT"}
+                        </button>
+                      </div>
+
+                      {errorRuc && <p style={{ color: "#dc2626", fontWeight: "600", marginTop: "8px", fontSize: "14px" }}>{errorRuc}</p>}
+                      {successRuc && <p style={{ color: "#16a34a", fontWeight: "600", marginTop: "8px", fontSize: "14px" }}>✓ {successRuc}</p>}
+
+                      {rucValidado && (
+                        <div style={{ marginTop: "14px" }}>
+                          <div className="form-grid">
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Razón social</label>
+                              <input type="text" value={form.razonSocial} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Nombre comercial</label>
+                              <input type="text" value={form.nombreNegocio} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Giro comercial</label>
+                              <input type="text" value={form.giro} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Dirección fiscal</label>
+                              <input type="text" value={form.direccion} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                          </div>
+                          <div className="form-grid" style={{ marginTop: "10px", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Estado SUNAT</label>
+                              <input type="text" value={form.estadoSunat} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Condición</label>
+                              <input type="text" value={form.condicionSunat} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Departamento</label>
+                              <input type="text" value={form.departamento} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Provincia</label>
+                              <input type="text" value={form.provincia} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Distrito</label>
+                              <input type="text" value={form.distrito} readOnly disabled style={{ background: "#f1f5f9" }} />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {wizardPaso === 2 && (
+                        <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                          <button type="button" className="btn-outline" onClick={() => setWizardPaso(1)}>← Atrás</button>
+                          <button
+                            type="button"
+                            className="btn-pago"
+                            onClick={() => {
+                              if (!rucValidado) { alert("Debe validar el RUC antes de continuar."); return; }
+                              // Validación persona natural: DNI debe coincidir con el RUC
+                              if (esPersonaNatural && !dniEnRuc) {
+                                alert("El DNI ingresado no corresponde al titular del RUC.");
+                                return;
+                              }
+                              setWizardPaso(3);
+                            }}
+                            style={{ background: "#1e3a8a" }}
+                          >
+                            Continuar →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ═══════════════════════════════════════════
+                      PASO 3 — TIPO DE CONTRIBUYENTE
+                  ═══════════════════════════════════════════ */}
+                  {wizardPaso >= 3 && (
+                    <div className="form-block" style={{ border: wizardPaso === 3 ? "2px solid #2563eb" : "1px solid #e2e8f0", borderRadius: "14px", padding: "20px", marginBottom: "16px" }}>
+                      <div className="block-title">
+                        <span style={{ background: wizardPaso > 3 ? "#16a34a" : wizardPaso === 3 ? "#1e3a8a" : "#64748b" }}>3</span>
+                        <div>
+                          <h3>Tipo de contribuyente</h3>
+                          <p>Determinado automáticamente según el RUC ingresado.</p>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: "12px", padding: "14px 18px", borderRadius: "12px", background: esPersonaNatural ? "#eff6ff" : "#f0fdf4", border: `1px solid ${esPersonaNatural ? "#bfdbfe" : "#bbf7d0"}` }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span style={{ fontSize: "24px" }}>{esPersonaNatural ? "👤" : "🏢"}</span>
+                          <div>
+                            <strong style={{ color: "#0f172a", fontSize: "15px" }}>
+                              {esPersonaNatural ? "Persona Natural con Negocio" : esPersonaJuridica ? "Persona Jurídica (Empresa)" : "RUC ingresado"}
+                            </strong>
+                            <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#475569" }}>
+                              {esPersonaNatural
+                                ? "El RUC inicia con 10 — Contribuyente persona natural."
+                                : esPersonaJuridica
+                                  ? "El RUC inicia con 20 — Empresa o sociedad registrada."
+                                  : "Tipo no identificado."}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {esPersonaJuridica && (
+                        <div style={{ marginTop: "14px" }}>
+                          <label style={{ fontSize: "13px", fontWeight: "700", color: "#374151", display: "block", marginBottom: "6px" }}>
+                            Tipo de relación del solicitante con la empresa
+                          </label>
+                          <select
+                            value={relacionSolicitante}
+                            onChange={(e) => setRelacionSolicitante(e.target.value)}
+                            disabled={wizardPaso > 3}
+                            style={{ background: wizardPaso > 3 ? "#f1f5f9" : undefined }}
+                          >
+                            <option value="Dueño">Dueño / Accionista principal</option>
+                            <option value="Representante legal">Representante legal</option>
+                            <option value="Apoderado">Apoderado</option>
+                          </select>
+                          {wizardPaso === 3 && requiereDocRepresentacion && (
+                            <p style={{ marginTop: "8px", fontSize: "13px", color: "#92400e", background: "#fef3c7", padding: "8px 12px", borderRadius: "8px" }}>
+                              ⚠️ Deberá adjuntar el documento que acredita su representación en el siguiente paso.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {wizardPaso === 3 && (
+                        <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                          <button type="button" className="btn-outline" onClick={() => setWizardPaso(2)}>← Atrás</button>
+                          <button type="button" className="btn-pago" onClick={() => setWizardPaso(4)} style={{ background: "#1e3a8a" }}>
+                            Continuar →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ═══════════════════════════════════════════
+                      PASO 4 — DOCUMENTOS REQUERIDOS
+                  ═══════════════════════════════════════════ */}
+                  {wizardPaso >= 4 && (
+                    <div className="form-block" style={{ border: "2px solid #2563eb", borderRadius: "14px", padding: "20px", marginBottom: "16px" }}>
+                      <div className="block-title">
+                        <span style={{ background: "#1e3a8a" }}>4</span>
+                        <div>
+                          <h3>Documentos requeridos</h3>
+                          <p>Suba cada documento en formato PDF (máx. 5 MB por archivo).</p>
+                        </div>
+                      </div>
+
+                      <p style={{ marginTop: "10px", fontSize: "13px", color: "#64748b", background: "#f8fafc", padding: "10px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                        📋 Solo se aceptan archivos <strong>PDF</strong>. No se permiten JPG, PNG, DOC, ZIP ni otros formatos.
+                      </p>
+
+                      {/* Documentos obligatorios */}
+                      <div style={{ marginTop: "18px", display: "grid", gap: "14px" }}>
+                        <p style={{ fontWeight: "700", color: "#0f172a", fontSize: "14px", margin: 0 }}>📌 Documentos obligatorios</p>
+
+                        {/* DNI Solicitante */}
+                        {[
+                          { label: "1. Documento de identidad del solicitante", hint: "DNI_Solicitante.pdf", state: docIdentidad, setter: setDocIdentidad },
+                          { label: "2. Ficha RUC SUNAT", hint: "Ficha_RUC.pdf", state: docFichaRuc, setter: setDocFichaRuc },
+                          { label: "4. Plano de distribución del establecimiento", hint: "Plano_Establecimiento.pdf", state: docPlano, setter: setDocPlano },
+                          { label: "5. Declaración jurada de seguridad", hint: "Declaracion_Jurada.pdf", state: docDj, setter: setDocDj },
+                        ].map(({ label, hint, state, setter }) => (
+                          <div key={label} style={{ padding: "14px 16px", borderRadius: "10px", background: state ? "#f0fdf4" : "#f8fafc", border: `1px solid ${state ? "#86efac" : "#e2e8f0"}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                              <div>
+                                <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>{label}</p>
+                                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Ejemplo: {hint}</p>
+                              </div>
+                              {state
+                                ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {state.name}</span>
+                                    <button type="button" className="btn-quitar" onClick={() => setter(null)}>Quitar</button>
+                                  </div>
+                                : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
+                                    Seleccionar PDF
+                                    <input type="file" accept=".pdf" hidden onChange={subirDoc(setter)} />
+                                  </label>}
+                            </div>
                           </div>
                         ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                <button
-                  type="button"
-                  className="btn-pago btn-full"
-                  onClick={continuarPago}
-                  disabled={!rucValidado}
-                  style={{
-                    opacity: rucValidado ? 1 : 0.6,
-                    cursor: rucValidado ? "pointer" : "not-allowed",
-                    background: rucValidado ? "#1e3a8a" : "#94a3b8"
-                  }}
-                >
-                  {rucValidado ? "Continuar al pago" : "Validar RUC para continuar"}
-                </button>
-              </div>
-            </section>
-          )}
+                        {/* Documento propiedad local — con selector de tipo */}
+                        <div style={{ padding: "14px 16px", borderRadius: "10px", background: docAcreditaLocal ? "#f0fdf4" : "#f8fafc", border: `1px solid ${docAcreditaLocal ? "#86efac" : "#e2e8f0"}` }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>3. Documento que acredita propiedad o uso del local</p>
+                              <select value={tipoPropiedadLocal} onChange={(e) => setTipoPropiedadLocal(e.target.value)} style={{ marginTop: "6px", fontSize: "13px", padding: "6px 10px", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
+                                <option>Contrato de alquiler</option>
+                                <option>Título de propiedad</option>
+                                <option>Cesión de uso</option>
+                              </select>
+                              <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Ejemplo: Contrato_Local.pdf</p>
+                            </div>
+                            {docAcreditaLocal
+                              ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {docAcreditaLocal.name}</span>
+                                  <button type="button" className="btn-quitar" onClick={() => setDocAcreditaLocal(null)}>Quitar</button>
+                                </div>
+                              : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600", alignSelf: "flex-start" }}>
+                                  Seleccionar PDF
+                                  <input type="file" accept=".pdf" hidden onChange={subirDoc(setDocAcreditaLocal)} />
+                                </label>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Documentos adicionales según giro */}
+                      {(requiereDocSanitario || requiereDocDigemid || requiereDocRepresentacion) && (
+                        <div style={{ marginTop: "18px", display: "grid", gap: "14px" }}>
+                          <p style={{ fontWeight: "700", color: "#0f172a", fontSize: "14px", margin: 0 }}>📋 Documentos adicionales según su actividad</p>
+
+                          {requiereDocSanitario && (
+                            <div style={{ padding: "14px 16px", borderRadius: "10px", background: docSanitario ? "#f0fdf4" : "#fefce8", border: `1px solid ${docSanitario ? "#86efac" : "#fde047"}` }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                                <div>
+                                  <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>🍽️ Certificado sanitario</p>
+                                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Requerido para establecimientos de alimentos</p>
+                                </div>
+                                {docSanitario
+                                  ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {docSanitario.name}</span>
+                                      <button type="button" className="btn-quitar" onClick={() => setDocSanitario(null)}>Quitar</button>
+                                    </div>
+                                  : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#854d0e", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
+                                      Seleccionar PDF
+                                      <input type="file" accept=".pdf" hidden onChange={subirDoc(setDocSanitario)} />
+                                    </label>}
+                              </div>
+                            </div>
+                          )}
+
+                          {requiereDocDigemid && (
+                            <div style={{ padding: "14px 16px", borderRadius: "10px", background: docDigemid ? "#f0fdf4" : "#fefce8", border: `1px solid ${docDigemid ? "#86efac" : "#fde047"}` }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                                <div>
+                                  <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>💊 Autorización DIGEMID</p>
+                                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Requerido para farmacias y boticas</p>
+                                </div>
+                                {docDigemid
+                                  ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {docDigemid.name}</span>
+                                      <button type="button" className="btn-quitar" onClick={() => setDocDigemid(null)}>Quitar</button>
+                                    </div>
+                                  : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#854d0e", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
+                                      Seleccionar PDF
+                                      <input type="file" accept=".pdf" hidden onChange={subirDoc(setDocDigemid)} />
+                                    </label>}
+                              </div>
+                            </div>
+                          )}
+
+                          {requiereDocRepresentacion && (
+                            <div style={{ padding: "14px 16px", borderRadius: "10px", background: docRepresentacion ? "#f0fdf4" : "#fefce8", border: `1px solid ${docRepresentacion ? "#86efac" : "#fde047"}` }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                                <div>
+                                  <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>📜 Poder notarial / Documento de representación</p>
+                                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Requerido para representantes legales y apoderados</p>
+                                </div>
+                                {docRepresentacion
+                                  ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {docRepresentacion.name}</span>
+                                      <button type="button" className="btn-quitar" onClick={() => setDocRepresentacion(null)}>Quitar</button>
+                                    </div>
+                                  : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#854d0e", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
+                                      Seleccionar PDF
+                                      <input type="file" accept=".pdf" hidden onChange={subirDoc(setDocRepresentacion)} />
+                                    </label>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Documentos adicionales libres (opcional) */}
+                      <div style={{ marginTop: "18px" }}>
+                        <p style={{ fontWeight: "700", color: "#0f172a", fontSize: "14px", margin: "0 0 10px" }}>📎 Documentos adicionales (opcional)</p>
+                        <div className="drop-zone drop-zone-modern" onDrop={manejarDrop} onDragOver={(e) => e.preventDefault()}>
+                          <div className="empty-icon">📄</div>
+                          <p>Sube documentos adicionales si el trámite lo requiere</p>
+                          <span>Máx. 5 PDFs. Arrastra o selecciona archivos.</span>
+                          <label className="file-label">
+                            Elegir PDFs
+                            <input type="file" accept=".pdf" multiple onChange={manejarArchivos} hidden />
+                          </label>
+                          {archivos.length > 0 && (
+                            <div className="archivo-box">
+                              {archivos.map((file, index) => (
+                                <div key={index} className="archivo-item">
+                                  <p className="archivo-seleccionado">PDF {index + 1}: {file.name}</p>
+                                  <button type="button" className="btn-quitar" onClick={() => quitarArchivo(index)}>Quitar</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+                        <button type="button" className="btn-outline" onClick={() => setWizardPaso(3)}>← Atrás</button>
+                        <button
+                          type="button"
+                          className="btn-pago btn-full"
+                          onClick={continuarPago}
+                          style={{ background: "#1e3a8a" }}
+                        >
+                          Continuar al pago →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </section>
+            );
+          })()}
 
           {paso === "pago" && (
             <section className="section-card section-card-modern">
@@ -925,9 +1429,10 @@ function PanelNegocio({ seccion }) {
                 <aside className="resumen-pago resumen-pago-modern">
                   <h3>Resumen del trámite</h3>
                   <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
+                  <p><strong>Solicitante:</strong> {nombresSolicitante} {apellidosSolicitante}</p>
+                  <p><strong>DNI:</strong> {dniSolicitante}</p>
                   <p><strong>RUC:</strong> {form.ruc}</p>
                   <p><strong>Razón social:</strong> {form.razonSocial}</p>
-                  <p><strong>Documentos PDF:</strong> {archivos.length}</p>
                   <div className="monto-box"><span>Total a pagar</span><strong>S/{MONTO_TRAMITE.toFixed(2)}</strong></div>
                   <span className={`badge ${estadoPago === "Confirmado" ? "ok" : "warning"}`}>{estadoPago}</span>
                   {detallePago?.id && <p className="text-muted"><strong>Operación:</strong> {detallePago.id}</p>}
@@ -943,13 +1448,13 @@ function PanelNegocio({ seccion }) {
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                         <div style={{ border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: "16px", padding: "20px" }}>
-                          <div style={{ fontSize: "28px", marginBottom: "8px" }}>&#128179;</div>
+                          <div style={{ fontSize: "28px", marginBottom: "8px" }}>💳</div>
                           <h4 style={{ margin: "0 0 8px", color: "#14532d" }}>Pago TEST con Mercado Pago</h4>
                           <p style={{ color: "#475569", lineHeight: "1.55" }}>Abre Checkout Pro oficial en ambiente de prueba.</p>
                           <button type="button" className="btn-pago btn-full" onClick={iniciarPagoMercadoPago} disabled={procesandoPago}>{procesandoPago ? "Generando enlace..." : "Pagar con Mercado Pago TEST"}</button>
                         </div>
                         <div style={{ border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: "16px", padding: "20px" }}>
-                          <div style={{ fontSize: "28px", marginBottom: "8px" }}>&#129534;</div>
+                          <div style={{ fontSize: "28px", marginBottom: "8px" }}>🧾</div>
                           <h4 style={{ margin: "0 0 8px", color: "#7c2d12" }}>Pago demo municipal</h4>
                           <p style={{ color: "#475569", lineHeight: "1.55" }}>Registra un comprobante demo para continuar el circuito.</p>
                           <button type="button" className="btn-secundario btn-full" onClick={iniciarPagoDemo} disabled={procesandoPago}>{procesandoPago ? "Registrando..." : "Confirmar pago demo"}</button>
@@ -984,11 +1489,12 @@ function PanelNegocio({ seccion }) {
             <section className="section-card section-card-modern confirmacion" style={{ textAlign: "center", padding: "50px 28px" }}>
               <div className="success-circle" style={{ width: "80px", height: "80px", margin: "0 auto 20px", fontSize: "40px", boxShadow: "0 8px 30px rgba(22, 163, 74, 0.25)" }}>&#10003;</div>
               <h2 style={{ fontSize: "28px", marginBottom: "8px" }}>Solicitud registrada</h2>
-              <p style={{ color: "#64748b", fontSize: "16px", maxWidth: "500px", margin: "0 auto 24px" }}>Tu solicitud fue enviada correctamente y los PDFs quedaron guardados.</p>
+              <p style={{ color: "#64748b", fontSize: "16px", maxWidth: "500px", margin: "0 auto 24px" }}>Tu solicitud fue enviada correctamente. La municipalidad revisará la documentación presentada.</p>
               <div className="resumen-pago resumen-pago-modern">
                 <p><strong>Número de expediente:</strong> {expediente}</p>
+                <p><strong>Solicitante:</strong> {nombresSolicitante} {apellidosSolicitante}</p>
                 <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
-                <p><strong>Estado:</strong> En revisión municipal</p>
+                <p><strong>Estado:</strong> Pendiente de revisión</p>
                 <p><strong>Pago:</strong> {estadoPago}</p>
                 <p><strong>Monto:</strong> S/{MONTO_TRAMITE.toFixed(2)}</p>
               </div>
@@ -997,6 +1503,9 @@ function PanelNegocio({ seccion }) {
           )}
         </>
       )}
+
+
+
 
       {seccion === "mi-cuenta" && (
         <section className="section-card section-card-modern">
