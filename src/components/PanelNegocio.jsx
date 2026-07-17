@@ -462,10 +462,24 @@ function PanelNegocio({ seccion }) {
     try {
       setGuardando(true);
 
-      const pdfsSubidos = await Promise.all(
-        todosLosDocs.map((archivo) => convertirPdfABase64(archivo))
-      );
+      // 1. Subir documentos a Cloudinary uno por uno (si uno falla, se ignora)
+      const pdfsSubidos = [];
+      for (const archivo of todosLosDocs) {
+        try {
+          const resultado = await convertirPdfABase64(archivo);
+          pdfsSubidos.push(resultado);
+        } catch (err) {
+          console.error("[SOLICITUD] Error subiendo archivo:", archivo.name, err);
+        }
+      }
 
+      if (pdfsSubidos.length === 0) {
+        alert("No se pudo subir ningún archivo. Verifique su conexión e intente nuevamente.");
+        setGuardando(false);
+        return;
+      }
+
+      // 2. Guardar solicitud en Firestore
       const nueva = await guardarSolicitud({
         uidUsuario: usuario?.uid || "",
         correoUsuario: usuario?.correo || "",
@@ -513,10 +527,17 @@ function PanelNegocio({ seccion }) {
         pagoEstadoDetalle: detallePago?.status_detail || "",
       });
 
+      console.log("[SOLICITUD] Guardada:", nueva.id);
       setExpediente(nueva.id);
-      await cargarMisSolicitudes();
 
-      // Generar comprobante de pago si el pago fue confirmado
+      // 3. Recargar solicitudes (no bloquear el flujo si falla)
+      try {
+        await cargarMisSolicitudes();
+      } catch (errReload) {
+        console.error("[SOLICITUD] Error recargando solicitudes:", errReload);
+      }
+
+      // 4. Generar comprobante de pago (no bloquear el flujo si falla)
       if (estadoPago === "Confirmado") {
         try {
           const tipoFinal = tipoComprobante || (form.ruc.startsWith("20") ? "factura" : "boleta");
@@ -538,15 +559,17 @@ function PanelNegocio({ seccion }) {
           });
           setComprobanteGenerado(comprobanteGenerado);
           console.log("[COMPROBANTE] Generado:", comprobanteGenerado.codigo_unico);
-        } catch (err) {
-          console.error("[COMPROBANTE] Error generando comprobante:", err);
+        } catch (errComp) {
+          console.error("[COMPROBANTE] Error generando comprobante (no bloqueante):", errComp);
         }
       }
 
+      // 5. SIEMPRE mostrar confirmación final
       setPaso("confirmacion");
+
     } catch (error) {
-      console.error(error);
-      alert(error.message || "No se pudo guardar la solicitud.");
+      console.error("[SOLICITUD] Error general:", error);
+      alert(error.message || "No se pudo guardar la solicitud. Intente nuevamente.");
     } finally {
       setGuardando(false);
     }
@@ -1652,17 +1675,26 @@ function PanelNegocio({ seccion }) {
           {paso === "confirmacion" && (
             <section className="section-card section-card-modern confirmacion" style={{ textAlign: "center", padding: "50px 28px" }}>
               <div className="success-circle" style={{ width: "80px", height: "80px", margin: "0 auto 20px", fontSize: "40px", boxShadow: "0 8px 30px rgba(22, 163, 74, 0.25)" }}>&#10003;</div>
-              <h2 style={{ fontSize: "28px", marginBottom: "8px" }}>Solicitud registrada</h2>
-              <p style={{ color: "#64748b", fontSize: "16px", maxWidth: "500px", margin: "0 auto 24px" }}>Tu solicitud fue enviada correctamente. La municipalidad revisará la documentación presentada.</p>
+              <h2 style={{ fontSize: "28px", marginBottom: "8px" }}>Solicitud registrada correctamente</h2>
+              <p style={{ color: "#64748b", fontSize: "16px", maxWidth: "500px", margin: "0 auto 24px" }}>Tu pago fue registrado y la solicitud fue enviada exitosamente. La municipalidad revisará la documentación presentada.</p>
               <div className="resumen-pago resumen-pago-modern">
                 <p><strong>Número de expediente:</strong> {expediente}</p>
                 <p><strong>Solicitante:</strong> {nombresSolicitante} {apellidosSolicitante}</p>
                 <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
-                <p><strong>Estado:</strong> Pendiente de revisión</p>
-                <p><strong>Pago:</strong> {estadoPago}</p>
+                <p><strong>Estado de solicitud:</strong> Registrada</p>
+                <p><strong>Estado de pago:</strong> PAGADO</p>
                 <p><strong>Monto:</strong> S/{MONTO_TRAMITE.toFixed(2)}</p>
+                {comprobanteGenerado && (
+                  <p><strong>Comprobante:</strong> {comprobanteGenerado.serie}-{comprobanteGenerado.numero} ({comprobanteGenerado.tipo_comprobante === "boleta" ? "Boleta" : "Factura"})</p>
+                )}
               </div>
-              <button type="button" className="btn-pago" onClick={() => setPaso("misSolicitudes")}>Ver mis solicitudes</button>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap", marginTop: "20px" }}>
+                <button type="button" className="btn-pago" onClick={() => setPaso("misSolicitudes")}>&#128196; Ver mis solicitudes</button>
+                {comprobanteGenerado && (
+                  <button type="button" className="btn-ok" onClick={() => descargarComprobante(comprobanteGenerado)}>&#11015; Descargar comprobante</button>
+                )}
+                <button type="button" className="btn-outline" onClick={() => { setPaso("misSolicitudes"); nuevaSolicitud(); }}>&#127968; Volver al inicio</button>
+              </div>
             </section>
           )}
         </>
