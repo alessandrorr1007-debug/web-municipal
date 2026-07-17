@@ -5,6 +5,7 @@ import {
   enviarRecuperacion,
   guardarCodigoVerificacion,
   verificarCodigoVerificacion,
+  cambiarContrasena,
 } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -27,6 +28,8 @@ function Login({ onVolver, modoInicial }) {
   const [pasoRecuperacion, setPasoRecuperacion] = useState("correo");
   const [codigoRecuperacion, setCodigoRecuperacion] = useState("");
   const [errorRecuperacion, setErrorRecuperacion] = useState("");
+  const [nuevaContrasena, setNuevaContrasena] = useState("");
+  const [confirmarNuevaContrasena, setConfirmarNuevaContrasena] = useState("");
 
   const [nombres, setNombres] = useState("");
   const [apellidos, setApellidos] = useState("");
@@ -217,9 +220,45 @@ function Login({ onVolver, modoInicial }) {
         setCargando(false);
         return;
       }
-      setPasoRecuperacion("exito");
+      setPasoRecuperacion("nueva-contrasena");
+      setNuevaContrasena("");
+      setConfirmarNuevaContrasena("");
+      setErrorRecuperacion("");
     } catch (err) {
       setErrorRecuperacion("Error al verificar el código.");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const manejarCambiarContrasena = async (e) => {
+    e.preventDefault();
+    setErrorRecuperacion("");
+
+    if (!nuevaContrasena || nuevaContrasena.length < 8) {
+      setErrorRecuperacion("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (!/[a-zA-Z]/.test(nuevaContrasena)) {
+      setErrorRecuperacion("La contraseña debe contener al menos una letra.");
+      return;
+    }
+    if (!/\d/.test(nuevaContrasena)) {
+      setErrorRecuperacion("La contraseña debe contener al menos un número.");
+      return;
+    }
+    if (nuevaContrasena !== confirmarNuevaContrasena) {
+      setErrorRecuperacion("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setCargando(true);
+    try {
+      await cambiarContrasena(correoRecuperacion, codigoRecuperacion, nuevaContrasena);
+      setPasoRecuperacion("exito");
+    } catch (err) {
+      console.error("[DEBUG] Error cambiando contraseña:", err.message);
+      setErrorRecuperacion(err.message || "No se pudo cambiar la contraseña. Intenta de nuevo.");
     } finally {
       setCargando(false);
     }
@@ -290,20 +329,55 @@ function Login({ onVolver, modoInicial }) {
         <div className="login-form-box" style={{ overflow: "auto", maxHeight: "600px" }}>
           {mostrarRecuperar ? (
             <div>
-              <button type="button" onClick={() => { setMostrarRecuperar(false); setError(""); setPasoRecuperacion("correo"); }} style={{ background: "none", color: "#64748b", border: "none", cursor: "pointer", fontSize: "14px", marginBottom: "16px", padding: 0 }}>
+              <button type="button" onClick={() => { setMostrarRecuperar(false); setError(""); setPasoRecuperacion("correo"); setNuevaContrasena(""); setConfirmarNuevaContrasena(""); }} style={{ background: "none", color: "#64748b", border: "none", cursor: "pointer", fontSize: "14px", marginBottom: "16px", padding: 0 }}>
                 &#8592; Volver al inicio de sesión
               </button>
 
               {pasoRecuperacion === "exito" ? (
                 <div style={{ textAlign: "center", padding: "20px 0" }}>
                   <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#f0fdf4", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "36px", border: "2px solid #bbf7d0" }}>&#9989;</div>
-                  <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Código verificado</h2>
+                  <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Contraseña actualizada</h2>
                   <p style={{ margin: "0 0 24px", color: "#475569", fontSize: "14px", lineHeight: "1.6" }}>
-                    Tu identidad fue confirmada. Ahora puedes restablecer tu contraseña desde el enlace que fue enviado a <strong>{correoRecuperacion}</strong>.
+                    Tu contraseña fue cambiada correctamente. Ya puedes iniciar sesión con tu nueva contraseña.
                   </p>
                   <button type="button" onClick={() => { setMostrarRecuperar(false); setPasoRecuperacion("correo"); setModo("login"); setError(""); }} className="primary-btn" style={{ padding: "14px 32px", fontSize: "15px" }}>
-                    Volver al inicio de sesión
+                    Iniciar sesión
                   </button>
+                </div>
+              ) : pasoRecuperacion === "nueva-contrasena" ? (
+                <div>
+                  <h2 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "20px" }}>Crear nueva contraseña</h2>
+                  <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "14px", lineHeight: "1.5" }}>
+                    Ingresa tu nueva contraseña para <strong style={{ color: "#1f3b57" }}>{correoRecuperacion}</strong>
+                  </p>
+                  <form onSubmit={manejarCambiarContrasena}>
+                    <label style={inputLabel}>Nueva contraseña</label>
+                    <input
+                      type="password"
+                      placeholder="Mínimo 8 caracteres"
+                      value={nuevaContrasena}
+                      onChange={(e) => setNuevaContrasena(e.target.value)}
+                      required
+                      minLength={8}
+                      autoFocus
+                    />
+                    <div style={{ marginTop: "6px", fontSize: "12px", color: "#64748b" }}>
+                      Debe contener al menos 8 caracteres, una letra y un número.
+                    </div>
+                    <label style={{ ...inputLabel, marginTop: "14px" }}>Confirmar nueva contraseña</label>
+                    <input
+                      type="password"
+                      placeholder="Repite tu nueva contraseña"
+                      value={confirmarNuevaContrasena}
+                      onChange={(e) => setConfirmarNuevaContrasena(e.target.value)}
+                      required
+                      minLength={8}
+                    />
+                    {errorRecuperacion && <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", marginTop: "12px" }}>&#9888; {errorRecuperacion}</div>}
+                    <button className="primary-btn" type="submit" disabled={cargando} style={{ opacity: cargando ? 0.7 : 1, padding: "15px", fontSize: "15px", marginTop: "16px" }}>
+                      {cargando ? "Cambiando contraseña..." : "Cambiar contraseña"}
+                    </button>
+                  </form>
                 </div>
               ) : pasoRecuperacion === "verificar" ? (
                 <div>

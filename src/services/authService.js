@@ -203,3 +203,25 @@ export const enviarRecuperacion = async (correo) => {
 
   return codigo;
 };
+
+export const cambiarContrasena = async (correo, codigo, nuevaContrasena) => {
+  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const url = `${apiUrl}/api/cambiar-contrasena`;
+  console.log("[DEBUG] Cambiar contraseña - Llamando a:", url);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correo, codigo, nuevaContrasena }),
+  });
+
+  const texto = await response.text();
+  console.log("[DEBUG] Status:", response.status, "- Respuesta:", texto);
+
+  if (!response.ok) {
+    const data = JSON.parse(texto);
+    throw new Error(data.error || `Error ${response.status}`);
+  }
+
+  return JSON.parse(texto);
+};

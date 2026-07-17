@@ -8,6 +8,12 @@ import {
   obtenerNegociosPorUsuario,
 } from "../services/solicitudService";
 import { convertirPdfABase64 } from "../services/pdfService";
+import {
+  generarComprobante,
+  obtenerComprobantesPorUsuario,
+  descargarComprobante,
+  enviarComprobantePorCorreo,
+} from "../services/comprobanteService";
 import { useAuth } from "../context/AuthContext";
 import Timeline from "./Timeline";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -58,6 +64,8 @@ function PanelNegocio({ seccion }) {
   const [detallePago, setDetallePago] = useState(null);
   const [notificacionesPendientes, setNotificacionesPendientes] = useState(0);
   const [negocios, setNegocios] = useState([]);
+  const [comprobantes, setComprobantes] = useState([]);
+  const [cargandoComprobantes, setCargandoComprobantes] = useState(false);
 
   const [form, setForm] = useState({
     tipoTramite: "Nueva licencia",
@@ -172,9 +180,24 @@ function PanelNegocio({ seccion }) {
     }
   };
 
+  const cargarComprobantes = async () => {
+    try {
+      setCargandoComprobantes(true);
+      const lista = await obtenerComprobantesPorUsuario(usuario?.uid);
+      setComprobantes(lista);
+    } catch (error) {
+      console.error("Error al cargar comprobantes:", error);
+    } finally {
+      setCargandoComprobantes(false);
+    }
+  };
+
   useEffect(() => {
     if (usuario && seccion === "mi-cuenta") {
       cargarNegocios();
+    }
+    if (usuario && seccion === "mis-comprobantes") {
+      cargarComprobantes();
     }
   }, [usuario, seccion]);
 
@@ -489,6 +512,30 @@ function PanelNegocio({ seccion }) {
 
       setExpediente(nueva.id);
       await cargarMisSolicitudes();
+
+      // Generar comprobante de pago si el pago fue confirmado
+      if (estadoPago === "Confirmado") {
+        try {
+          const tipoComprobante = form.ruc.startsWith("20") ? "factura" : "boleta";
+          const comprobanteGenerado = await generarComprobante({
+            uidUsuario: usuario?.uid || "",
+            correoUsuario: usuario?.correo || "",
+            idSolicitud: nueva.id,
+            tipo: tipoComprobante,
+            dniCliente: "",
+            rucCliente: form.ruc,
+            razonSocial: form.razonSocial,
+            descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
+            monto: MONTO_TRAMITE,
+            metodoPago,
+            estadoPago: "Pagado",
+          });
+          console.log("[COMPROBANTE] Generado:", comprobanteGenerado.codigo_unico);
+        } catch (err) {
+          console.error("[COMPROBANTE] Error generando comprobante:", err);
+        }
+      }
+
       setPaso("confirmacion");
     } catch (error) {
       console.error(error);
@@ -1506,6 +1553,120 @@ function PanelNegocio({ seccion }) {
 
 
 
+
+      {seccion === "mis-comprobantes" && (
+        <section className="section-card section-card-modern">
+          <div className="section-header">
+            <div>
+              <h2>Mis comprobantes de pago</h2>
+              <p>Consulta y descarga los comprobantes de tus pagos realizados.</p>
+            </div>
+            <button type="button" className="btn-outline" onClick={cargarComprobantes} disabled={cargandoComprobantes}>
+              {cargandoComprobantes ? "Cargando..." : "Actualizar"}
+            </button>
+          </div>
+
+          {cargandoComprobantes ? (
+            <div className="empty-state">
+              <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128196;</div>
+              <h3>Cargando comprobantes...</h3>
+            </div>
+          ) : comprobantes.length === 0 ? (
+            <div className="empty-state empty-state-modern">
+              <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "linear-gradient(135deg, #fef3c7, #fde68a)", display: "grid", placeItems: "center", margin: "0 auto 16px", fontSize: "36px" }}>&#128196;</div>
+              <h3>No tienes comprobantes de pago</h3>
+              <p>Cuando realices el pago de una solicitud, tu comprobante aparecerá aquí.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: "14px" }}>
+              {comprobantes.map((comp) => (
+                <div key={comp.id_comprobante} style={{
+                  padding: "18px 20px",
+                  borderRadius: "14px",
+                  border: "1px solid #e2e8f0",
+                  background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+                    <div style={{ flex: 1, minWidth: "200px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                        <span style={{
+                          display: "inline-block",
+                          padding: "3px 10px",
+                          borderRadius: "999px",
+                          fontSize: "11px",
+                          fontWeight: "700",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          background: comp.tipo_comprobante === "boleta" ? "#eff6ff" : "#f0fdf4",
+                          color: comp.tipo_comprobante === "boleta" ? "#1e40af" : "#166534",
+                          border: `1px solid ${comp.tipo_comprobante === "boleta" ? "#bfdbfe" : "#bbf7d0"}`,
+                        }}>
+                          {comp.tipo_comprobante === "boleta" ? "Boleta" : "Factura"}
+                        </span>
+                        <span style={{ fontFamily: "monospace", fontWeight: "700", color: "#0f172a", fontSize: "15px" }}>
+                          {comp.serie}-{comp.numero}
+                        </span>
+                      </div>
+                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#64748b" }}>
+                        <strong>Solicitud:</strong> {comp.id_solicitud}
+                      </p>
+                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#64748b" }}>
+                        <strong>Fecha:</strong> {comp.fecha_emision}
+                      </p>
+                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#64748b" }}>
+                        <strong>Método:</strong> {comp.metodo_pago}
+                      </p>
+                    </div>
+                    <div style={{ textAlign: "right", minWidth: "120px" }}>
+                      <p style={{ margin: "0 0 8px", fontSize: "22px", fontWeight: "800", color: "#166534" }}>
+                        S/{Number(comp.monto).toFixed(2)}
+                      </p>
+                      <span style={{
+                        display: "inline-block",
+                        padding: "3px 10px",
+                        borderRadius: "999px",
+                        fontSize: "11px",
+                        fontWeight: "700",
+                        background: "#dcfce7",
+                        color: "#166534",
+                        marginBottom: "10px",
+                      }}>
+                        {comp.estado}
+                      </span>
+                      <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                        <button
+                          type="button"
+                          className="btn-ok"
+                          style={{ fontSize: "12px", padding: "6px 14px" }}
+                          onClick={() => descargarComprobante(comp)}
+                        >
+                          Descargar PDF
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secundario"
+                          style={{ fontSize: "12px", padding: "6px 14px" }}
+                          onClick={async () => {
+                            try {
+                              await enviarComprobantePorCorreo(comp);
+                              alert("Comprobante enviado a tu correo electrónico.");
+                            } catch (err) {
+                              alert("No se pudo enviar el correo: " + err.message);
+                            }
+                          }}
+                        >
+                          Enviar por correo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {seccion === "mi-cuenta" && (
         <section className="section-card section-card-modern">

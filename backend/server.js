@@ -437,7 +437,123 @@ app.post("/api/enviar-codigo", async (req, res) => {
   }
 });
 
-app.post("/api/enviar-recuperacion", async (req, res) => {
+app.post("/api/cambiar-contrasena", async (req, res) => {
+  console.log("=== ENDPOINT /api/cambiar-contrasena ===");
+
+  try {
+    const { correo, codigo, nuevaContrasena } = req.body;
+
+    if (!correo || !codigo || !nuevaContrasena) {
+      return res.status(400).json({ error: "Faltan parámetros: correo, código y nueva contraseña." });
+    }
+
+    if (nuevaContrasena.length < 8) {
+      return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres." });
+    }
+
+    if (!/[a-zA-Z]/.test(nuevaContrasena) || !/\d/.test(nuevaContrasena)) {
+      return res.status(400).json({ error: "La contraseña debe contener al menos una letra y un número." });
+    }
+
+    console.log("1. Parámetros OK. Verificando código y cambiando contraseña para:", correo);
+
+    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyC_LEdrAj9R9epUNj9ZMhwE2al1TIfoUko";
+
+    // Paso 1: Obtener la contraseña actual desde Firestore via REST API (read)
+    // No tenemos admin SDK, así que usamos la contraseña almacenada en Firestore
+    // que se guardó durante el registro
+    const axiosAdmin = axios.create();
+
+    // Paso 2: Usar signInWithPassword para obtener idToken con las credenciales actuales
+    // Primero necesitamos la contraseña actual del usuario (almacenada en Firestore)
+    // Usamos el endpoint REST de Firestore para leer el documento
+    const firestoreUrl = `https://firestore.googleapis.com/v1/projects/web-municipal-32860/databases/(default)/documents/usuarios`;
+
+    // Buscar usuario por correo
+    const usuarioResponse = await axiosAdmin.get(
+      `${firestoreUrl}?filter=fieldPath%3Dcorreo%20op%3DEQUAL%20value%3DstringType%2C${encodeURIComponent(correo)}`,
+      { timeout: 10000 }
+    );
+
+    const documentos = usuarioResponse.data?.documents;
+    if (!documentos || documentos.length === 0) {
+      return res.status(404).json({ error: "No se encontró una cuenta con ese correo electrónico." });
+    }
+
+    const usuarioDoc = documentos[0];
+    const campos = {};
+    if (usuarioDoc.fields) {
+      Object.keys(usuarioDoc.fields).forEach((key) => {
+        const field = usuarioDoc.fields[key];
+        campos[key] = field.stringValue || field.integerValue || field.booleanValue || "";
+      });
+    }
+
+    const contrasenaActual = campos.contraseña;
+    if (!contrasenaActual) {
+      return res.status(400).json({ error: "No se pudo recuperar la información de la cuenta." });
+    }
+
+    console.log("2. Contraseña actual obtenida de Firestore");
+
+    // Paso 3: Iniciar sesión temporalmente para obtener idToken
+    const signInResponse = await axiosAdmin.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+      {
+        email: correo,
+        password: contrasenaActual,
+        returnSecureToken: true,
+      },
+      { timeout: 10000 }
+    );
+
+    const idToken = signInResponse.data.idToken;
+    console.log("3. Sesión temporal obtenida (idToken)");
+
+    // Paso 4: Cambiar la contraseña
+    const updateResponse = await axiosAdmin.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${FIREBASE_API_KEY}`,
+      {
+        idToken: idToken,
+        password: nuevaContrasena,
+        returnSecureToken: true,
+      },
+      { timeout: 10000 }
+    );
+
+    console.log("4. Contraseña cambiada exitosamente");
+
+    // Paso 5: Actualizar la contraseña en Firestore
+    const updateId = usuarioDoc.name.split("/").pop();
+    await axiosAdmin.patch(
+      `https://firestore.googleapis.com/v1/projects/web-municipal-32860/databases/(default)/documents/usuarios/${updateId}?updateMask.fieldPaths=contraseña`,
+      {
+        fields: {
+          contraseña: { stringValue: nuevaContrasena },
+        },
+      },
+      { timeout: 10000 }
+    );
+
+    console.log("5. Contraseña actualizada en Firestore");
+
+    res.json({ mensaje: "Contraseña actualizada correctamente. Ya puedes iniciar sesión." });
+  } catch (error) {
+    console.error("=== ERROR CAMBIANDO CONTRASEÑA ===");
+    console.error("Status:", error.response?.status);
+    console.error("Data:", JSON.stringify(error.response?.data));
+    console.error("Message:", error.message);
+
+    if (error.response?.data?.error?.message === "INVALID_PASSWORD" || error.response?.data?.error?.message === "EMAIL_NOT_FOUND") {
+      return res.status(400).json({ error: "No se pudo verificar la cuenta. Contacta al administrador." });
+    }
+
+    res.status(500).json({
+      error: "No se pudo cambiar la contraseña. Intenta nuevamente.",
+      detalle: error.response?.data?.error?.message || error.message,
+    });
+  }
+});
   console.log("=== ENDPOINT /api/enviar-recuperacion ===");
 
   try {
@@ -489,6 +605,81 @@ app.post("/api/enviar-recuperacion", async (req, res) => {
     console.error("=== ERROR ENVIANDO RECUPERACIÓN ===");
     console.error("Mensaje:", error.message);
     res.status(500).json({ error: "No se pudo enviar el correo de recuperación", detalle: error.message });
+  }
+});
+
+app.post("/api/comprobantes/enviar-correo", async (req, res) => {
+  console.log("=== ENDPOINT /api/comprobantes/enviar-correo ===");
+
+  try {
+    const { correo_usuario, codigo_unico, tipo_comprobante, monto, id_solicitud, fecha_emision } = req.body;
+
+    if (!correo_usuario || !codigo_unico) {
+      return res.status(400).json({ error: "Faltan parámetros obligatorios." });
+    }
+
+    if (!transporter) {
+      return res.status(500).json({ error: "Servicio de correo no configurado." });
+    }
+
+    const tipoLabel = tipo_comprobante === "boleta" ? "Boleta de Venta" : "Factura Electrónica";
+
+    const mailOptions = {
+      from: `"Municipalidad de Trujillo" <${SMTP_EMAIL}>`,
+      to: correo_usuario,
+      subject: `Comprobante de pago ${tipoLabel} - ${codigo_unico}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 28px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: #1f3b57; border-radius: 10px;">
+            <h1 style="color: white; font-size: 18px; margin: 0;">Municipalidad de Trujillo</h1>
+            <p style="color: #93c5fd; font-size: 12px; margin: 4px 0 0;">Sistema de Licencias Municipales</p>
+          </div>
+
+          <h2 style="color: #0f172a; font-size: 18px; margin: 0 0 12px;">Comprobante de Pago</h2>
+
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+            <p style="margin: 0; color: #166534; font-size: 14px;">Tu pago fue registrado exitosamente.</p>
+          </div>
+
+          <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #f1f5f9;">Tipo de comprobante</td>
+              <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${tipoLabel}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #f1f5f9;">Serie - Número</td>
+              <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${codigo_unico}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #f1f5f9;">Expediente</td>
+              <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${id_solicitud || "N/A"}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #f1f5f9;">Fecha de emisión</td>
+              <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${fecha_emision || "N/A"}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #64748b; font-size: 16px;">Monto pagado</td>
+              <td style="padding: 8px 0; color: #166534; font-weight: 700; font-size: 18px; text-align: right;">S/${Number(monto || 0).toFixed(2)}</td>
+            </tr>
+          </table>
+
+          <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 16px;">
+            Este comprobante fue generado automáticamente por el sistema municipal.
+          </p>
+          <p style="font-size: 14px; font-weight: bold; color: #1f3b57; margin: 0;">Municipalidad de Trujillo</p>
+        </div>
+      `,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log("[COMPROBANTE] Correo enviado:", result.messageId);
+
+    res.json({ mensaje: "Comprobante enviado por correo correctamente." });
+  } catch (error) {
+    console.error("=== ERROR ENVIANDO COMPROBANTE POR CORREO ===");
+    console.error("Mensaje:", error.message);
+    res.status(500).json({ error: "No se pudo enviar el comprobante.", detalle: error.message });
   }
 });
 
