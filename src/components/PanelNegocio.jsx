@@ -66,6 +66,9 @@ function PanelNegocio({ seccion }) {
   const [negocios, setNegocios] = useState([]);
   const [comprobantes, setComprobantes] = useState([]);
   const [cargandoComprobantes, setCargandoComprobantes] = useState(false);
+  const [tipoComprobante, setTipoComprobante] = useState("");
+  const [comprobanteGenerado, setComprobanteGenerado] = useState(null);
+  const [enviandoCorreo, setEnviandoCorreo] = useState(false);
 
   const [form, setForm] = useState({
     tipoTramite: "Nueva licencia",
@@ -516,20 +519,24 @@ function PanelNegocio({ seccion }) {
       // Generar comprobante de pago si el pago fue confirmado
       if (estadoPago === "Confirmado") {
         try {
-          const tipoComprobante = form.ruc.startsWith("20") ? "factura" : "boleta";
+          const tipoFinal = tipoComprobante || (form.ruc.startsWith("20") ? "factura" : "boleta");
           const comprobanteGenerado = await generarComprobante({
             uidUsuario: usuario?.uid || "",
             correoUsuario: usuario?.correo || "",
             idSolicitud: nueva.id,
-            tipo: tipoComprobante,
-            dniCliente: "",
+            tipo: tipoFinal,
+            dniCliente: dniSolicitante,
+            nombresCliente: nombresSolicitante,
+            apellidosCliente: apellidosSolicitante,
             rucCliente: form.ruc,
             razonSocial: form.razonSocial,
+            direccionCliente: form.direccion,
             descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
             monto: MONTO_TRAMITE,
             metodoPago,
             estadoPago: "Pagado",
           });
+          setComprobanteGenerado(comprobanteGenerado);
           console.log("[COMPROBANTE] Generado:", comprobanteGenerado.codigo_unico);
         } catch (err) {
           console.error("[COMPROBANTE] Error generando comprobante:", err);
@@ -557,6 +564,9 @@ function PanelNegocio({ seccion }) {
     setExpediente("");
     setDetallePago(null);
     setProcesandoPago(false);
+    setTipoComprobante("");
+    setComprobanteGenerado(null);
+    setEnviandoCorreo(false);
     // Limpiar estados de DNI
     setDniValidado(false);
     setDniSolicitante("");
@@ -1468,7 +1478,7 @@ function PanelNegocio({ seccion }) {
               <div className="section-header">
                 <div>
                   <h2>Pago del trámite</h2>
-                  <p>Elige una opcion de pago para continuar con tu solicitud municipal.</p>
+                  <p>Elige tu tipo de comprobante y forma de pago para continuar.</p>
                 </div>
               </div>
 
@@ -1480,6 +1490,9 @@ function PanelNegocio({ seccion }) {
                   <p><strong>DNI:</strong> {dniSolicitante}</p>
                   <p><strong>RUC:</strong> {form.ruc}</p>
                   <p><strong>Razón social:</strong> {form.razonSocial}</p>
+                  {tipoComprobante && (
+                    <p><strong>Comprobante:</strong> {tipoComprobante === "boleta" ? "Boleta de Venta" : "Factura Electrónica"}</p>
+                  )}
                   <div className="monto-box"><span>Total a pagar</span><strong>S/{MONTO_TRAMITE.toFixed(2)}</strong></div>
                   <span className={`badge ${estadoPago === "Confirmado" ? "ok" : "warning"}`}>{estadoPago}</span>
                   {detallePago?.id && <p className="text-muted"><strong>Operación:</strong> {detallePago.id}</p>}
@@ -1488,38 +1501,142 @@ function PanelNegocio({ seccion }) {
                 <div className="detalle-pago detalle-pago-modern">
                   {estadoPago !== "Confirmado" ? (
                     <div className="voucher-box" style={{ padding: "28px", borderRadius: "18px", border: "1px solid #dbeafe", background: "linear-gradient(135deg, #ffffff 0%, #f8fbff 55%, #ecfdf5 100%)", boxShadow: "0 14px 35px rgba(15, 23, 42, 0.08)" }}>
+
+                      {/* Selección de tipo de comprobante */}
                       <div style={{ marginBottom: "22px" }}>
-                        <span style={{ display: "inline-block", padding: "7px 12px", borderRadius: "999px", background: "#e0f2fe", color: "#075985", fontWeight: "700", fontSize: "13px", marginBottom: "12px" }}>Pago del expediente</span>
-                        <h3 style={{ margin: "0 0 8px", color: "#0f172a" }}>Selecciona como deseas pagar</h3>
-                        <p style={{ margin: 0, color: "#475569", lineHeight: "1.6" }}>Puedes intentar el pago TEST oficial con Mercado Pago o usar el modo demo municipal.</p>
+                        <span style={{ display: "inline-block", padding: "7px 12px", borderRadius: "999px", background: "#e0f2fe", color: "#075985", fontWeight: "700", fontSize: "13px", marginBottom: "12px" }}>Tipo de comprobante</span>
+                        <h3 style={{ margin: "0 0 8px", color: "#0f172a" }}>¿Qué tipo de comprobante deseas?</h3>
+                        <p style={{ margin: "0 0 14px", color: "#475569", lineHeight: "1.6" }}>Selecciona según tu condición de contribuyente.</p>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                          <button
+                            type="button"
+                            onClick={() => setTipoComprobante("boleta")}
+                            style={{
+                              padding: "16px", borderRadius: "14px", border: `2px solid ${tipoComprobante === "boleta" ? "#2563eb" : "#e2e8f0"}`,
+                              background: tipoComprobante === "boleta" ? "#eff6ff" : "#f8fafc",
+                              cursor: "pointer", textAlign: "left", transition: "all 0.2s",
+                            }}
+                          >
+                            <div style={{ fontSize: "24px", marginBottom: "6px" }}>&#128196;</div>
+                            <strong style={{ color: "#0f172a", fontSize: "14px", display: "block" }}>Boleta de Venta</strong>
+                            <span style={{ fontSize: "12px", color: "#64748b" }}>Persona Natural — Se completa con tu DNI</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTipoComprobante("factura")}
+                            style={{
+                              padding: "16px", borderRadius: "14px", border: `2px solid ${tipoComprobante === "factura" ? "#16a34a" : "#e2e8f0"}`,
+                              background: tipoComprobante === "factura" ? "#f0fdf4" : "#f8fafc",
+                              cursor: "pointer", textAlign: "left", transition: "all 0.2s",
+                            }}
+                          >
+                            <div style={{ fontSize: "24px", marginBottom: "6px" }}>&#128196;</div>
+                            <strong style={{ color: "#0f172a", fontSize: "14px", display: "block" }}>Factura Electrónica</strong>
+                            <span style={{ fontSize: "12px", color: "#64748b" }}>Persona Jurídica — Se completa con tu RUC</span>
+                          </button>
+                        </div>
+
+                        {tipoComprobante && (
+                          <div style={{ marginTop: "14px", padding: "14px 18px", borderRadius: "12px", background: tipoComprobante === "boleta" ? "#eff6ff" : "#f0fdf4", border: `1px solid ${tipoComprobante === "boleta" ? "#bfdbfe" : "#bbf7d0"}` }}>
+                            <strong style={{ fontSize: "13px", color: "#0f172a" }}>Datos del comprobante:</strong>
+                            {tipoComprobante === "boleta" ? (
+                              <div style={{ marginTop: "6px", fontSize: "13px", color: "#475569" }}>
+                                <p style={{ margin: "2px 0" }}><strong>DNI:</strong> {dniSolicitante}</p>
+                                <p style={{ margin: "2px 0" }}><strong>Nombres:</strong> {nombresSolicitante} {apellidosSolicitante}</p>
+                                <p style={{ margin: "2px 0" }}><strong>Correo:</strong> {usuario?.correo}</p>
+                              </div>
+                            ) : (
+                              <div style={{ marginTop: "6px", fontSize: "13px", color: "#475569" }}>
+                                <p style={{ margin: "2px 0" }}><strong>RUC:</strong> {form.ruc}</p>
+                                <p style={{ margin: "2px 0" }}><strong>Razón Social:</strong> {form.razonSocial}</p>
+                                <p style={{ margin: "2px 0" }}><strong>Dirección:</strong> {form.direccion}</p>
+                                <p style={{ margin: "2px 0", fontSize: "12px", color: "#94a3b8" }}>Incluye IGV (18%)</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
-                        <div style={{ border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: "16px", padding: "20px" }}>
-                          <div style={{ fontSize: "28px", marginBottom: "8px" }}>💳</div>
-                          <h4 style={{ margin: "0 0 8px", color: "#14532d" }}>Pago TEST con Mercado Pago</h4>
-                          <p style={{ color: "#475569", lineHeight: "1.55" }}>Abre Checkout Pro oficial en ambiente de prueba.</p>
-                          <button type="button" className="btn-pago btn-full" onClick={iniciarPagoMercadoPago} disabled={procesandoPago}>{procesandoPago ? "Generando enlace..." : "Pagar con Mercado Pago TEST"}</button>
+
+                      {!tipoComprobante && (
+                        <p style={{ color: "#92400e", background: "#fef3c7", padding: "10px 14px", borderRadius: "8px", fontSize: "13px" }}>
+                          Debe seleccionar un tipo de comprobante antes de continuar con el pago.
+                        </p>
+                      )}
+
+                      {/* Opciones de pago (solo si ya eligió comprobante) */}
+                      {tipoComprobante && (
+                        <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "18px" }}>
+                          <span style={{ display: "inline-block", padding: "7px 12px", borderRadius: "999px", background: "#fef3c7", color: "#92400e", fontWeight: "700", fontSize: "13px", marginBottom: "12px" }}>Forma de pago</span>
+                          <h3 style={{ margin: "0 0 8px", color: "#0f172a" }}>Selecciona como deseas pagar</h3>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", marginTop: "14px" }}>
+                            <div style={{ border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: "14px", padding: "18px" }}>
+                              <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#128179;</div>
+                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "14px" }}>Pago TEST con Mercado Pago</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Abre Checkout Pro en ambiente de prueba.</p>
+                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoMercadoPago} disabled={procesandoPago} style={{ fontSize: "13px" }}>{procesandoPago ? "Generando..." : "Pagar con MP TEST"}</button>
+                            </div>
+                            <div style={{ border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: "14px", padding: "18px" }}>
+                              <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#129535;</div>
+                              <h4 style={{ margin: "0 0 6px", color: "#7c2d12", fontSize: "14px" }}>Pago demo municipal</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Registra comprobante demo para continuar.</p>
+                              <button type="button" className="btn-secundario btn-full" onClick={iniciarPagoDemo} disabled={procesandoPago} style={{ fontSize: "13px" }}>{procesandoPago ? "Registrando..." : "Confirmar pago demo"}</button>
+                            </div>
+                            <div style={{ border: "1px solid #cbd5e1", background: "#f8fafc", borderRadius: "14px", padding: "18px" }}>
+                              <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#127970;</div>
+                              <h4 style={{ margin: "0 0 6px", color: "#334155", fontSize: "14px" }}>Pago presencial en caja</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Paga en la Municipalidad.</p>
+                              <button type="button" className="btn-outline btn-full" onClick={iniciarPagoCaja} disabled={procesandoPago} style={{ fontSize: "13px" }}>Seleccionar caja</button>
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: "16px", padding: "20px" }}>
-                          <div style={{ fontSize: "28px", marginBottom: "8px" }}>🧾</div>
-                          <h4 style={{ margin: "0 0 8px", color: "#7c2d12" }}>Pago demo municipal</h4>
-                          <p style={{ color: "#475569", lineHeight: "1.55" }}>Registra un comprobante demo para continuar el circuito.</p>
-                          <button type="button" className="btn-secundario btn-full" onClick={iniciarPagoDemo} disabled={procesandoPago}>{procesandoPago ? "Registrando..." : "Confirmar pago demo"}</button>
-                        </div>
-                        <div style={{ border: "1px solid #cbd5e1", background: "#f8fafc", borderRadius: "16px", padding: "20px" }}>
-                          <div style={{ fontSize: "28px", marginBottom: "8px" }}>🏛️</div>
-                          <h4 style={{ margin: "0 0 8px", color: "#334155" }}>Pago presencial en caja</h4>
-                          <p style={{ color: "#475569", lineHeight: "1.55" }}>Paga en efectivo o tarjeta en la caja de la Municipalidad.</p>
-                          <button type="button" className="btn-outline btn-full" onClick={iniciarPagoCaja} disabled={procesandoPago}>Seleccionar pago en caja</button>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <div className="voucher-box success-voucher">
-                      <h3>Pago registrado</h3>
-                      <p>El comprobante quedó asociado a esta solicitud.</p>
+                      <h3>&#10003; Pago confirmado</h3>
+                      <p>El comprobante fue generado y guardado exitosamente.</p>
                       {detallePago?.id && <p><strong>Código de operación:</strong> {detallePago.id}</p>}
                       <p><strong>Método:</strong> {metodoPago}</p>
+
+                      {comprobanteGenerado && (
+                        <div style={{ marginTop: "18px", padding: "16px", background: "#f0fdf4", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
+                          <strong style={{ color: "#166534", fontSize: "14px" }}>Comprobante generado</strong>
+                          <p style={{ margin: "4px 0 8px", fontSize: "13px", color: "#475569" }}>
+                            {comprobanteGenerado.tipo_comprobante === "boleta" ? "Boleta" : "Factura"}: {comprobanteGenerado.serie}-{comprobanteGenerado.numero}
+                          </p>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            {comprobanteGenerado.url_pdf && (
+                              <a href={comprobanteGenerado.url_pdf} target="_blank" rel="noreferrer"
+                                style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600", textDecoration: "none" }}>
+                                &#128196; Ver comprobante
+                              </a>
+                            )}
+                            <button type="button" className="btn-ok" style={{ fontSize: "13px" }} onClick={() => descargarComprobante(comprobanteGenerado)}>
+                              &#11015; Descargar PDF
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secundario"
+                              style={{ fontSize: "13px" }}
+                              disabled={enviandoCorreo}
+                              onClick={async () => {
+                                try {
+                                  setEnviandoCorreo(true);
+                                  await enviarComprobantePorCorreo(comprobanteGenerado);
+                                  alert("Comprobante enviado a tu correo electrónico.");
+                                } catch (err) {
+                                  alert("No se pudo enviar el correo: " + err.message);
+                                } finally {
+                                  setEnviandoCorreo(false);
+                                }
+                              }}
+                            >
+                              {enviandoCorreo ? "Enviando..." : "Enviar por correo"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1527,7 +1644,7 @@ function PanelNegocio({ seccion }) {
 
               <div className="acciones-pago acciones-pago-modern">
                 <button type="button" onClick={() => setPaso("solicitud")}>Volver</button>
-                <button type="button" className="btn-pago" onClick={enviarSolicitud} disabled={guardando || (estadoPago !== "Confirmado" && metodoPago !== "Pago presencial en caja")}>{guardando ? "Guardando solicitud..." : "Enviar solicitud"}</button>
+                <button type="button" className="btn-pago" onClick={enviarSolicitud} disabled={guardando || !tipoComprobante || (estadoPago !== "Confirmado" && metodoPago !== "Pago presencial en caja")}>{guardando ? "Guardando solicitud..." : "Enviar solicitud"}</button>
               </div>
             </section>
           )}
@@ -1558,8 +1675,8 @@ function PanelNegocio({ seccion }) {
         <section className="section-card section-card-modern">
           <div className="section-header">
             <div>
-              <h2>Mis comprobantes de pago</h2>
-              <p>Consulta y descarga los comprobantes de tus pagos realizados.</p>
+              <h2>Mis pagos y comprobantes</h2>
+              <p>Historial de comprobantes de pago de tus solicitudes.</p>
             </div>
             <button type="button" className="btn-outline" onClick={cargarComprobantes} disabled={cargandoComprobantes}>
               {cargandoComprobantes ? "Cargando..." : "Actualizar"}
@@ -1574,22 +1691,22 @@ function PanelNegocio({ seccion }) {
           ) : comprobantes.length === 0 ? (
             <div className="empty-state empty-state-modern">
               <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "linear-gradient(135deg, #fef3c7, #fde68a)", display: "grid", placeItems: "center", margin: "0 auto 16px", fontSize: "36px" }}>&#128196;</div>
-              <h3>No tienes comprobantes de pago</h3>
+              <h3>No tienes pagos registrados</h3>
               <p>Cuando realices el pago de una solicitud, tu comprobante aparecerá aquí.</p>
             </div>
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
               {comprobantes.map((comp) => (
                 <div key={comp.id_comprobante} style={{
-                  padding: "18px 20px",
+                  padding: "20px",
                   borderRadius: "14px",
                   border: "1px solid #e2e8f0",
                   background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
-                    <div style={{ flex: 1, minWidth: "200px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                    <div style={{ flex: 1, minWidth: "220px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
                         <span style={{
                           display: "inline-block",
                           padding: "3px 10px",
@@ -1607,41 +1724,47 @@ function PanelNegocio({ seccion }) {
                         <span style={{ fontFamily: "monospace", fontWeight: "700", color: "#0f172a", fontSize: "15px" }}>
                           {comp.serie}-{comp.numero}
                         </span>
+                        <span style={{
+                          display: "inline-block",
+                          padding: "3px 10px",
+                          borderRadius: "999px",
+                          fontSize: "11px",
+                          fontWeight: "700",
+                          background: "#dcfce7",
+                          color: "#166534",
+                        }}>
+                          {comp.estado}
+                        </span>
                       </div>
-                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#64748b" }}>
-                        <strong>Solicitud:</strong> {comp.id_solicitud}
-                      </p>
-                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#64748b" }}>
-                        <strong>Fecha:</strong> {comp.fecha_emision}
-                      </p>
-                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#64748b" }}>
-                        <strong>Método:</strong> {comp.metodo_pago}
-                      </p>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "4px 16px" }}>
+                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Solicitud:</strong> {comp.id_solicitud}</p>
+                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Fecha:</strong> {comp.fecha_emision}</p>
+                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Método:</strong> {comp.metodo_pago}</p>
+                        {comp.ruc_cliente && <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>RUC:</strong> {comp.ruc_cliente}</p>}
+                        {comp.dni_cliente && <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>DNI:</strong> {comp.dni_cliente}</p>}
+                        {comp.tipo_comprobante === "factura" && comp.monto_igv > 0 && (
+                          <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>IGV:</strong> S/{Number(comp.monto_igv).toFixed(2)}</p>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ textAlign: "right", minWidth: "120px" }}>
-                      <p style={{ margin: "0 0 8px", fontSize: "22px", fontWeight: "800", color: "#166534" }}>
-                        S/{Number(comp.monto).toFixed(2)}
+                    <div style={{ textAlign: "right", minWidth: "140px" }}>
+                      <p style={{ margin: "0 0 8px", fontSize: "24px", fontWeight: "800", color: "#166534" }}>
+                        S/{Number(comp.monto_total || comp.monto).toFixed(2)}
                       </p>
-                      <span style={{
-                        display: "inline-block",
-                        padding: "3px 10px",
-                        borderRadius: "999px",
-                        fontSize: "11px",
-                        fontWeight: "700",
-                        background: "#dcfce7",
-                        color: "#166534",
-                        marginBottom: "10px",
-                      }}>
-                        {comp.estado}
-                      </span>
-                      <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                      <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                        {comp.url_pdf && (
+                          <a href={comp.url_pdf} target="_blank" rel="noreferrer"
+                            style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "12px", fontWeight: "600", textDecoration: "none" }}>
+                            &#128196; Ver PDF
+                          </a>
+                        )}
                         <button
                           type="button"
                           className="btn-ok"
                           style={{ fontSize: "12px", padding: "6px 14px" }}
                           onClick={() => descargarComprobante(comp)}
                         >
-                          Descargar PDF
+                          &#11015; Descargar
                         </button>
                         <button
                           type="button"
@@ -1656,7 +1779,7 @@ function PanelNegocio({ seccion }) {
                             }
                           }}
                         >
-                          Enviar por correo
+                          &#9993; Enviar
                         </button>
                       </div>
                     </div>

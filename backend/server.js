@@ -614,7 +614,7 @@ app.post("/api/comprobantes/enviar-correo", async (req, res) => {
   console.log("=== ENDPOINT /api/comprobantes/enviar-correo ===");
 
   try {
-    const { correo_usuario, codigo_unico, tipo_comprobante, monto, id_solicitud, fecha_emision } = req.body;
+    const { correo_usuario, codigo_unico, tipo_comprobante, monto_total, id_solicitud, fecha_emision, url_pdf, serie, numero } = req.body;
 
     if (!correo_usuario || !codigo_unico) {
       return res.status(400).json({ error: "Faltan parámetros obligatorios." });
@@ -624,24 +624,26 @@ app.post("/api/comprobantes/enviar-correo", async (req, res) => {
       return res.status(500).json({ error: "Servicio de correo no configurado." });
     }
 
-    const tipoLabel = tipo_comprobante === "boleta" ? "Boleta de Venta" : "Factura Electrónica";
+    const tipoLabel = tipo_comprobante === "boleta" ? "Boleta de Venta Electrónica" : "Factura Electrónica";
+    const nombrePdf = `${tipo_comprobante === "boleta" ? "BOLETA" : "FACTURA"}_${serie || codigo_unico.split("-")[0]}_${numero || codigo_unico.split("-")[1]}.pdf`;
 
     const mailOptions = {
       from: `"Municipalidad de Trujillo" <${SMTP_EMAIL}>`,
       to: correo_usuario,
-      subject: `Comprobante de pago ${tipoLabel} - ${codigo_unico}`,
+      subject: `${tipoLabel} — ${codigo_unico} | Comprobante de pago municipal`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 28px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
           <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: #1f3b57; border-radius: 10px;">
             <h1 style="color: white; font-size: 18px; margin: 0;">Municipalidad de Trujillo</h1>
             <p style="color: #93c5fd; font-size: 12px; margin: 4px 0 0;">Sistema de Licencias Municipales</p>
           </div>
 
-          <h2 style="color: #0f172a; font-size: 18px; margin: 0 0 12px;">Comprobante de Pago</h2>
-
-          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
-            <p style="margin: 0; color: #166534; font-size: 14px;">Tu pago fue registrado exitosamente.</p>
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-bottom: 16px; text-align: center;">
+            <p style="margin: 0; color: #166534; font-size: 15px; font-weight: 700;">&#10003; Pago registrado exitosamente</p>
+            <p style="margin: 4px 0 0; color: #166534; font-size: 13px;">Tu comprobante de pago ha sido generado.</p>
           </div>
+
+          <h2 style="color: #0f172a; font-size: 16px; margin: 0 0 10px;">${tipoLabel}</h2>
 
           <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
             <tr>
@@ -661,15 +663,24 @@ app.post("/api/comprobantes/enviar-correo", async (req, res) => {
               <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${fecha_emision || "N/A"}</td>
             </tr>
             <tr>
-              <td style="padding: 8px 0; color: #64748b; font-size: 16px;">Monto pagado</td>
-              <td style="padding: 8px 0; color: #166534; font-weight: 700; font-size: 18px; text-align: right;">S/${Number(monto || 0).toFixed(2)}</td>
+              <td style="padding: 10px 0; color: #64748b; font-size: 16px;">Monto pagado</td>
+              <td style="padding: 10px 0; color: #166534; font-weight: 700; font-size: 20px; text-align: right;">S/${Number(monto_total || 0).toFixed(2)}</td>
             </tr>
           </table>
 
-          <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 16px;">
-            Este comprobante fue generado automáticamente por el sistema municipal.
+          ${url_pdf ? `
+          <div style="text-align: center; margin: 20px 0;">
+            <a href="${url_pdf}" target="_blank" style="display: inline-block; padding: 14px 32px; background: #1e3a8a; color: #ffffff; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 15px;">
+              &#128196; Descargar comprobante PDF
+            </a>
+            <p style="margin: 8px 0 0; font-size: 12px; color: #94a3b8;">${nombrePdf}</p>
+          </div>
+          ` : ""}
+
+          <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 16px; text-align: center;">
+            Este comprobante fue generado automáticamente por el sistema municipal.<br/>
+            Municipalidad de Trujillo — Sistema de Licencias v1.0
           </p>
-          <p style="font-size: 14px; font-weight: bold; color: #1f3b57; margin: 0;">Municipalidad de Trujillo</p>
         </div>
       `,
     };
