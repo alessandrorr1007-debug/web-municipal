@@ -36,6 +36,7 @@ function PanelNegocio({ seccion }) {
   const [errorSms, setErrorSms] = useState("");
   const [successSms, setSuccessSms] = useState("");
   const [tiempoRestanteSms, setTiempoRestanteSms] = useState(0);
+  const [modalComprobante, setModalComprobante] = useState(null);
 
   useEffect(() => {
     if (tiempoRestanteSms <= 0) return;
@@ -94,6 +95,34 @@ function PanelNegocio({ seccion }) {
       await actualizarPreferenciasNotificaciones(usuario.uid, nuevoRecibirCorreos, nuevoSmsHabilitado);
     } catch (err) {
       alert("Error al guardar la preferencia: " + err.message);
+    }
+  };
+
+  const descargarComprobanteDesdeUrl = async (comprobante) => {
+    const url = comprobante.url_pdf || comprobante.archivo_pdf_url;
+    if (!url) return;
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${comprobante.tipo_comprobante === "boleta" ? "BOLETA" : "FACTURA"}_${comprobante.serie}_${comprobante.numero}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      window.open(url, "_blank");
+    }
+  };
+
+  const imprimirComprobante = (comprobante) => {
+    const url = comprobante.url_pdf || comprobante.archivo_pdf_url;
+    if (!url) return;
+    const printWindow = window.open(url, "_blank");
+    if (printWindow) {
+      printWindow.focus();
     }
   };
 
@@ -578,14 +607,10 @@ function PanelNegocio({ seccion }) {
       console.log("[SOLICITUD] Guardada:", nueva.id);
       setExpediente(nueva.id);
 
-      // 3. MOSTRAR CONFIRMACIÓN INMEDIATAMENTE (no esperar comprobante ni reload)
-      setGuardando(false);
-      setPaso("confirmacion");
-
-      // 4. Operaciones en BACKGROUND (fire-and-forget, no bloquean UI)
+      let comp = null;
       if (estadoPago === "Confirmado") {
         const tipoFinal = tipoComprobante || (form.ruc.startsWith("20") ? "factura" : "boleta");
-        generarComprobante({
+        comp = await generarComprobante({
           uidUsuario: usuario?.uid || "",
           correoUsuario: usuario?.correo || "",
           idSolicitud: nueva.id,
@@ -600,12 +625,17 @@ function PanelNegocio({ seccion }) {
           monto: MONTO_TRAMITE,
           metodoPago,
           estadoPago: "Pagado",
-        }).then((comp) => {
-          setComprobanteGenerado(comp);
-          console.log("[COMPROBANTE] Generado:", comp.codigo_unico);
-        }).catch((err) => {
-          console.error("[COMPROBANTE] Error (background):", err);
+          codigoOperacion: (detallePago?.id || detallePago?.paymentId || `DEMO-${Date.now().toString().slice(-8)}`),
         });
+        setComprobanteGenerado(comp);
+        console.log("[COMPROBANTE] Generado:", comp.codigo_unico);
+      }
+
+      setGuardando(false);
+      setPaso("confirmacion");
+
+      if (comp) {
+        setModalComprobante(comp);
       }
 
       cargarMisSolicitudes().catch((err) => {
@@ -1828,34 +1858,29 @@ function PanelNegocio({ seccion }) {
                         S/{Number(comp.monto_total || comp.monto).toFixed(2)}
                       </p>
                       <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                        {comp.url_pdf && (
-                          <a href={comp.url_pdf} target="_blank" rel="noreferrer"
-                            style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "12px", fontWeight: "600", textDecoration: "none" }}>
-                            &#128196; Ver PDF
-                          </a>
-                        )}
+                        <button
+                          type="button"
+                          className="btn-outline"
+                          style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
+                          onClick={() => setModalComprobante(comp)}
+                        >
+                          👁 Ver
+                        </button>
                         <button
                           type="button"
                           className="btn-ok"
-                          style={{ fontSize: "12px", padding: "6px 14px" }}
-                          onClick={() => descargarComprobante(comp)}
+                          style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
+                          onClick={() => descargarComprobanteDesdeUrl(comp)}
                         >
-                          &#11015; Descargar
+                          📥 Descargar PDF
                         </button>
                         <button
                           type="button"
                           className="btn-secundario"
-                          style={{ fontSize: "12px", padding: "6px 14px" }}
-                          onClick={async () => {
-                            try {
-                              await enviarComprobantePorCorreo(comp);
-                              alert("Comprobante enviado a tu correo electrónico.");
-                            } catch (err) {
-                              alert("No se pudo enviar el correo: " + err.message);
-                            }
-                          }}
+                          style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
+                          onClick={() => imprimirComprobante(comp)}
                         >
-                          &#9993; Enviar
+                          🖨 Imprimir
                         </button>
                       </div>
                     </div>
@@ -2029,6 +2054,169 @@ function PanelNegocio({ seccion }) {
             </div>
           </div>
         </section>
+      )}
+      {modalComprobante && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(15, 23, 42, 0.6)",
+          backdropFilter: "blur(4px)",
+          display: "grid",
+          placeItems: "center",
+          zIndex: 9999,
+          padding: "20px",
+          overflowY: "auto",
+        }}>
+          <div style={{
+            background: "white",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "500px",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+            overflow: "hidden",
+            border: "1px solid #e2e8f0",
+          }}>
+            {/* Header */}
+            <div style={{
+              background: "#f0fdf4",
+              borderBottom: "1px solid #bbf7d0",
+              padding: "24px 20px",
+              textAlign: "center",
+            }}>
+              <div style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "50%",
+                background: "#dcfce7",
+                border: "2px solid #34d399",
+                display: "grid",
+                placeItems: "center",
+                margin: "0 auto 12px",
+                fontSize: "24px",
+                color: "#059669",
+              }}>
+                ✓
+              </div>
+              <h2 style={{ margin: "0 0 4px", color: "#166534", fontSize: "18px", fontWeight: "800" }}>PAGO REALIZADO CORRECTAMENTE</h2>
+              <p style={{ margin: 0, color: "#15803d", fontSize: "14px" }}>Comprobante generado exitosamente.</p>
+            </div>
+
+            {/* Content / Details */}
+            <div style={{ padding: "20px", fontSize: "14px", color: "#334155" }}>
+              <div style={{ display: "grid", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ color: "#64748b" }}>Código de solicitud</span>
+                  <strong style={{ color: "#0f172a" }}>{modalComprobante.id_solicitud}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ color: "#64748b" }}>Código de operación</span>
+                  <strong style={{ color: "#0f172a" }}>{modalComprobante.codigo_operacion}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ color: "#64748b" }}>Tipo de comprobante</span>
+                  <strong style={{ color: "#0f172a" }}>{modalComprobante.tipo_comprobante === "boleta" ? "Boleta de Venta" : "Factura Electrónica"}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ color: "#64748b" }}>Solicitante</span>
+                  <strong style={{ color: "#0f172a" }}>{modalComprobante.nombres_cliente} {modalComprobante.apellidos_cliente}</strong>
+                </div>
+                {modalComprobante.dni_cliente && (
+                  <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                    <span style={{ color: "#64748b" }}>DNI</span>
+                    <strong style={{ color: "#0f172a" }}>{modalComprobante.dni_cliente}</strong>
+                  </div>
+                )}
+                {modalComprobante.ruc_cliente && (
+                  <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                    <span style={{ color: "#64748b" }}>RUC</span>
+                    <strong style={{ color: "#0f172a" }}>{modalComprobante.ruc_cliente}</strong>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ color: "#64748b" }}>Monto pagado</span>
+                  <strong style={{ color: "#166534", fontSize: "16px" }}>S/{Number(modalComprobante.monto_total || modalComprobante.monto).toFixed(2)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ color: "#64748b" }}>Método de pago</span>
+                  <strong style={{ color: "#0f172a" }}>{modalComprobante.metodo_pago}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
+                  <span style={{ color: "#64748b" }}>Fecha</span>
+                  <strong style={{ color: "#0f172a" }}>{modalComprobante.fecha_emision}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "4px" }}>
+                  <span style={{ color: "#64748b" }}>Estado</span>
+                  <span style={{ background: "#dcfce7", color: "#15803d", padding: "4px 12px", borderRadius: "999px", fontSize: "12px", fontWeight: "700" }}>PAGADO</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div style={{
+              background: "#f8fafc",
+              borderTop: "1px solid #e2e8f0",
+              padding: "16px 20px",
+              display: "flex",
+              gap: "8px",
+              justifyContent: "flex-end",
+            }}>
+              <button
+                type="button"
+                onClick={() => descargarComprobanteDesdeUrl(modalComprobante)}
+                style={{
+                  padding: "10px 16px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  background: "#1e3a8a",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                📥 Descargar PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => imprimirComprobante(modalComprobante)}
+                style={{
+                  padding: "10px 16px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  background: "#64748b",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                🖨 Imprimir
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalComprobante(null);
+                  setPaso("misSolicitudes");
+                }}
+                style={{
+                  padding: "10px 16px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  background: "white",
+                  color: "#334155",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

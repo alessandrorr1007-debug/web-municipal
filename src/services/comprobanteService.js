@@ -11,7 +11,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import jsPDF from "jspdf";
 
-const COLLECTION = "pagos";
+const COLLECTION = "comprobantes_pago";
 const IGV_RATE = 0.18;
 
 const generarSerie = (tipo) => {
@@ -45,6 +45,7 @@ export const generarComprobante = async ({
   monto,
   metodoPago,
   estadoPago,
+  codigoOperacion,
 }) => {
   const serie = generarSerie(tipo);
   const numero = generarNumero();
@@ -77,6 +78,7 @@ export const generarComprobante = async ({
     direccion_cliente: direccionCliente || "",
     descripcion_pago: descripcionPago || "Pago por derecho de trámite de licencia de funcionamiento",
     monto_total: monto,
+    monto: monto,
     monto_base: montoBase,
     monto_igv: montoIgv,
     metodo_pago: metodoPago,
@@ -84,17 +86,20 @@ export const generarComprobante = async ({
     hora_emision: horaEmision,
     fecha_pago: fechaEmision,
     estado: estadoPago || "Pagado",
+    codigo_operacion: codigoOperacion || `DEMO-${Date.now().toString().slice(-8)}`,
     url_pdf: "",
+    archivo_pdf_url: "",
   };
 
   const docPdf = generarPdfComprobante(comprobante);
-  const nombrePdf = `${tipo === "boleta" ? "BOLETA" : "FACTURA"}_${codigoUnico}.pdf`;
+  const nombrePdf = `${tipo.toUpperCase()}_${serie}_${numero}.pdf`;
   const pdfBlob = docPdf.output("blob");
 
   const storageRef = ref(storage, `comprobantes/${uidUsuario}/${idSolicitud}/${nombrePdf}`);
   await uploadBytes(storageRef, pdfBlob, { contentType: "application/pdf" });
   const urlPdf = await getDownloadURL(storageRef);
   comprobante.url_pdf = urlPdf;
+  comprobante.archivo_pdf_url = urlPdf;
 
   await setDoc(doc(db, COLLECTION, comprobante.id_comprobante), comprobante);
 
