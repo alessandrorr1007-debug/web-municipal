@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { consultarRuc } from "../services/rucService";
 import { consultarDni } from "../services/dniService";
 import { crearPreferenciaPago } from "../services/pagoService";
@@ -290,15 +290,15 @@ function PanelNegocio({ seccion }) {
 
       setForm((prev) => ({
         ...prev,
-        razonSocial: data.nombreNegocio || "",
-        nombreNegocio: data.nombreComercial || data.nombreNegocio || "",
+        razonSocial: data.razon_social || "",
+        nombreNegocio: data.razon_social || "",
         direccion: data.direccion || "",
         estadoSunat: data.estado || "",
         condicionSunat: data.condicion || "",
         departamento: data.departamento || "",
         provincia: data.provincia || "",
         distrito: data.distrito || "",
-        giro: data.giroComercial || "Actividad económica no especificada"
+        giro: data.actividad_economica || "Actividad económica no especificada"
       }));
 
       if (data.esValido) {
