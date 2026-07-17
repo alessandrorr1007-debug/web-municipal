@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./style.css";
 
 import LandingPage from "./components/LandingPage";
@@ -17,7 +17,29 @@ function App() {
   const { usuario, cargando } = useAuth();
   const [vista, setVista] = useState("landing");
   const [seccion, setSeccion] = useState("inicio");
-  const [sidebarAbierto, setSidebarAbierto] = useState(true);
+  const [sidebarAbierto, setSidebarAbierto] = useState(window.innerWidth > 1024);
+  const [esMovil, setEsMovil] = useState(window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth <= 1024;
+      setEsMovil(isMobile);
+      if (isMobile) {
+        setSidebarAbierto(false);
+      } else {
+        setSidebarAbierto(true);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const cambiarSeccion = (nueva) => {
+    setSeccion(nueva);
+    if (window.innerWidth <= 1024) {
+      setSidebarAbierto(false);
+    }
+  };
 
   const salir = async () => {
     await cerrarSesion();
@@ -140,11 +162,27 @@ function App() {
         rolEtiqueta={rolEtiqueta}
         rolColor={rolColor}
         seccion={seccion}
-        onCambiarSeccion={setSeccion}
+        onCambiarSeccion={cambiarSeccion}
         abierto={sidebarAbierto}
         onToggle={() => setSidebarAbierto(!sidebarAbierto)}
         secciones={seccionesPorRol[usuario.rol] || []}
       />
+
+      {sidebarAbierto && esMovil && (
+        <div 
+          onClick={() => setSidebarAbierto(false)} 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.4)",
+            backdropFilter: "blur(2px)",
+            zIndex: 99,
+          }}
+        />
+      )}
 
       <div className={`dashboard-main ${sidebarAbierto ? "sidebar-open" : "sidebar-closed"}`}>
         <header className="topbar">
