@@ -19,7 +19,13 @@ import {
   enviarOtpTelefono,
   verificarOtpTelefono,
   confirmarVerificacionTelefono,
-  actualizarPreferenciasNotificaciones
+  actualizarPreferenciasNotificaciones,
+  enviarOtpCorreoActual,
+  verificarOtpCorreoActual,
+  enviarOtpCorreoNuevo,
+  verificarOtpCorreoNuevo,
+  actualizarCorreoDeUsuario,
+  restablecerContrasenaPorEmail
 } from "../services/authService";
 import Timeline from "./Timeline";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -37,6 +43,121 @@ function PanelNegocio({ seccion }) {
   const [successSms, setSuccessSms] = useState("");
   const [tiempoRestanteSms, setTiempoRestanteSms] = useState(0);
   const [modalComprobante, setModalComprobante] = useState(null);
+
+  // Email Change states
+  const [modalCambiarCorreo, setModalCambiarCorreo] = useState(false);
+  const [pasoCambioCorreo, setPasoCambioCorreo] = useState(1);
+  const [nuevoCorreo, setNuevoCorreo] = useState("");
+  const [codigoCorreoActual, setCodigoCorreoActual] = useState("");
+  const [codigoCorreoNuevo, setCodigoCorreoNuevo] = useState("");
+  const [cargandoCambioCorreo, setCargandoCambioCorreo] = useState(false);
+  const [errorCambioCorreo, setErrorCambioCorreo] = useState("");
+  const [successCambioCorreo, setSuccessCambioCorreo] = useState("");
+
+  const manejarEnviarOtpActual = async (e) => {
+    e.preventDefault();
+    if (!nuevoCorreo) {
+      setErrorCambioCorreo("Ingrese el nuevo correo electrónico.");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(nuevoCorreo)) {
+      setErrorCambioCorreo("Ingrese un correo electrónico válido.");
+      return;
+    }
+    if (nuevoCorreo.toLowerCase() === usuario.correo.toLowerCase()) {
+      setErrorCambioCorreo("El nuevo correo debe ser diferente al actual.");
+      return;
+    }
+    
+    setErrorCambioCorreo("");
+    setSuccessCambioCorreo("");
+    setCargandoCambioCorreo(true);
+    try {
+      const qUser = query(collection(db, "usuarios"), where("correo", "==", nuevoCorreo.trim().toLowerCase()));
+      const snapUser = await getDocs(qUser);
+      if (!snapUser.empty) {
+        throw new Error("No es posible utilizar este correo porque ya pertenece a otra cuenta.");
+      }
+
+      await enviarOtpCorreoActual(usuario.correo);
+      setPasoCambioCorreo(2);
+      setSuccessCambioCorreo("Código de verificación enviado a tu correo actual.");
+    } catch (err) {
+      setErrorCambioCorreo(err.message || "Error al enviar el código de verificación.");
+    } finally {
+      setCargandoCambioCorreo(false);
+    }
+  };
+
+  const manejarVerificarOtpActual = async (e) => {
+    e.preventDefault();
+    if (!codigoCorreoActual || codigoCorreoActual.length !== 6) {
+      setErrorCambioCorreo("Ingresa el código de 6 dígitos.");
+      return;
+    }
+    setErrorCambioCorreo("");
+    setSuccessCambioCorreo("");
+    setCargandoCambioCorreo(true);
+    try {
+      await verificarOtpCorreoActual(usuario.correo, codigoCorreoActual);
+      await enviarOtpCorreoNuevo(usuario.correo, nuevoCorreo.trim().toLowerCase());
+      setPasoCambioCorreo(3);
+      setSuccessCambioCorreo("Código de confirmación enviado a tu nuevo correo.");
+    } catch (err) {
+      setErrorCambioCorreo(err.message || "Código incorrecto o inválido.");
+    } finally {
+      setCargandoCambioCorreo(false);
+    }
+  };
+
+  const manejarVerificarOtpNuevo = async (e) => {
+    e.preventDefault();
+    if (!codigoCorreoNuevo || codigoCorreoNuevo.length !== 6) {
+      setErrorCambioCorreo("Ingresa el código de 6 dígitos.");
+      return;
+    }
+    setErrorCambioCorreo("");
+    setSuccessCambioCorreo("");
+    setCargandoCambioCorreo(true);
+    try {
+      await verificarOtpCorreoNuevo(usuario.correo, nuevoCorreo.trim().toLowerCase(), codigoCorreoNuevo);
+      await actualizarCorreoDeUsuario(usuario.uid, nuevoCorreo.trim().toLowerCase());
+      
+      setSuccessCambioCorreo("Correo electrónico actualizado correctamente.");
+      setTimeout(() => {
+        setModalCambiarCorreo(false);
+        setPasoCambioCorreo(1);
+        setNuevoCorreo("");
+        setCodigoCorreoActual("");
+        setCodigoCorreoNuevo("");
+        setErrorCambioCorreo("");
+        setSuccessCambioCorreo("");
+      }, 3000);
+    } catch (err) {
+      setErrorCambioCorreo(err.message || "Código incorrecto o inválido.");
+    } finally {
+      setCargandoCambioCorreo(false);
+    }
+  };
+
+  const [cargandoCambioPassword, setCargandoCambioPassword] = useState(false);
+  const [successPasswordReset, setSuccessPasswordReset] = useState("");
+  const [errorPasswordReset, setErrorPasswordReset] = useState("");
+
+  const manejarCambiarPassword = async () => {
+    setErrorPasswordReset("");
+    setSuccessPasswordReset("");
+    setCargandoCambioPassword(true);
+    try {
+      await restablecerContrasenaPorEmail(usuario.correo);
+      setSuccessPasswordReset("Se ha enviado un enlace para restablecer tu contraseña a tu correo electrónico.");
+    } catch (err) {
+      setErrorPasswordReset(err.message || "No se pudo enviar el correo de restablecimiento.");
+    } finally {
+      setCargandoCambioPassword(false);
+    }
+  };
 
   useEffect(() => {
     if (tiempoRestanteSms <= 0) return;
@@ -1900,19 +2021,59 @@ function PanelNegocio({ seccion }) {
               <p>Información de tu perfil registrado.</p>
             </div>
           </div>
+          
           <div style={{ display: "grid", gap: "12px", maxWidth: "500px" }}>
+            
+            {/* Cabecera de perfil */}
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px 20px", background: "#eff6ff", borderRadius: "14px", border: "1px solid #bfdbfe", marginBottom: "8px" }}>
+              <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: "#1e3a8a", color: "white", display: "grid", placeItems: "center", fontSize: "24px", fontWeight: "bold" }}>
+                {usuario.nombre ? usuario.nombre.charAt(0).toUpperCase() : "U"}
+              </div>
+              <div>
+                <h3 style={{ margin: 0, color: "#1e3a8a", fontSize: "16px", fontWeight: "700" }}>{usuario.nombre}</h3>
+                <span style={{ color: "#1e40af", fontSize: "13px" }}>Ciudadano registrado</span>
+              </div>
+            </div>
+
+            {/* Campos de datos */}
             <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <span style={{ color: "#64748b", fontSize: "14px" }}>Nombre</span>
+              <span style={{ color: "#64748b", fontSize: "14px" }}>Nombre completo</span>
               <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.nombre}</strong>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <span style={{ color: "#64748b", fontSize: "14px" }}>Correo</span>
-              <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.correo}</strong>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <div>
+                <span style={{ color: "#64748b", fontSize: "12px", display: "block" }}>Correo electrónico</span>
+                <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.correo}</strong>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setModalCambiarCorreo(true)}
+                style={{ padding: "6px 12px", fontSize: "12px", background: "#1e3a8a", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}
+              >
+                Cambiar correo
+              </button>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <span style={{ color: "#64748b", fontSize: "14px" }}>DNI</span>
-              <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.dni || "No registrado"}</strong>
+
+            <div style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <span style={{ color: "#64748b", fontSize: "12px", display: "block" }}>Contraseña</span>
+                  <strong style={{ color: "#0f172a", fontSize: "14px" }}>••••••••••••</strong>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={manejarCambiarPassword}
+                  disabled={cargandoCambioPassword}
+                  style={{ padding: "6px 12px", fontSize: "12px", background: "#64748b", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}
+                >
+                  {cargandoCambioPassword ? "Enviando..." : "Cambiar contraseña"}
+                </button>
+              </div>
+              {successPasswordReset && <div style={{ color: "#15803d", fontSize: "12px", marginTop: "8px", background: "#f0fdf4", padding: "8px 12px", borderRadius: "6px", border: "1px solid #bbf7d0" }}>&#10004; {successPasswordReset}</div>}
+              {errorPasswordReset && <div style={{ color: "#b91c1c", fontSize: "12px", marginTop: "8px", background: "#fef2f2", padding: "8px 12px", borderRadius: "6px", border: "1px solid #fecaca" }}>&#9888; {errorPasswordReset}</div>}
             </div>
+
             <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
               <span style={{ color: "#64748b", fontSize: "14px" }}>Teléfono</span>
               <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.telefono || "No registrado"}</strong>
@@ -2033,21 +2194,7 @@ function PanelNegocio({ seccion }) {
 
               </div>
             </div>
-            <div style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-              <span style={{ color: "#64748b", fontSize: "14px", display: "block", marginBottom: "8px" }}>Mis Negocios Registrados</span>
-              {negocios.length === 0 ? (
-                <span style={{ fontSize: "14px", color: "#64748b" }}>Ningún negocio registrado aún.</span>
-              ) : (
-                <div style={{ display: "grid", gap: "8px" }}>
-                  {negocios.map((neg, idx) => (
-                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", borderTop: idx > 0 ? "1px solid #e2e8f0" : "none", paddingTop: idx > 0 ? "8px" : "0" }}>
-                      <span style={{ fontSize: "13px", color: "#0f172a", fontWeight: 600 }}>{neg.razonSocial || neg.nombreNegocio}</span>
-                      <span style={{ fontSize: "13px", color: "#64748b" }}>RUC: {neg.ruc}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+
             <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
               <span style={{ color: "#64748b", fontSize: "14px" }}>Rol</span>
               <strong style={{ color: "#0f172a", fontSize: "14px" }}>Solicitante</strong>
@@ -2213,6 +2360,131 @@ function PanelNegocio({ seccion }) {
                 }}
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modalCambiarCorreo && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(15, 23, 42, 0.6)",
+          backdropFilter: "blur(4px)",
+          display: "grid",
+          placeItems: "center",
+          zIndex: 9999,
+          padding: "20px",
+        }}>
+          <div style={{
+            background: "white",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "450px",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+            overflow: "hidden",
+            border: "1px solid #e2e8f0",
+          }}>
+            <div style={{ background: "#1f3b57", color: "white", padding: "20px", textAlign: "center" }}>
+              <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>Cambiar correo electrónico</h3>
+              <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#93c5fd" }}>Doble verificación de seguridad</p>
+            </div>
+            
+            <div style={{ padding: "20px" }}>
+              {/* PASO 1: Ingresar nuevo correo */}
+              {pasoCambioCorreo === 1 && (
+                <form onSubmit={manejarEnviarOtpActual} style={{ display: "grid", gap: "14px" }}>
+                  <div>
+                    <span style={{ display: "block", fontSize: "13px", color: "#64748b", marginBottom: "4px" }}>Correo actual</span>
+                    <strong style={{ fontSize: "15px", color: "#0f172a" }}>{usuario.correo}</strong>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>Nuevo correo electrónico</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="nuevo@correo.com"
+                      value={nuevoCorreo}
+                      onChange={(e) => setNuevoCorreo(e.target.value)}
+                      style={{ width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <button type="submit" disabled={cargandoCambioCorreo} style={{ padding: "10px", background: "#1e3a8a", color: "white", border: "none", borderRadius: "8px", fontWeight: "600", cursor: "pointer" }}>
+                    {cargandoCambioCorreo ? "Verificando..." : "Enviar código al correo actual"}
+                  </button>
+                </form>
+              )}
+
+              {/* PASO 2: Ingresar código del correo actual */}
+              {pasoCambioCorreo === 2 && (
+                <form onSubmit={manejarVerificarOtpActual} style={{ display: "grid", gap: "14px" }}>
+                  <p style={{ margin: 0, fontSize: "13.5px", color: "#475569", lineHeight: 1.4 }}>
+                    Hemos enviado un código al correo actual <strong>{usuario.correo}</strong>.
+                  </p>
+                  <div>
+                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>Código de verificación (6 dígitos)</label>
+                    <input
+                      type="text"
+                      maxLength="6"
+                      required
+                      placeholder="Ej: 123456"
+                      value={codigoCorreoActual}
+                      onChange={(e) => setCodigoCorreoActual(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      style={{ width: "100%", padding: "10px", textAlign: "center", fontSize: "18px", letterSpacing: "2px", fontWeight: "bold", border: "1px solid #cbd5e1", borderRadius: "8px", boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <button type="submit" disabled={cargandoCambioCorreo} style={{ padding: "10px", background: "#16a34a", color: "white", border: "none", borderRadius: "8px", fontWeight: "600", cursor: "pointer" }}>
+                    {cargandoCambioCorreo ? "Verificando..." : "Confirmar código actual"}
+                  </button>
+                </form>
+              )}
+
+              {/* PASO 3: Ingresar código del nuevo correo */}
+              {pasoCambioCorreo === 3 && (
+                <form onSubmit={manejarVerificarOtpNuevo} style={{ display: "grid", gap: "14px" }}>
+                  <p style={{ margin: 0, fontSize: "13.5px", color: "#475569", lineHeight: 1.4 }}>
+                    Código del correo actual verificado. Ahora, hemos enviado un segundo código a tu nuevo correo: <strong>{nuevoCorreo}</strong>.
+                  </p>
+                  <div>
+                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>Código de confirmación (6 dígitos)</label>
+                    <input
+                      type="text"
+                      maxLength="6"
+                      required
+                      placeholder="Ej: 123456"
+                      value={codigoCorreoNuevo}
+                      onChange={(e) => setCodigoCorreoNuevo(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      style={{ width: "100%", padding: "10px", textAlign: "center", fontSize: "18px", letterSpacing: "2px", fontWeight: "bold", border: "1px solid #cbd5e1", borderRadius: "8px", boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <button type="submit" disabled={cargandoCambioCorreo} style={{ padding: "10px", background: "#16a34a", color: "white", border: "none", borderRadius: "8px", fontWeight: "600", cursor: "pointer" }}>
+                    {cargandoCambioCorreo ? "Confirmando..." : "Actualizar correo electrónico"}
+                  </button>
+                </form>
+              )}
+
+              {errorCambioCorreo && <div style={{ color: "#b91c1c", fontSize: "13px", marginTop: "12px", background: "#fef2f2", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fecaca" }}>&#9888; {errorCambioCorreo}</div>}
+              {successCambioCorreo && <div style={{ color: "#15803d", fontSize: "13px", marginTop: "12px", background: "#f0fdf4", padding: "10px 12px", borderRadius: "8px", border: "1px solid #bbf7d0" }}>&#10004; {successCambioCorreo}</div>}
+            </div>
+
+            <div style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", padding: "12px 20px", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalCambiarCorreo(false);
+                  setPasoCambioCorreo(1);
+                  setNuevoCorreo("");
+                  setCodigoCorreoActual("");
+                  setCodigoCorreoNuevo("");
+                  setErrorCambioCorreo("");
+                  setSuccessCambioCorreo("");
+                }}
+                style={{ padding: "8px 16px", background: "white", color: "#334155", border: "1px solid #cbd5e1", borderRadius: "8px", fontSize: "13px", cursor: "pointer", fontWeight: "600" }}
+              >
+                Cancelar
               </button>
             </div>
           </div>

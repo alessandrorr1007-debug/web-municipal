@@ -377,6 +377,190 @@ app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
   }
 });
 
+// Map for email change OTPs
+// key: email, value: { codigo, expiracion, intentos, verificado }
+const changeEmailOtps = new Map();
+
+// 1. Enviar código al correo actual
+app.post("/api/email-change/enviar-codigo-actual", async (req, res) => {
+  const { correoActual } = req.body;
+  if (!correoActual) {
+    return res.status(400).json({ error: "El correo actual es requerido." });
+  }
+
+  const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiracion = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+  changeEmailOtps.set(correoActual, {
+    codigo,
+    expiracion,
+    intentos: 0,
+    verificado: false
+  });
+
+  console.log(`[CAMBIO CORREO] OTP para correo actual ${correoActual}: ${codigo}`);
+
+  if (!transporter) {
+    return res.json({ success: true, mensaje: "Código enviado (simulado en consola)." });
+  }
+
+  const mailOptions = {
+    from: `"Web Municipal" <${SMTP_EMAIL}>`,
+    to: correoActual,
+    subject: "Verificación para cambio de correo",
+    html: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e3a8a;">
+        <h2>Verificación para cambio de correo electrónico</h2>
+        <p>Has solicitado cambiar el correo electrónico de tu cuenta en la Web Municipal.</p>
+        <p>Para continuar, ingresa el siguiente código de verificación en el sistema:</p>
+        <div style="background: #f1f5f9; padding: 16px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; margin: 20px 0; color: #0f172a;">
+          ${codigo}
+        </div>
+        <p>Este código expira en 5 minutos y es de un solo uso.</p>
+        <p>Si no solicitaste este cambio, puedes ignorar este mensaje.</p>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true, mensaje: "Código enviado correctamente." });
+  } catch (err) {
+    console.error("[CAMBIO CORREO] Error enviando mail a correo actual:", err);
+    res.status(500).json({ error: "No se pudo enviar el correo de verificación." });
+  }
+});
+
+// 2. Verificar código del correo actual
+app.post("/api/email-change/verificar-codigo-actual", async (req, res) => {
+  const { correoActual, codigo } = req.body;
+  if (!correoActual || !codigo) {
+    return res.status(400).json({ error: "El correo y el código son requeridos." });
+  }
+
+  const otpData = changeEmailOtps.get(correoActual);
+  if (!otpData) {
+    return res.status(400).json({ error: "No se ha solicitado un código para este correo." });
+  }
+
+  if (Date.now() > otpData.expiracion) {
+    changeEmailOtps.delete(correoActual);
+    return res.status(400).json({ error: "El código ha expirado." });
+  }
+
+  if (otpData.intentos >= 5) {
+    changeEmailOtps.delete(correoActual);
+    return res.status(400).json({ error: "Se ha excedido el límite de 5 intentos fallidos. Solicita un nuevo código." });
+  }
+
+  if (otpData.codigo !== codigo) {
+    otpData.intentos += 1;
+    changeEmailOtps.set(correoActual, otpData);
+    return res.status(400).json({ error: `Código incorrecto. Intentos restantes: ${5 - otpData.intentos}` });
+  }
+
+  // Código correcto
+  otpData.verificado = true;
+  changeEmailOtps.set(correoActual, otpData);
+  res.json({ success: true, mensaje: "Código del correo actual verificado correctamente." });
+});
+
+// 3. Enviar código al nuevo correo electrónico
+app.post("/api/email-change/enviar-codigo-nuevo", async (req, res) => {
+  const { correoActual, correoNuevo } = req.body;
+  if (!correoActual || !correoNuevo) {
+    return res.status(400).json({ error: "El correo actual y el nuevo son requeridos." });
+  }
+
+  // Verificar que el código del correo actual ya fue verificado
+  const otpDataActual = changeEmailOtps.get(correoActual);
+  if (!otpDataActual || !otpDataActual.verificado) {
+    return res.status(403).json({ error: "Primero debes verificar el código de tu correo actual." });
+  }
+
+  const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiracion = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+  changeEmailOtps.set(correoNuevo, {
+    codigo,
+    expiracion,
+    intentos: 0,
+    verificado: false
+  });
+
+  console.log(`[CAMBIO CORREO] OTP para correo nuevo ${correoNuevo}: ${codigo}`);
+
+  if (!transporter) {
+    return res.json({ success: true, mensaje: "Código enviado (simulado en consola)." });
+  }
+
+  const mailOptions = {
+    from: `"Web Municipal" <${SMTP_EMAIL}>`,
+    to: correoNuevo,
+    subject: "Confirmación de nuevo correo",
+    html: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e3a8a;">
+        <h2>Confirmación de nuevo correo electrónico</h2>
+        <p>Estás confirmando este correo como tu nueva dirección de correo en la Web Municipal.</p>
+        <p>Para finalizar la actualización, ingresa el siguiente código de confirmación en el sistema:</p>
+        <div style="background: #f1f5f9; padding: 16px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; margin: 20px 0; color: #0f172a;">
+          ${codigo}
+        </div>
+        <p>Este código expira en 5 minutos y es de un solo uso.</p>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true, mensaje: "Código enviado al nuevo correo correctamente." });
+  } catch (err) {
+    console.error("[CAMBIO CORREO] Error enviando mail a correo nuevo:", err);
+    res.status(500).json({ error: "No se pudo enviar el correo de confirmación al nuevo correo electrónico." });
+  }
+});
+
+// 4. Verificar código del nuevo correo electrónico
+app.post("/api/email-change/verificar-codigo-nuevo", async (req, res) => {
+  const { correoActual, correoNuevo, codigo } = req.body;
+  if (!correoActual || !correoNuevo || !codigo) {
+    return res.status(400).json({ error: "Todos los campos son requeridos." });
+  }
+
+  // Verificar correo actual
+  const otpDataActual = changeEmailOtps.get(correoActual);
+  if (!otpDataActual || !otpDataActual.verificado) {
+    return res.status(403).json({ error: "Petición no autorizada. Falta verificar el correo actual." });
+  }
+
+  const otpDataNuevo = changeEmailOtps.get(correoNuevo);
+  if (!otpDataNuevo) {
+    return res.status(400).json({ error: "No se ha solicitado un código para el nuevo correo." });
+  }
+
+  if (Date.now() > otpDataNuevo.expiracion) {
+    changeEmailOtps.delete(correoNuevo);
+    return res.status(400).json({ error: "El código del nuevo correo ha expirado." });
+  }
+
+  if (otpDataNuevo.intentos >= 5) {
+    changeEmailOtps.delete(correoNuevo);
+    return res.status(400).json({ error: "Se ha excedido el límite de 5 intentos fallidos en el nuevo correo. Solicita un nuevo código." });
+  }
+
+  if (otpDataNuevo.codigo !== codigo) {
+    otpDataNuevo.intentos += 1;
+    changeEmailOtps.set(correoNuevo, otpDataNuevo);
+    return res.status(400).json({ error: `Código incorrecto. Intentos restantes: ${5 - otpDataNuevo.intentos}` });
+  }
+
+  // Eliminar ambos códigos de la memoria para que sean estrictamente de un solo uso
+  changeEmailOtps.delete(correoActual);
+  changeEmailOtps.delete(correoNuevo);
+
+  res.json({ success: true, mensaje: "Ambos correos verificados correctamente." });
+});
+
 app.post("/api/enviar-codigo", async (req, res) => {
   console.log("=== ENDPOINT /api/enviar-codigo ===");
   console.log("Body recibido:", JSON.stringify(req.body));

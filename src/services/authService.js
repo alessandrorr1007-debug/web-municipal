@@ -4,6 +4,10 @@ import {
   signInWithEmailAndPassword,
   signOut,
   fetchSignInMethodsForEmail,
+  updateEmail,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 
 import {
@@ -294,4 +298,99 @@ export const actualizarPreferenciasNotificaciones = async (uid, recibir_correos,
     recibir_correos,
     sms_habilitado,
   });
+};
+
+export const enviarOtpCorreoActual = async (correoActual) => {
+  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const url = `${apiUrl}/api/email-change/enviar-codigo-actual`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correoActual }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo enviar el código al correo actual.");
+  }
+  return data;
+};
+
+export const verificarOtpCorreoActual = async (correoActual, codigo) => {
+  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const url = `${apiUrl}/api/email-change/verificar-codigo-actual`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correoActual, codigo }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Código incorrecto.");
+  }
+  return data;
+};
+
+export const enviarOtpCorreoNuevo = async (correoActual, correoNuevo) => {
+  const qUser = query(collection(db, "usuarios"), where("correo", "==", correoNuevo));
+  const snapUser = await getDocs(qUser);
+  if (!snapUser.empty) {
+    throw new Error("No es posible utilizar este correo porque ya pertenece a otra cuenta.");
+  }
+
+  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const url = `${apiUrl}/api/email-change/enviar-codigo-nuevo`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correoActual, correoNuevo }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo enviar el código al nuevo correo.");
+  }
+  return data;
+};
+
+export const verificarOtpCorreoNuevo = async (correoActual, correoNuevo, codigo) => {
+  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const url = `${apiUrl}/api/email-change/verificar-codigo-nuevo`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correoActual, correoNuevo, codigo }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Código incorrecto.");
+  }
+  return data;
+};
+
+export const actualizarCorreoDeUsuario = async (uid, correoNuevo) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error("No hay un usuario autenticado.");
+
+  const userRef = doc(db, "usuarios", uid);
+  const userSnap = await getDoc(userRef);
+  if (!userSnap.exists()) {
+    throw new Error("No se encontró el documento de usuario en la base de datos.");
+  }
+  const data = userSnap.data();
+  const contrasena = data.contraseña || data.contrasena || "";
+  
+  if (contrasena) {
+    const credential = EmailAuthProvider.credential(user.email, contrasena);
+    await reauthenticateWithCredential(user, credential);
+  }
+
+  await updateEmail(user, correoNuevo);
+  await updateDoc(userRef, {
+    correo: correoNuevo
+  });
+
+  return { ...data, correo: correoNuevo };
+};
+
+export const restablecerContrasenaPorEmail = async (correo) => {
+  await sendPasswordResetEmail(auth, correo);
 };
