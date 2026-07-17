@@ -92,10 +92,10 @@ function PanelCajero({ seccion }) {
       const info = data.data || data.resultado || data;
       setForm((prev) => ({
         ...prev,
-        razonSocial: info.razon_social || info.nombre_o_razon_social || "",
-        nombreNegocio: info.nombre_comercial || info.razon_social || info.nombre_o_razon_social || "",
+        razonSocial: info.nombreNegocio || info.razon_social || info.nombre_o_razon_social || "",
+        nombreNegocio: info.nombreComercial || info.nombreNegocio || info.nombre_comercial || info.razon_social || info.nombre_o_razon_social || "",
         direccion: info.direccion || info.direccion_completa || info.domicilio_fiscal || "",
-        giro: info.actividad_economica || info.actividad || info.ciiu || "Actividad no especificada",
+        giro: info.giroComercial || info.actividad_economica || info.actividad || info.ciiu || "Actividad no especificada",
         estadoSunat: info.estado || "",
         condicionSunat: info.condicion || "",
       }));
