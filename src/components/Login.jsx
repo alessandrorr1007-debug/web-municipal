@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   iniciarSesion,
   registrarUsuario,
@@ -33,6 +33,9 @@ function Login({ onVolver, modoInicial }) {
 
   const [nombres, setNombres] = useState("");
   const [apellidos, setApellidos] = useState("");
+  // Helper regex for allowed characters (letters, spaces, accents, ñ, hyphen, apostrophe)
+  const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$/;
+  const filterName = (val) => val.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]/g, "");
 
   const [pasoRegistro, setPasoRegistro] = useState("formulario");
   const [correoVerificar, setCorreoVerificar] = useState("");
@@ -83,6 +86,10 @@ function Login({ onVolver, modoInicial }) {
 
     if (!nombres.trim()) { setError("Ingresa tus nombres."); return; }
     if (!apellidos.trim()) { setError("Ingresa tus apellidos."); return; }
+    if (!nameRegex.test(nombres.trim()) || !nameRegex.test(apellidos.trim())) {
+      setError("Los nombres y apellidos solo pueden contener letras.");
+      return;
+    }
     if (!correo) { setError("Ingresa tu correo electrónico."); return; }
     if (!telefono || telefono.length < 9) { setError("Ingresa un número de teléfono válido de 9 dígitos."); return; }
     if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return; }
@@ -548,7 +555,7 @@ function Login({ onVolver, modoInicial }) {
                               type="text"
                               placeholder="Ej: Juan Carlos"
                               value={nombres}
-                              onChange={(e) => { setNombres(e.target.value); setError(""); }}
+                              onChange={(e) => { setNombres(filterName(e.target.value)); setError(""); }}
                               required
                             />
                           </div>
@@ -558,7 +565,7 @@ function Login({ onVolver, modoInicial }) {
                               type="text"
                               placeholder="Ej: García López"
                               value={apellidos}
-                              onChange={(e) => { setApellidos(e.target.value); setError(""); }}
+                              onChange={(e) => { setApellidos(filterName(e.target.value)); setError(""); }}
                               required
                             />
                           </div>

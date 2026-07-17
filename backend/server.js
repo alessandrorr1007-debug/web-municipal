@@ -387,6 +387,12 @@ app.post("/api/enviar-codigo", async (req, res) => {
       return res.status(400).json({ error: "Faltan correo o código" });
     }
 
+    const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$/;
+    if (nombre && !nameRegex.test(nombre)) {
+      console.error("Nombre contiene caracteres inválidos:", nombre);
+      return res.status(400).json({ error: "Los nombres y apellidos solo pueden contener letras." });
+    }
+
     const nombreUsuario = nombre || "Ciudadano";
     console.log("1. Parámetros OK - Email:", correo, "- Código:", codigo, "- Nombre:", nombreUsuario);
 

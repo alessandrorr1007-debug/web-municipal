@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "../firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 
 const AuthContext = createContext();
 
@@ -9,8 +9,25 @@ export const AuthProvider = ({ children }) => {
   const [usuario, setUsuario] = useState(null);
   const [cargando, setCargando] = useState(true);
 
+  // Helper to handle sign‑out and cleanup when the user no longer exists
+  const handleUserRemoval = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("Error signing out:", e);
+    }
+    // Clear any persisted storage
+    localStorage.clear();
+    sessionStorage.clear();
+    setUsuario(null);
+    // Redirect to login page
+    window.location.href = "/login";
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeUserDoc = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       try {
         if (user) {
           const ref = doc(db, "usuarios", user.uid);
@@ -18,17 +35,25 @@ export const AuthProvider = ({ children }) => {
 
           if (snap.exists()) {
             const data = snap.data();
-
             setUsuario({
               uid: user.uid,
               correo: user.email,
               nombre: data.nombre || "",
               rol: data.rol || "",
             });
+            // Listen for real‑time changes on the user document
+            unsubscribeUserDoc = onSnapshot(ref, (docSnap) => {
+              if (!docSnap.exists()) {
+                // User document removed -> clean up and sign out
+                handleUserRemoval();
+              }
+            });
           } else {
-            setUsuario(null);
+            // No document found – treat as non‑existent user
+            handleUserRemoval();
           }
         } else {
+          // No authenticated user
           setUsuario(null);
         }
       } catch (error) {
@@ -39,7 +64,11 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    return () => unsubscribe();
+    // Cleanup on unmount or when auth changes
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUserDoc) unsubscribeUserDoc();
+    };
   }, []);
 
   return (

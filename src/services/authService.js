@@ -12,6 +12,21 @@ import {
 } from "firebase/firestore";
 
 export const registrarUsuario = async (datos) => {
+  const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$/;
+  const nombreAValidar = datos.nombre_completo || datos.nombre || "";
+  if (nombreAValidar && !nameRegex.test(nombreAValidar)) {
+    throw new Error("Los nombres y apellidos solo pueden contener letras.");
+  }
+  if (datos.nombres && !nameRegex.test(datos.nombres)) {
+    throw new Error("Los nombres y apellidos solo pueden contener letras.");
+  }
+  if (datos.apellido_paterno && !nameRegex.test(datos.apellido_paterno)) {
+    throw new Error("Los nombres y apellidos solo pueden contener letras.");
+  }
+  if (datos.apellido_materno && !nameRegex.test(datos.apellido_materno)) {
+    throw new Error("Los nombres y apellidos solo pueden contener letras.");
+  }
+
   const credenciales = await createUserWithEmailAndPassword(
     auth,
     datos.correo,
@@ -83,6 +98,11 @@ export const verificarCorreoExistente = async (correo) => {
 };
 
 export const guardarCodigoVerificacion = async (correo, nombre = "Usuario") => {
+  const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$/;
+  if (nombre !== "Usuario" && !nameRegex.test(nombre)) {
+    throw new Error("Los nombres y apellidos solo pueden contener letras.");
+  }
+
   const qUser = query(collection(db, "usuarios"), where("correo", "==", correo));
   const snapUser = await getDocs(qUser);
   if (!snapUser.empty) {
