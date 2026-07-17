@@ -1,16 +1,15 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import {
   iniciarSesion,
   registrarUsuario,
   enviarRecuperacion,
-  verificarCorreoExistente,
   guardarCodigoVerificacion,
   verificarCodigoVerificacion,
 } from "../services/authService";
-import { consultarDni } from "../services/dniService";
 import { useAuth } from "../context/AuthContext";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
+
 
 function Login({ onVolver, modoInicial }) {
   const { setUsuario } = useAuth();
@@ -29,12 +28,8 @@ function Login({ onVolver, modoInicial }) {
   const [codigoRecuperacion, setCodigoRecuperacion] = useState("");
   const [errorRecuperacion, setErrorRecuperacion] = useState("");
 
-  const [dni, setDni] = useState("");
-  const [dniValidado, setDniValidado] = useState(false);
   const [nombres, setNombres] = useState("");
-  const [apellidoPaterno, setApellidoPaterno] = useState("");
-  const [apellidoMaterno, setApellidoMaterno] = useState("");
-  const [successDni, setSuccessDni] = useState("");
+  const [apellidos, setApellidos] = useState("");
 
   const [pasoRegistro, setPasoRegistro] = useState("formulario");
   const [correoVerificar, setCorreoVerificar] = useState("");
@@ -42,6 +37,7 @@ function Login({ onVolver, modoInicial }) {
   const [errorCodigo, setErrorCodigo] = useState("");
   const [tiempoRestante, setTiempoRestante] = useState(0);
   const [reenviando, setReenviando] = useState(false);
+
 
   useEffect(() => {
     if (tiempoRestante <= 0) return;
@@ -82,10 +78,8 @@ function Login({ onVolver, modoInicial }) {
     e.preventDefault();
     setError("");
 
-    if (!dniValidado) {
-      setError("Primero debes validar tu identidad con DNI.");
-      return;
-    }
+    if (!nombres.trim()) { setError("Ingresa tus nombres."); return; }
+    if (!apellidos.trim()) { setError("Ingresa tus apellidos."); return; }
     if (!correo) { setError("Ingresa tu correo electrónico."); return; }
     if (!telefono || telefono.length < 9) { setError("Ingresa un número de teléfono válido de 9 dígitos."); return; }
     if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return; }
@@ -93,16 +87,7 @@ function Login({ onVolver, modoInicial }) {
 
     setCargando(true);
     try {
-      // 1. Verificar DNI único en Firestore
-      const qDni = query(collection(db, "usuarios"), where("dni", "==", dni.trim()));
-      const snapDni = await getDocs(qDni);
-      if (!snapDni.empty) {
-        setError("DNI ya registrado. Este documento ya pertenece a una cuenta existente.");
-        setCargando(false);
-        return;
-      }
-
-      // 2. Verificar Correo único en Firestore
+      // 1. Verificar Correo único en Firestore
       const qCorreo = query(collection(db, "usuarios"), where("correo", "==", correo.trim()));
       const snapCorreo = await getDocs(qCorreo);
       if (!snapCorreo.empty) {
@@ -111,7 +96,7 @@ function Login({ onVolver, modoInicial }) {
         return;
       }
 
-      // 3. Verificar Teléfono único en Firestore
+      // 2. Verificar Teléfono único en Firestore
       const qTelefono = query(collection(db, "usuarios"), where("telefono", "==", telefono.trim()));
       const snapTelefono = await getDocs(qTelefono);
       if (!snapTelefono.empty) {
@@ -120,10 +105,10 @@ function Login({ onVolver, modoInicial }) {
         return;
       }
 
-      // 4. Guardar código de verificación y enviar por correo con nombre de usuario
-      const nombreCompleto = nombre || `${nombres} ${apellidoPaterno} ${apellidoMaterno}`.trim() || "Ciudadano";
+      // 3. Guardar código de verificación y enviar por correo
+      const nombreCompleto = `${nombres.trim()} ${apellidos.trim()}`;
       await guardarCodigoVerificacion(correo.trim(), nombreCompleto);
-      
+
       setCorreoVerificar(correo.trim());
       setPasoRegistro("verificar");
       setTiempoRestante(300);
@@ -136,6 +121,7 @@ function Login({ onVolver, modoInicial }) {
       setCargando(false);
     }
   };
+
 
   const manejarVerificarCodigo = async (e) => {
     e.preventDefault();
@@ -156,18 +142,14 @@ function Login({ onVolver, modoInicial }) {
         return;
       }
 
+      const nombreCompleto = `${nombres.trim()} ${apellidos.trim()}`;
       await registrarUsuario({
-        nombre,
+        nombre: nombreCompleto,
         correo: correoVerificar,
         password,
         rol: "negocio",
         telefono,
-        dni,
-        digito_verificador: "",
-        nombres,
-        apellido_paterno: apellidoPaterno,
-        apellido_materno: apellidoMaterno,
-        nombre_completo: nombre,
+        nombre_completo: nombreCompleto,
       });
 
       setPasoRegistro("exito");
@@ -183,11 +165,12 @@ function Login({ onVolver, modoInicial }) {
     }
   };
 
+
   const reenviarCodigo = async () => {
     setReenviando(true);
     setErrorCodigo("");
     try {
-      const nombreCompleto = nombre || `${nombres} ${apellidoPaterno} ${apellidoMaterno}`.trim() || "Ciudadano";
+      const nombreCompleto = `${nombres.trim()} ${apellidos.trim()}`;
       await guardarCodigoVerificacion(correoVerificar, nombreCompleto);
       setTiempoRestante(300);
       setCodigoIngresado("");
@@ -197,6 +180,7 @@ function Login({ onVolver, modoInicial }) {
       setReenviando(false);
     }
   };
+
 
   const manejarRecuperar = async (e) => {
     e.preventDefault();
@@ -241,71 +225,21 @@ function Login({ onVolver, modoInicial }) {
     }
   };
 
-  const resetDni = () => {
-    setDniValidado(false);
-    setDni("");
-    setNombre("");
-    setNombres("");
-    setApellidoPaterno("");
-    setApellidoMaterno("");
-    setError("");
-    setSuccessDni("");
-  };
-
-  const manejarConsultarDni = async () => {
-    setError("");
-    setSuccessDni("");
-
-    if (!dni || dni.length !== 8) {
-      setError("El DNI debe tener exactamente 8 dígitos.");
-      return;
-    }
-
-    setCargando(true);
-    try {
-      // 1. Consultar RENIEC
-      const data = await consultarDni(dni);
-
-      // 2. Verificar si el DNI ya está registrado en Firebase/Firestore
-      const qDni = query(collection(db, "usuarios"), where("dni", "==", dni.trim()));
-      const snapDni = await getDocs(qDni);
-      if (!snapDni.empty) {
-        setError("DNI ya registrado. Este documento ya pertenece a una cuenta existente.");
-        setNombres("");
-        setApellidoPaterno("");
-        setApellidoMaterno("");
-        setNombre("");
-        setDniValidado(false);
-        return;
-      }
-
-      setNombres(data.nombres || "");
-      setApellidoPaterno(data.apellido_paterno || "");
-      setApellidoMaterno(data.apellido_materno || "");
-      setNombre(data.nombre_completo || "");
-      setDniValidado(true);
-      setSuccessDni("✅ DNI encontrado correctamente.");
-    } catch (err) {
-      console.error(err);
-      const msg = err?.message || "";
-      if (msg.includes("no encontrado") || msg.includes("RENIEC") || msg.includes("404")) {
-        setError("❌ DNI no encontrado en RENIEC.");
-      } else {
-        setError("❌ No fue posible consultar RENIEC. Intente nuevamente.");
-      }
-    } finally {
-      setCargando(false);
-    }
-  };
-
   const resetRegistro = () => {
     setPasoRegistro("formulario");
     setCodigoIngresado("");
     setErrorCodigo("");
     setTiempoRestante(0);
     setCorreoVerificar("");
-    resetDni();
+    setNombres("");
+    setApellidos("");
+    setCorreo("");
+    setTelefono("");
+    setPassword("");
+    setConfirmPassword("");
+    setError("");
   };
+
 
   const inputLabel = { display: "block", fontSize: "13px", fontWeight: 600, color: "#334155", marginBottom: "6px" };
 
@@ -533,115 +467,75 @@ function Login({ onVolver, modoInicial }) {
                   <form onSubmit={modo === "login" ? manejarLogin : manejarRegistro}>
                     {modo === "registro" && (
                       <div style={{ display: "grid", gap: "12px", marginBottom: "4px" }}>
-                        <div style={{ marginBottom: "4px" }}>
-                          <label style={inputLabel}>DNI *</label>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                          <div>
+                            <label style={inputLabel}>Nombres *</label>
+                            <input
+                              type="text"
+                              placeholder="Ej: Juan Carlos"
+                              value={nombres}
+                              onChange={(e) => { setNombres(e.target.value); setError(""); }}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label style={inputLabel}>Apellidos *</label>
+                            <input
+                              type="text"
+                              placeholder="Ej: García López"
+                              value={apellidos}
+                              onChange={(e) => { setApellidos(e.target.value); setError(""); }}
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label style={inputLabel}>Correo electrónico *</label>
                           <input
-                            type="text"
-                            placeholder="Ingrese DNI de 8 dígitos"
-                            value={dni}
-                            onChange={(e) => {
-                              setDni(e.target.value.replace(/\D/g, "").slice(0, 8));
-                              setError("");
-                              setSuccessDni("");
-                            }}
-                            disabled={dniValidado}
-                            maxLength="8"
+                            type="email"
+                            placeholder="tu@correo.com"
+                            value={correo}
+                            onChange={(e) => setCorreo(e.target.value)}
                             required
                           />
                         </div>
-
-                        {successDni && (
-                          <div style={{ background: "#f0fdf4", padding: "12px 16px", borderRadius: "10px", border: "1px solid #bbf7d0", fontSize: "14px", color: "#166534", display: "flex", alignItems: "flex-start", gap: "10px", marginTop: "4px" }}>
-                            <span>{successDni}</span>
-                          </div>
-                        )}
-
-                        {!dniValidado ? (
-                          <button
-                            type="button"
-                            className="primary-btn"
-                            onClick={manejarConsultarDni}
-                            disabled={cargando}
-                            style={{ background: "#1f3b57", marginTop: "4px", padding: "14px" }}
-                          >
-                            {cargando ? "Consultando..." : "Consultar RENIEC"}
-                          </button>
-                        ) : (
-                          <>
-                            <div style={{ textAlign: "right", marginTop: "2px" }}>
-                              <button
-                                type="button"
-                                onClick={resetDni}
-                                style={{
-                                  background: "none",
-                                  border: "none",
-                                  color: "#2563eb",
-                                  fontSize: "12px",
-                                  cursor: "pointer",
-                                  textDecoration: "underline",
-                                  padding: 0
-                                }}
-                              >
-                                Cambiar DNI
-                              </button>
-                            </div>
-                            <div>
-                              <label style={inputLabel}>Nombre completo *</label>
-                              <input
-                                type="text"
-                                value={nombre}
-                                disabled
-                                required
-                                style={{ background: "#f1f5f9", cursor: "not-allowed" }}
-                              />
-                            </div>
-                            <div>
-                              <label style={inputLabel}>Correo electrónico *</label>
-                              <input
-                                type="email"
-                                placeholder="tu@correo.com"
-                                value={correo}
-                                onChange={(e) => setCorreo(e.target.value)}
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label style={inputLabel}>Número de teléfono *</label>
-                              <input
-                                type="text"
-                                placeholder="912345678"
-                                value={telefono}
-                                onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 9))}
-                                maxLength="9"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label style={inputLabel}>Contraseña *</label>
-                              <input
-                                type="password"
-                                placeholder="Mínimo 6 caracteres"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                minLength={6}
-                              />
-                            </div>
-                            <div>
-                              <label style={inputLabel}>Confirmar contraseña *</label>
-                              <input
-                                type="password"
-                                placeholder="Repite tu contraseña"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                required
-                                minLength={6}
-                              />
-                            </div>
-                          </>
-                        )}
+                        <div>
+                          <label style={inputLabel}>Número de teléfono *</label>
+                          <input
+                            type="text"
+                            placeholder="912345678"
+                            value={telefono}
+                            onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                            maxLength="9"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label style={inputLabel}>Contraseña *</label>
+                          <input
+                            type="password"
+                            placeholder="Mínimo 6 caracteres"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            minLength={6}
+                          />
+                        </div>
+                        <div>
+                          <label style={inputLabel}>Confirmar contraseña *</label>
+                          <input
+                            type="password"
+                            placeholder="Repite tu contraseña"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            required
+                            minLength={6}
+                          />
+                        </div>
                       </div>
                     )}
+
+
 
                     {modo === "login" && (
                       <div style={{ display: "grid", gap: "12px" }}>
@@ -689,7 +583,7 @@ function Login({ onVolver, modoInicial }) {
                       </div>
                     )}
 
-                    {(modo === "login" || (modo === "registro" && dniValidado)) && (
+                    {(modo === "login" || modo === "registro") && (
                       <button
                         className="primary-btn"
                         type="submit"
