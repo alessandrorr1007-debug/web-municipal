@@ -554,6 +554,8 @@ app.post("/api/cambiar-contrasena", async (req, res) => {
     });
   }
 });
+
+app.post("/api/enviar-recuperacion", async (req, res) => {
   console.log("=== ENDPOINT /api/enviar-recuperacion ===");
 
   try {
