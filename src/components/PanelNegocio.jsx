@@ -438,17 +438,9 @@ function PanelNegocio({ seccion }) {
       return;
     }
 
-    // Recopilar todos los documentos cargados en un arreglo unificado
     const todosLosDocs = [
-      docIdentidad,
-      docFichaRuc,
-      docAcreditaLocal,
-      docPlano,
-      docDj,
-      docSanitario,
-      docDigemid,
-      docRepresentacion,
-      ...archivos,
+      docIdentidad, docFichaRuc, docAcreditaLocal, docPlano,
+      docDj, docSanitario, docDigemid, docRepresentacion, ...archivos,
     ].filter(Boolean);
 
     if (todosLosDocs.length === 0) {
@@ -456,13 +448,12 @@ function PanelNegocio({ seccion }) {
       return;
     }
 
-    // Determinar tipo de contribuyente según RUC
     const tipoContribuyente = form.ruc.startsWith("20") ? "Persona Jurídica" : "Persona Natural";
 
     try {
       setGuardando(true);
 
-      // 1. Subir documentos a Cloudinary uno por uno (si uno falla, se ignora)
+      // 1. Subir documentos a Cloudinary uno por uno
       const pdfsSubidos = [];
       for (const archivo of todosLosDocs) {
         try {
@@ -484,45 +475,28 @@ function PanelNegocio({ seccion }) {
         uidUsuario: usuario?.uid || "",
         correoUsuario: usuario?.correo || "",
         tipoTramite: form.tipoTramite,
-        // Datos del solicitante (RENIEC)
-        dniSolicitante,
-        nombresSolicitante,
-        apellidosSolicitante,
-        // Datos del negocio (SUNAT)
-        ruc: form.ruc,
-        nombreNegocio: form.nombreNegocio,
-        razonSocial: form.razonSocial,
-        direccion: form.direccion,
-        giro: form.giro,
-        estadoSunat: form.estadoSunat,
+        dniSolicitante, nombresSolicitante, apellidosSolicitante,
+        ruc: form.ruc, nombreNegocio: form.nombreNegocio,
+        razonSocial: form.razonSocial, direccion: form.direccion,
+        giro: form.giro, estadoSunat: form.estadoSunat,
         condicionSunat: form.condicionSunat,
-        departamento: form.departamento,
-        provincia: form.provincia,
+        departamento: form.departamento, provincia: form.provincia,
         distrito: form.distrito,
-        // Tipo de contribuyente y relación
-        tipoContribuyente,
-        relacionSolicitante,
-        // Documentos
+        tipoContribuyente, relacionSolicitante,
         archivosPdf: pdfsSubidos,
         archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
         archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
-        // Pago
-        metodoPago,
-        estadoPago,
+        metodoPago, estadoPago,
         comprobantePago:
           estadoPago === "Confirmado"
             ? `Pago confirmado mediante ${metodoPago}`
             : (metodoPago === "Pago presencial en caja" ? "Pendiente de pago en caja" : `Pago generado mediante ${metodoPago}`),
-        estado: metodoPago === "Pago presencial en caja" ? "Pendiente de revisión" : "Pendiente de revisión",
+        estado: "Pendiente de revisión",
         inspeccion: "Sin inspección",
-        recomendacionInspector: "",
-        observacionInspector: "",
-        evidenciasInspector: [],
-        decisionFuncionario: "",
-        observacionFuncionario: "",
-        numeroLicencia: "",
-        fechaAprobacion: "",
-        fechaExpiracionLicencia: "",
+        recomendacionInspector: "", observacionInspector: "",
+        evidenciasInspector: [], decisionFuncionario: "",
+        observacionFuncionario: "", numeroLicencia: "",
+        fechaAprobacion: "", fechaExpiracionLicencia: "",
         pagoId: detallePago?.id || "",
         pagoEstadoDetalle: detallePago?.status_detail || "",
       });
@@ -530,48 +504,44 @@ function PanelNegocio({ seccion }) {
       console.log("[SOLICITUD] Guardada:", nueva.id);
       setExpediente(nueva.id);
 
-      // 3. Recargar solicitudes (no bloquear el flujo si falla)
-      try {
-        await cargarMisSolicitudes();
-      } catch (errReload) {
-        console.error("[SOLICITUD] Error recargando solicitudes:", errReload);
-      }
-
-      // 4. Generar comprobante de pago (no bloquear el flujo si falla)
-      if (estadoPago === "Confirmado") {
-        try {
-          const tipoFinal = tipoComprobante || (form.ruc.startsWith("20") ? "factura" : "boleta");
-          const comprobanteGenerado = await generarComprobante({
-            uidUsuario: usuario?.uid || "",
-            correoUsuario: usuario?.correo || "",
-            idSolicitud: nueva.id,
-            tipo: tipoFinal,
-            dniCliente: dniSolicitante,
-            nombresCliente: nombresSolicitante,
-            apellidosCliente: apellidosSolicitante,
-            rucCliente: form.ruc,
-            razonSocial: form.razonSocial,
-            direccionCliente: form.direccion,
-            descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
-            monto: MONTO_TRAMITE,
-            metodoPago,
-            estadoPago: "Pagado",
-          });
-          setComprobanteGenerado(comprobanteGenerado);
-          console.log("[COMPROBANTE] Generado:", comprobanteGenerado.codigo_unico);
-        } catch (errComp) {
-          console.error("[COMPROBANTE] Error generando comprobante (no bloqueante):", errComp);
-        }
-      }
-
-      // 5. SIEMPRE mostrar confirmación final
+      // 3. MOSTRAR CONFIRMACIÓN INMEDIATAMENTE (no esperar comprobante ni reload)
+      setGuardando(false);
       setPaso("confirmacion");
+
+      // 4. Operaciones en BACKGROUND (fire-and-forget, no bloquean UI)
+      if (estadoPago === "Confirmado") {
+        const tipoFinal = tipoComprobante || (form.ruc.startsWith("20") ? "factura" : "boleta");
+        generarComprobante({
+          uidUsuario: usuario?.uid || "",
+          correoUsuario: usuario?.correo || "",
+          idSolicitud: nueva.id,
+          tipo: tipoFinal,
+          dniCliente: dniSolicitante,
+          nombresCliente: nombresSolicitante,
+          apellidosCliente: apellidosSolicitante,
+          rucCliente: form.ruc,
+          razonSocial: form.razonSocial,
+          direccionCliente: form.direccion,
+          descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
+          monto: MONTO_TRAMITE,
+          metodoPago,
+          estadoPago: "Pagado",
+        }).then((comp) => {
+          setComprobanteGenerado(comp);
+          console.log("[COMPROBANTE] Generado:", comp.codigo_unico);
+        }).catch((err) => {
+          console.error("[COMPROBANTE] Error (background):", err);
+        });
+      }
+
+      cargarMisSolicitudes().catch((err) => {
+        console.error("[SOLICITUD] Error recargando:", err);
+      });
 
     } catch (error) {
       console.error("[SOLICITUD] Error general:", error);
-      alert(error.message || "No se pudo guardar la solicitud. Intente nuevamente.");
-    } finally {
       setGuardando(false);
+      alert(error.message || "No se pudo guardar la solicitud. Intente nuevamente.");
     }
   };
 
