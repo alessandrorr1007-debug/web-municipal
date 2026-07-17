@@ -380,7 +380,7 @@ export const descargarComprobante = (comprobante) => {
 };
 
 export const enviarComprobantePorCorreo = async (comprobante) => {
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
   const url = `${apiUrl}/api/comprobantes/enviar-correo`;
 
   const response = await fetch(url, {
@@ -389,10 +389,16 @@ export const enviarComprobantePorCorreo = async (comprobante) => {
     body: JSON.stringify(comprobante),
   });
 
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
+
+  const data = await response.json();
+
   if (!response.ok) {
-    const data = await response.json();
     throw new Error(data.error || "No se pudo enviar el comprobante por correo.");
   }
 
-  return response.json();
+  return data;
 };

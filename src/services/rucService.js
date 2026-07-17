@@ -6,6 +6,11 @@ export const consultarRuc = async (ruc) => {
     `${API_URL}/api/consultar-ruc/${ruc}`
   );
 
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
+
   const data = await response.json();
 
   if (!response.ok) {

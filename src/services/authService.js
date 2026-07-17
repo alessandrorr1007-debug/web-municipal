@@ -15,6 +15,8 @@ import {
   addDoc, deleteDoc, updateDoc, Timestamp,
 } from "firebase/firestore";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
 export const registrarUsuario = async (datos) => {
   const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$/;
   const nombreAValidar = datos.nombre_completo || datos.nombre || "";
@@ -135,8 +137,7 @@ export const guardarCodigoVerificacion = async (correo, nombre = "Usuario") => {
 
   console.log("[DEBUG] Código guardado en Firestore");
 
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/enviar-codigo`;
+  const url = `${API_URL}/api/enviar-codigo`;
   console.log("[DEBUG] Llamando a:", url);
 
   const response = await fetch(url, {
@@ -210,8 +211,7 @@ export const enviarRecuperacion = async (correo) => {
 
   console.log("[DEBUG] Código de recuperación guardado en Firestore");
 
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/enviar-recuperacion`;
+  const url = `${API_URL}/api/enviar-recuperacion`;
   console.log("[DEBUG] Llamando a:", url);
 
   const response = await fetch(url, {
@@ -232,8 +232,7 @@ export const enviarRecuperacion = async (correo) => {
 };
 
 export const cambiarContrasena = async (correo, codigo, nuevaContrasena) => {
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/cambiar-contrasena`;
+  const url = `${API_URL}/api/cambiar-contrasena`;
   console.log("[DEBUG] Cambiar contraseña - Llamando a:", url);
 
   const response = await fetch(url, {
@@ -242,25 +241,32 @@ export const cambiarContrasena = async (correo, codigo, nuevaContrasena) => {
     body: JSON.stringify({ correo, codigo, nuevaContrasena }),
   });
 
-  const texto = await response.text();
-  console.log("[DEBUG] Status:", response.status, "- Respuesta:", texto);
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
 
+  const data = await response.json();
   if (!response.ok) {
-    const data = JSON.parse(texto);
     throw new Error(data.error || `Error ${response.status}`);
   }
 
-  return JSON.parse(texto);
+  return data;
 };
 
 export const enviarOtpTelefono = async (telefono) => {
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/sms/enviar-otp`;
+  const url = `${API_URL}/api/sms/enviar-otp`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ telefono }),
   });
+
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
+
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "No se pudo enviar el código SMS.");
@@ -269,13 +275,18 @@ export const enviarOtpTelefono = async (telefono) => {
 };
 
 export const verificarOtpTelefono = async (telefono, codigo) => {
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/sms/verificar-otp`;
+  const url = `${API_URL}/api/sms/verificar-otp`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ telefono, codigo }),
   });
+
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
+
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "Código incorrecto.");
@@ -301,13 +312,18 @@ export const actualizarPreferenciasNotificaciones = async (uid, recibir_correos,
 };
 
 export const enviarOtpCorreoActual = async (correoActual) => {
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/email-change/enviar-codigo-actual`;
+  const url = `${API_URL}/api/email-change/enviar-codigo-actual`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ correoActual }),
   });
+
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
+
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "No se pudo enviar el código al correo actual.");
@@ -316,13 +332,18 @@ export const enviarOtpCorreoActual = async (correoActual) => {
 };
 
 export const verificarOtpCorreoActual = async (correoActual, codigo) => {
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/email-change/verificar-codigo-actual`;
+  const url = `${API_URL}/api/email-change/verificar-codigo-actual`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ correoActual, codigo }),
   });
+
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
+
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "Código incorrecto.");
@@ -337,13 +358,18 @@ export const enviarOtpCorreoNuevo = async (correoActual, correoNuevo) => {
     throw new Error("No es posible utilizar este correo porque ya pertenece a otra cuenta.");
   }
 
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/email-change/enviar-codigo-nuevo`;
+  const url = `${API_URL}/api/email-change/enviar-codigo-nuevo`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ correoActual, correoNuevo }),
   });
+
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
+
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "No se pudo enviar el código al nuevo correo.");
@@ -352,13 +378,18 @@ export const enviarOtpCorreoNuevo = async (correoActual, correoNuevo) => {
 };
 
 export const verificarOtpCorreoNuevo = async (correoActual, correoNuevo, codigo) => {
-  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
-  const url = `${apiUrl}/api/email-change/verificar-codigo-nuevo`;
+  const url = `${API_URL}/api/email-change/verificar-codigo-nuevo`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ correoActual, correoNuevo, codigo }),
   });
+
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+  }
+
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "Código incorrecto.");

@@ -977,6 +977,9 @@ if (fs.existsSync(distPath)) {
 }
 
 app.use((req, res) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "Ruta de API no encontrada." });
+  }
   const indexPath = join(distPath, "index.html");
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
