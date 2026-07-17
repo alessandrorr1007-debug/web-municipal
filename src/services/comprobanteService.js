@@ -91,10 +91,13 @@ export const generarComprobante = async ({
     archivo_pdf_url: "",
   };
 
+  console.log("[4] Generando comprobante");
   const docPdf = generarPdfComprobante(comprobante);
+  console.log("[5] PDF generado");
   const nombrePdf = `${tipo.toUpperCase()}_${serie}_${numero}.pdf`;
   const pdfBlob = docPdf.output("blob");
 
+  console.log("[6] Guardando PDF");
   const storageRef = ref(storage, `comprobantes/${uidUsuario}/${idSolicitud}/${nombrePdf}`);
   await uploadBytes(storageRef, pdfBlob, { contentType: "application/pdf" });
   const urlPdf = await getDownloadURL(storageRef);
@@ -103,7 +106,9 @@ export const generarComprobante = async ({
 
   await setDoc(doc(db, COLLECTION, comprobante.id_comprobante), comprobante);
 
+  console.log("[7] PDF guardado");
   console.log("[COMPROBANTE] Guardado y subido:", comprobante.id_comprobante);
+  console.log("[8] Respuesta enviada al frontend");
   return comprobante;
 };
 
@@ -111,11 +116,15 @@ export const obtenerComprobantesPorUsuario = async (uidUsuario) => {
   if (!uidUsuario) return [];
   const q = query(
     collection(db, COLLECTION),
-    where("id_usuario", "==", uidUsuario),
-    orderBy("fecha_emision", "desc")
+    where("id_usuario", "==", uidUsuario)
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const comprobantes = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  // Sort locally by fecha_emision/hora_emision to avoid index constraints
+  return comprobantes.sort((a, b) => {
+    return (b.fecha_emision || "").localeCompare(a.fecha_emision || "");
+  });
 };
 
 export const obtenerComprobantePorId = async (idComprobante) => {

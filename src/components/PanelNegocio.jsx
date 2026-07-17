@@ -676,6 +676,7 @@ function PanelNegocio({ seccion }) {
 
     try {
       setGuardando(true);
+      console.log("[1] Pago confirmado");
 
       // 1. Subir documentos a Cloudinary uno por uno
       const pdfsSubidos = [];
@@ -693,6 +694,8 @@ function PanelNegocio({ seccion }) {
         setGuardando(false);
         return;
       }
+
+      console.log("[2] Guardando solicitud");
 
       // 2. Guardar solicitud en Firestore
       const nueva = await guardarSolicitud({
@@ -725,6 +728,7 @@ function PanelNegocio({ seccion }) {
         pagoEstadoDetalle: detallePago?.status_detail || "",
       });
 
+      console.log("[3] Solicitud guardada");
       console.log("[SOLICITUD] Guardada:", nueva.id);
       setExpediente(nueva.id);
 
@@ -748,15 +752,18 @@ function PanelNegocio({ seccion }) {
           estadoPago: "Pagado",
           codigoOperacion: (detallePago?.id || detallePago?.paymentId || `DEMO-${Date.now().toString().slice(-8)}`),
         });
+        console.log("[9] Frontend recibió respuesta");
         setComprobanteGenerado(comp);
         console.log("[COMPROBANTE] Generado:", comp.codigo_unico);
       }
 
       setGuardando(false);
+      console.log("[10] Loading finalizado");
       setPaso("confirmacion");
 
       if (comp) {
         setModalComprobante(comp);
+        console.log("[11] Modal del voucher abierto");
       }
 
       cargarMisSolicitudes().catch((err) => {

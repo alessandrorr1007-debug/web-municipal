@@ -131,13 +131,20 @@ export const obtenerNegociosPorUsuario = async (uidUsuario) => {
 };
 
 export const obtenerSolicitudes = async () => {
-  const q = query(collection(db, COLLECTION_NAME), orderBy("creadoEn", "desc"));
+  const q = query(collection(db, COLLECTION_NAME));
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map((documento) => ({
+  const solicitudes = snapshot.docs.map((documento) => ({
     id: documento.id,
     ...documento.data(),
   }));
+
+  // Sort locally by creadoEn to avoid query hanging during server writes
+  return solicitudes.sort((a, b) => {
+    const aTime = a.creadoEn?.seconds || a.creadoEn?.toMillis?.() || 0;
+    const bTime = b.creadoEn?.seconds || b.creadoEn?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
 };
 
 export const actualizarSolicitud = async (id, cambios) => {
