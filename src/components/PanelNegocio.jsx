@@ -674,6 +674,20 @@ function PanelNegocio({ seccion }) {
 
     const tipoContribuyente = form.ruc.startsWith("20") ? "Persona Jurídica" : "Persona Natural";
 
+    const conTimeout = (promesa, ms, mensajeError) => {
+      let timeoutId;
+      const promesaTimeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(mensajeError)), ms);
+      });
+      return Promise.race([
+        promesa.then((res) => {
+          clearTimeout(timeoutId);
+          return res;
+        }),
+        promesaTimeout,
+      ]);
+    };
+
     try {
       setGuardando(true);
       console.log("[1] Pago confirmado");
@@ -682,7 +696,11 @@ function PanelNegocio({ seccion }) {
       const pdfsSubidos = [];
       for (const archivo of todosLosDocs) {
         try {
-          const resultado = await convertirPdfABase64(archivo);
+          const resultado = await conTimeout(
+            convertirPdfABase64(archivo),
+            15000,
+            `Tiempo de espera agotado al subir el archivo ${archivo.name}.`
+          );
           pdfsSubidos.push(resultado);
         } catch (err) {
           console.error("[SOLICITUD] Error subiendo archivo:", archivo.name, err);
@@ -698,35 +716,39 @@ function PanelNegocio({ seccion }) {
       console.log("[2] Guardando solicitud");
 
       // 2. Guardar solicitud en Firestore
-      const nueva = await guardarSolicitud({
-        uidUsuario: usuario?.uid || "",
-        correoUsuario: usuario?.correo || "",
-        tipoTramite: form.tipoTramite,
-        dniSolicitante, nombresSolicitante, apellidosSolicitante,
-        ruc: form.ruc, nombreNegocio: form.nombreNegocio,
-        razonSocial: form.razonSocial, direccion: form.direccion,
-        giro: form.giro, estadoSunat: form.estadoSunat,
-        condicionSunat: form.condicionSunat,
-        departamento: form.departamento, provincia: form.provincia,
-        distrito: form.distrito,
-        tipoContribuyente, relacionSolicitante,
-        archivosPdf: pdfsSubidos,
-        archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
-        archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
-        metodoPago, estadoPago,
-        comprobantePago:
-          estadoPago === "Confirmado"
-            ? `Pago confirmado mediante ${metodoPago}`
-            : (metodoPago === "Pago presencial en caja" ? "Pendiente de pago en caja" : `Pago generado mediante ${metodoPago}`),
-        estado: "Pendiente de revisión",
-        inspeccion: "Sin inspección",
-        recomendacionInspector: "", observacionInspector: "",
-        evidenciasInspector: [], decisionFuncionario: "",
-        observacionFuncionario: "", numeroLicencia: "",
-        fechaAprobacion: "", fechaExpiracionLicencia: "",
-        pagoId: detallePago?.id || "",
-        pagoEstadoDetalle: detallePago?.status_detail || "",
-      });
+      const nueva = await conTimeout(
+        guardarSolicitud({
+          uidUsuario: usuario?.uid || "",
+          correoUsuario: usuario?.correo || "",
+          tipoTramite: form.tipoTramite,
+          dniSolicitante, nombresSolicitante, apellidosSolicitante,
+          ruc: form.ruc, nombreNegocio: form.nombreNegocio,
+          razonSocial: form.razonSocial, direccion: form.direccion,
+          giro: form.giro, estadoSunat: form.estadoSunat,
+          condicionSunat: form.condicionSunat,
+          departamento: form.departamento, provincia: form.provincia,
+          distrito: form.distrito,
+          tipoContribuyente, relacionSolicitante,
+          archivosPdf: pdfsSubidos,
+          archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
+          archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
+          metodoPago, estadoPago,
+          comprobantePago:
+            estadoPago === "Confirmado"
+              ? `Pago confirmado mediante ${metodoPago}`
+              : (metodoPago === "Pago presencial en caja" ? "Pendiente de pago en caja" : `Pago generado mediante ${metodoPago}`),
+          estado: "Pendiente de revisión",
+          inspeccion: "Sin inspección",
+          recomendacionInspector: "", observacionInspector: "",
+          evidenciasInspector: [], decisionFuncionario: "",
+          observacionFuncionario: "", numeroLicencia: "",
+          fechaAprobacion: "", fechaExpiracionLicencia: "",
+          pagoId: detallePago?.id || "",
+          pagoEstadoDetalle: detallePago?.status_detail || "",
+        }),
+        15000,
+        "Tiempo de espera agotado al registrar la solicitud en Firebase."
+      );
 
       console.log("[3] Solicitud guardada");
       console.log("[SOLICITUD] Guardada:", nueva.id);
@@ -735,23 +757,27 @@ function PanelNegocio({ seccion }) {
       let comp = null;
       if (estadoPago === "Confirmado") {
         const tipoFinal = tipoComprobante || (form.ruc.startsWith("20") ? "factura" : "boleta");
-        comp = await generarComprobante({
-          uidUsuario: usuario?.uid || "",
-          correoUsuario: usuario?.correo || "",
-          idSolicitud: nueva.id,
-          tipo: tipoFinal,
-          dniCliente: dniSolicitante,
-          nombresCliente: nombresSolicitante,
-          apellidosCliente: apellidosSolicitante,
-          rucCliente: form.ruc,
-          razonSocial: form.razonSocial,
-          direccionCliente: form.direccion,
-          descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
-          monto: MONTO_TRAMITE,
-          metodoPago,
-          estadoPago: "Pagado",
-          codigoOperacion: (detallePago?.id || detallePago?.paymentId || `DEMO-${Date.now().toString().slice(-8)}`),
-        });
+        comp = await conTimeout(
+          generarComprobante({
+            uidUsuario: usuario?.uid || "",
+            correoUsuario: usuario?.correo || "",
+            idSolicitud: nueva.id,
+            tipo: tipoFinal,
+            dniCliente: dniSolicitante,
+            nombresCliente: nombresSolicitante,
+            apellidosCliente: apellidosSolicitante,
+            rucCliente: form.ruc,
+            razonSocial: form.razonSocial,
+            direccionCliente: form.direccion,
+            descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
+            monto: MONTO_TRAMITE,
+            metodoPago,
+            estadoPago: "Pagado",
+            codigoOperacion: (detallePago?.id || detallePago?.paymentId || `DEMO-${Date.now().toString().slice(-8)}`),
+          }),
+          15000,
+          "Tiempo de espera agotado al generar el comprobante de pago."
+        );
         console.log("[9] Frontend recibió respuesta");
         setComprobanteGenerado(comp);
         console.log("[COMPROBANTE] Generado:", comp.codigo_unico);

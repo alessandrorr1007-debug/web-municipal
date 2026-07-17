@@ -8,27 +8,41 @@ export const subirArchivoACloudinary = async (file) => {
   formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
   formData.append("resource_type", "auto");
 
-  const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
-    {
-      method: "POST",
-      body: formData,
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
+      {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error("No se pudo subir el archivo a Cloudinary.");
     }
-  );
 
-  if (!response.ok) {
-    throw new Error("No se pudo subir el archivo a Cloudinary.");
+    const data = await response.json();
+
+    return {
+      archivoUrl: data.secure_url,
+      archivoNombre: file.name,
+      publicId: data.public_id,
+      tipo: file.type,
+      tamaño: file.size,
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === "AbortError") {
+      throw new Error(`Tiempo de espera agotado al subir el archivo ${file.name} a Cloudinary.`);
+    }
+    throw error;
   }
-
-  const data = await response.json();
-
-  return {
-    archivoUrl: data.secure_url,
-    archivoNombre: file.name,
-    publicId: data.public_id,
-    tipo: file.type,
-    tamaño: file.size,
-  };
 };
 
 export const convertirPdfABase64 = subirArchivoACloudinary;
