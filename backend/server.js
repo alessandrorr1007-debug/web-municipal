@@ -6,6 +6,8 @@ import nodemailer from "nodemailer";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import fs from "fs";
+import { smsProvider } from "./smsProvider.js";
+
 
 import {
   MercadoPagoConfig,
@@ -701,6 +703,86 @@ app.post("/api/comprobantes/enviar-correo", async (req, res) => {
     res.status(500).json({ error: "No se pudo enviar el comprobante.", detalle: error.message });
   }
 });
+
+const otpsSms = new Map(); // key: telefono, value: { codigo, expiracion, intentos, usado }
+
+app.post("/api/sms/enviar-otp", async (req, res) => {
+  try {
+    const { telefono } = req.body;
+    if (!telefono || !/^\d{9}$/.test(telefono)) {
+      return res.status(400).json({ error: "Número telefónico inválido (debe tener 9 dígitos)." });
+    }
+
+    // Generate 6-digit code
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiracion = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+    otpsSms.set(telefono, {
+      codigo,
+      expiracion,
+      intentos: 0,
+      usado: false
+    });
+
+    console.log(`[OTP SMS] Generado código ${codigo} para ${telefono}`);
+
+    // Send SMS via decoupled provider
+    await smsProvider.sendSMS(
+      telefono,
+      `Tu codigo de verificacion municipal para habilitar notificaciones SMS es: ${codigo}. Valido por 5 minutos.`
+    );
+
+    res.json({ mensaje: "Código OTP enviado correctamente por SMS." });
+  } catch (error) {
+    console.error("Error al enviar OTP SMS:", error.message);
+    res.status(500).json({ error: "No se pudo enviar el código OTP por SMS." });
+  }
+});
+
+app.post("/api/sms/verificar-otp", async (req, res) => {
+  try {
+    const { telefono, codigo } = req.body;
+
+    if (!telefono || !codigo) {
+      return res.status(400).json({ error: "Faltan parámetros: teléfono y código." });
+    }
+
+    const otpData = otpsSms.get(telefono);
+
+    if (!otpData) {
+      return res.status(400).json({ error: "No se solicitó ningún código para este número de teléfono." });
+    }
+
+    if (otpData.usado) {
+      return res.status(400).json({ error: "El código ya ha sido utilizado." });
+    }
+
+    if (Date.now() > otpData.expiracion) {
+      return res.status(400).json({ error: "El código ha expirado. Solicita uno nuevo." });
+    }
+
+    // Increment attempts
+    otpData.intentos += 1;
+
+    if (otpData.intentos > 5) {
+      return res.status(400).json({ error: "Has alcanzado el límite máximo de 5 intentos." });
+    }
+
+    if (otpData.codigo !== codigo) {
+      return res.status(400).json({ error: "El código ingresado es incorrecto." });
+    }
+
+    // Mark as used
+    otpData.usado = true;
+    otpsSms.delete(telefono); // Clean up
+
+    res.json({ success: true, mensaje: "Tu número telefónico ha sido verificado correctamente." });
+  } catch (error) {
+    console.error("Error al verificar OTP SMS:", error.message);
+    res.status(500).json({ error: "Error al verificar el código OTP." });
+  }
+});
+
 
 /* =========================
    STATIC FILES & SPA

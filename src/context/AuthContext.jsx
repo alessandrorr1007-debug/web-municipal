@@ -40,12 +40,32 @@ export const AuthProvider = ({ children }) => {
               correo: user.email,
               nombre: data.nombre || "",
               rol: data.rol || "",
+              telefono: data.telefono || "",
+              dni: data.dni || "",
+              telefono_verificado: data.telefono_verificado || false,
+              sms_habilitado: data.sms_habilitado || false,
+              recibir_correos: data.recibir_correos !== false,
+              fecha_verificacion: data.fecha_verificacion || null,
             });
             // Listen for real‑time changes on the user document
             unsubscribeUserDoc = onSnapshot(ref, (docSnap) => {
               if (!docSnap.exists()) {
                 // User document removed -> clean up and sign out
                 handleUserRemoval();
+              } else {
+                const updatedData = docSnap.data();
+                setUsuario({
+                  uid: user.uid,
+                  correo: user.email,
+                  nombre: updatedData.nombre || "",
+                  rol: updatedData.rol || "",
+                  telefono: updatedData.telefono || "",
+                  dni: updatedData.dni || "",
+                  telefono_verificado: updatedData.telefono_verificado || false,
+                  sms_habilitado: updatedData.sms_habilitado || false,
+                  recibir_correos: updatedData.recibir_correos !== false,
+                  fecha_verificacion: updatedData.fecha_verificacion || null,
+                });
               }
             });
           } else {

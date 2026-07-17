@@ -48,6 +48,9 @@ export const registrarUsuario = async (datos) => {
     apellido_materno: datos.apellido_materno || "",
     nombre_completo: datos.nombre_completo || datos.nombre || "",
     contraseña: datos.password || "",
+    telefono_verificado: false,
+    sms_habilitado: false,
+    recibir_correos: true,
   };
 
   await setDoc(doc(db, "usuarios", usuario.uid), nuevoUsuario);
@@ -244,4 +247,51 @@ export const cambiarContrasena = async (correo, codigo, nuevaContrasena) => {
   }
 
   return JSON.parse(texto);
+};
+
+export const enviarOtpTelefono = async (telefono) => {
+  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const url = `${apiUrl}/api/sms/enviar-otp`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ telefono }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo enviar el código SMS.");
+  }
+  return data;
+};
+
+export const verificarOtpTelefono = async (telefono, codigo) => {
+  const apiUrl = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL || "http://localhost:3000");
+  const url = `${apiUrl}/api/sms/verificar-otp`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ telefono, codigo }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Código incorrecto.");
+  }
+  return data;
+};
+
+export const confirmarVerificacionTelefono = async (uid, telefono) => {
+  const ref = doc(db, "usuarios", uid);
+  await updateDoc(ref, {
+    telefono_verificado: true,
+    fecha_verificacion: Timestamp.now(),
+    sms_habilitado: true,
+  });
+};
+
+export const actualizarPreferenciasNotificaciones = async (uid, recibir_correos, sms_habilitado) => {
+  const ref = doc(db, "usuarios", uid);
+  await updateDoc(ref, {
+    recibir_correos,
+    sms_habilitado,
+  });
 };
