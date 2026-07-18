@@ -13,6 +13,8 @@ import {
 
 import { db } from "../firebase";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
 const COLLECTION_NAME = "solicitudes";
 
 const generarIdExpediente = () => {
@@ -20,107 +22,29 @@ const generarIdExpediente = () => {
 };
 
 export const guardarSolicitud = async (solicitud) => {
-  const id = generarIdExpediente();
-  const archivosPdf = solicitud.archivosPdf || [];
+  const response = await fetch(`${API_URL}/api/solicitudes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(solicitud),
+  });
 
-  const nuevaSolicitud = {
-    id,
-    fecha: new Date().toLocaleString("es-PE"),
-    creadoEn: serverTimestamp(),
-    actualizadoEn: serverTimestamp(),
-
-    uidUsuario: solicitud.uidUsuario || "",
-    correoUsuario: solicitud.correoUsuario || "",
-    nombreSolicitante: solicitud.nombreSolicitante || "",
-    telefonoSolicitante: solicitud.telefonoSolicitante || "",
-
-    canalRegistro: solicitud.canalRegistro || "online",
-
-    tipoTramite: solicitud.tipoTramite || "Nueva licencia",
-
-    ruc: solicitud.ruc || "",
-    nombreNegocio: solicitud.nombreNegocio || "",
-    razonSocial: solicitud.razonSocial || "",
-    direccion: solicitud.direccion || "",
-    giro: solicitud.giro || "",
-    estadoSunat: solicitud.estadoSunat || "",
-    condicionSunat: solicitud.condicionSunat || "",
-
-    archivosPdf,
-
-    archivo: solicitud.archivoNombre || archivosPdf[0]?.archivoNombre || "Sin archivo",
-    archivoNombre: solicitud.archivoNombre || archivosPdf[0]?.archivoNombre || "Sin archivo",
-    archivoUrl: solicitud.archivoUrl || archivosPdf[0]?.archivoUrl || "",
-
-    metodoPago: solicitud.metodoPago || "",
-    estadoPago: solicitud.estadoPago || "Pendiente de validacion",
-    pago: solicitud.estadoPago || "Pendiente de validacion",
-    comprobantePago: solicitud.comprobantePago || "",
-    montoPagado: solicitud.montoPagado || 0,
-
-    estado: solicitud.estado || "En revision",
-
-    fechaVisitaInspector: solicitud.fechaVisitaInspector || "",
-    programadoPor: solicitud.programadoPor || "",
-    nombreProgramador: solicitud.nombreProgramador || "",
-
-    inspeccion: solicitud.inspeccion || "Sin inspeccion",
-    resultadoInspeccion: solicitud.resultadoInspeccion || "",
-
-    observacion: solicitud.observacion || "",
-    observacionInspector: solicitud.observacionInspector || "",
-    recomendacionInspector: solicitud.recomendacionInspector || "",
-    evidenciasInspector: solicitud.evidenciasInspector || [],
-    fechaInspeccion: solicitud.fechaInspeccion || "",
-
-    cantidadReobservaciones: solicitud.cantidadReobservaciones || 0,
-    historialReobservaciones: solicitud.historialReobservaciones || [],
-
-    decisionFuncionario: solicitud.decisionFuncionario || "",
-    observacionFuncionario: solicitud.observacionFuncionario || "",
-    fechaDecisionFuncionario: solicitud.fechaDecisionFuncionario || "",
-
-    numeroLicencia: solicitud.numeroLicencia || "",
-    fechaAprobacion: solicitud.fechaAprobacion || "",
-    fechaExpiracionLicencia: solicitud.fechaExpiracionLicencia || "",
-    fechaVencimiento: solicitud.fechaVencimiento || "",
-    licenciaVigente: solicitud.licenciaVigente || false,
-    licenciaRenovada: solicitud.licenciaRenovada || false,
-    fechaRenovacion: solicitud.fechaRenovacion || "",
-    resultadoFinal: solicitud.resultadoFinal || "",
-
-    licenciaAnterior: solicitud.licenciaAnterior || "",
-    qrVerificacion: solicitud.qrVerificacion || "",
-
-    pagoId: solicitud.pagoId || "",
-    pagoEstadoDetalle: solicitud.pagoEstadoDetalle || "",
-
-    notificaciones: solicitud.notificaciones || [],
-  };
-
-  await setDoc(doc(db, COLLECTION_NAME, id), nuevaSolicitud);
-
-  // Guardar o actualizar la relación del negocio en la colección 'negocios'
-  if (solicitud.ruc && solicitud.uidUsuario) {
-    try {
-      await setDoc(doc(db, "negocios", solicitud.ruc), {
-        ruc: solicitud.ruc,
-        uidUsuario: solicitud.uidUsuario,
-        razonSocial: solicitud.razonSocial || "",
-        nombreNegocio: solicitud.nombreNegocio || "",
-        direccion: solicitud.direccion || "",
-        giro: solicitud.giro || "",
-        estadoSunat: solicitud.estadoSunat || "",
-        condicionSunat: solicitud.condicionSunat || "",
-        actualizadoEn: serverTimestamp(),
-      }, { merge: true });
-      console.log("[DEBUG] Negocio guardado/vinculado al usuario:", solicitud.ruc);
-    } catch (e) {
-      console.error("Error al guardar la relación de negocio:", e);
-    }
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
   }
 
-  return nuevaSolicitud;
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Error al guardar la solicitud.");
+  }
+
+  return {
+    id: data.idSolicitud,
+    ...solicitud,
+  };
 };
 
 export const obtenerNegociosPorUsuario = async (uidUsuario) => {

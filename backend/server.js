@@ -7,6 +7,8 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import fs from "fs";
 import { smsProvider } from "./smsProvider.js";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 
 import {
@@ -25,6 +27,18 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+const firebaseConfig = {
+  apiKey: process.env.FIREBASE_API_KEY || "AIzaSyC_LEdrAj9R9epUNj9ZMhwE2al1TIfoUko",
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || "web-municipal-32860.firebaseapp.com",
+  projectId: process.env.FIREBASE_PROJECT_ID || "web-municipal-32860",
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "web-municipal-32860.firebasestorage.app",
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "47406376313",
+  appId: process.env.FIREBASE_APP_ID || "1:47406376313:web:d85dcf95515fe6a19a7ba8",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
 const PORT = process.env.PORT || 3000;
 
@@ -75,6 +89,132 @@ if (transporter) {
 /* =========================
    API ROUTES
 ========================= */
+
+const generarIdExpediente = () => {
+  return "EXP-" + Date.now().toString().slice(-6);
+};
+
+app.post("/api/solicitudes", async (req, res) => {
+  console.log("=== ENDPOINT POST /api/solicitudes ===");
+  try {
+    const solicitud = req.body;
+    const id = generarIdExpediente();
+    const archivosPdf = solicitud.archivosPdf || [];
+
+    const nuevaSolicitud = {
+      id,
+      fecha: new Date().toLocaleString("es-PE"),
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+
+      uidUsuario: solicitud.uidUsuario || "",
+      correoUsuario: solicitud.correoUsuario || "",
+      nombreSolicitante: solicitud.nombreSolicitante || "",
+      telefonoSolicitante: solicitud.telefonoSolicitante || "",
+
+      canalRegistro: solicitud.canalRegistro || "online",
+
+      tipoTramite: solicitud.tipoTramite || "Nueva licencia",
+
+      ruc: solicitud.ruc || "",
+      nombreNegocio: solicitud.nombreNegocio || "",
+      razonSocial: solicitud.razonSocial || "",
+      direccion: solicitud.direccion || "",
+      giro: solicitud.giro || "",
+      estadoSunat: solicitud.estadoSunat || "",
+      condicionSunat: solicitud.condicionSunat || "",
+
+      archivosPdf,
+
+      archivo: solicitud.archivoNombre || archivosPdf[0]?.archivoNombre || "Sin archivo",
+      archivoNombre: solicitud.archivoNombre || archivosPdf[0]?.archivoNombre || "Sin archivo",
+      archivoUrl: solicitud.archivoUrl || archivosPdf[0]?.archivoUrl || "",
+
+      metodoPago: solicitud.metodoPago || "",
+      estadoPago: solicitud.estadoPago || "Pendiente de validacion",
+      pago: solicitud.pago || solicitud.estadoPago || "Pendiente de validacion",
+      comprobantePago: solicitud.comprobantePago || "",
+      montoPagado: solicitud.montoPagado || 0,
+
+      estado: solicitud.estado || "En revision",
+
+      fechaVisitaInspector: solicitud.fechaVisitaInspector || "",
+      programadoPor: solicitud.programadoPor || "",
+      nombreProgramador: solicitud.nombreProgramador || "",
+
+      inspeccion: solicitud.inspeccion || "Sin inspeccion",
+      resultadoInspeccion: solicitud.resultadoInspeccion || "",
+
+      observacion: solicitud.observacion || "",
+      observacionInspector: solicitud.observacionInspector || "",
+      recomendacionInspector: solicitud.recomendacionInspector || "",
+      evidenciasInspector: solicitud.evidenciasInspector || [],
+      fechaInspeccion: solicitud.fechaInspeccion || "",
+
+      cantidadReobservaciones: solicitud.cantidadReobservaciones || 0,
+      historialReobservaciones: solicitud.historialReobservaciones || [],
+
+      decisionFuncionario: solicitud.decisionFuncionario || "",
+      observacionFuncionario: solicitud.observacionFuncionario || "",
+      fechaDecisionFuncionario: solicitud.fechaDecisionFuncionario || "",
+
+      numeroLicencia: solicitud.numeroLicencia || "",
+      fechaAprobacion: solicitud.fechaAprobacion || "",
+      fechaExpiracionLicencia: solicitud.fechaExpiracionLicencia || "",
+      fechaVencimiento: solicitud.fechaVencimiento || "",
+      licenciaVigente: solicitud.licenciaVigente || false,
+      licenciaRenovada: solicitud.licenciaRenovada || false,
+      fechaRenovacion: solicitud.fechaRenovacion || "",
+      resultadoFinal: solicitud.resultadoFinal || "",
+
+      licenciaAnterior: solicitud.licenciaAnterior || "",
+      qrVerificacion: solicitud.qrVerificacion || "",
+
+      pagoId: solicitud.pagoId || "",
+      pagoEstadoDetalle: solicitud.pagoEstadoDetalle || "",
+
+      notificaciones: solicitud.notificaciones || [],
+    };
+
+    // Save to Firestore
+    await setDoc(doc(db, "solicitudes", id), nuevaSolicitud);
+
+    // Save or update business local relationship in negocios collection
+    if (solicitud.ruc && solicitud.uidUsuario) {
+      try {
+        await setDoc(doc(db, "negocios", solicitud.ruc), {
+          ruc: solicitud.ruc,
+          uidUsuario: solicitud.uidUsuario,
+          razonSocial: solicitud.razonSocial || "",
+          nombreNegocio: solicitud.nombreNegocio || "",
+          direccion: solicitud.direccion || "",
+          giro: solicitud.giro || "",
+          estadoSunat: solicitud.estadoSunat || "",
+          condicionSunat: solicitud.condicionSunat || "",
+          actualizadoEn: serverTimestamp(),
+        }, { merge: true });
+        console.log("[DEBUG Backend] Negocio guardado/vinculado:", solicitud.ruc);
+      } catch (e) {
+        console.error("[DEBUG Backend] Error vinculando local de negocio:", e.message);
+      }
+    }
+
+    console.log("[DEBUG Backend] Solicitud guardada con ID:", id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Solicitud guardada correctamente",
+      idSolicitud: id,
+    });
+  } catch (error) {
+    console.error("=== ERROR GUARDANDO SOLICITUD EN BACKEND ===");
+    console.error("Mensaje:", error.message);
+    return res.status(500).json({
+      error: "Error al guardar la solicitud en la base de datos.",
+      detalle: error.message,
+    });
+  }
+});
 
 app.get("/api/health", (req, res) => {
   res.json({
