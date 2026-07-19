@@ -15,7 +15,8 @@ const CONFIG_DEFAULT = {
   vigenciaLicencia: 365,
   diasParaRenovacion: 30,
   maxReobservaciones: 2,
-  diasPlazoReparo: 30,
+  diasPlazoReparo: 5,
+  diasReprogramacion: 3,
 
   estadosLicencia: [
     "En revision",

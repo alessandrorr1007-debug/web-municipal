@@ -212,7 +212,7 @@ function PanelInspector({ seccion }) {
         } else {
           const nuevaCantidad = 1;
           const fechaReprogramacion = new Date();
-          fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 30);
+          fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 3);
           const nuevaFecha = fechaReprogramacion.toLocaleDateString("es-PE");
 
           await actualizarSolicitud(solicitud.id, {
@@ -221,7 +221,7 @@ function PanelInspector({ seccion }) {
             observacionInspector: observacion,
             evidenciasInspector: evidencias,
             fechaInspeccion: formatearFechaHora(),
-            resultadoInspeccion: "El inspector observa el local. Se reprograma visita en 30 días.",
+            resultadoInspeccion: "El inspector observa el local. Se reprograma visita en 3 días hábiles.",
             estado: "Reprogramado",
             fechaVisitaInspector: nuevaFecha,
             cantidadReobservaciones: nuevaCantidad,
@@ -248,7 +248,7 @@ function PanelInspector({ seccion }) {
         }
       } else if (resultado === "No atendido") {
         const fechaReprogramacion = new Date();
-        fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 7);
+        fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 3);
         const nuevaFecha = fechaReprogramacion.toLocaleDateString("es-PE");
 
         await actualizarSolicitud(solicitud.id, {
