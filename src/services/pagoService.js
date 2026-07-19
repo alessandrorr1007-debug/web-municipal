@@ -1,3 +1,5 @@
+import { authHeaders } from "../firebase";
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const obtenerError = async (response) => {
@@ -10,11 +12,10 @@ const obtenerError = async (response) => {
 };
 
 export const crearPreferenciaPago = async ({ ruc, razonSocial }) => {
+  const headers = await authHeaders();
   const response = await fetch(`${API_URL}/api/pagos/crear-preferencia`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       ruc,
       razonSocial,
@@ -30,7 +31,8 @@ export const crearPreferenciaPago = async ({ ruc, razonSocial }) => {
 
 
 export const verificarPago = async (paymentId) => {
-  const response = await fetch(`${API_URL}/api/pagos/verificar/${paymentId}`);
+  const headers = await authHeaders();
+  const response = await fetch(`${API_URL}/api/pagos/verificar/${paymentId}`, { headers });
 
   if (!response.ok) {
     throw new Error(await obtenerError(response));

@@ -1,4 +1,4 @@
-import { db } from "../firebase";
+import { db, authHeaders } from "../firebase";
 import {
   collection,
   doc,
@@ -32,16 +32,18 @@ export const crearNotificacion = async (uidUsuario, { titulo, descripcion, icono
   }
 
   if (correoUsuario) {
-    fetch(`${API_URL}/api/email/enviar-notificacion`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ correoUsuario, titulo, descripcion }),
-    }).then((res) => {
-      if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos.");
-      else console.log("[NOTIFICACION EMAIL] Enviado correctamente.");
-    }).catch((err) => {
-      console.error("[NOTIFICACION EMAIL] Error al conectar para enviar email:", err.message);
-    });
+    authHeaders().then(headers => {
+      fetch(`${API_URL}/api/email/enviar-notificacion`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ correoUsuario, titulo, descripcion }),
+      }).then((res) => {
+        if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos.");
+        else console.log("[NOTIFICACION EMAIL] Enviado correctamente.");
+      }).catch((err) => {
+        console.error("[NOTIFICACION EMAIL] Error al conectar para enviar email:", err.message);
+      });
+    }).catch(err => console.error("[NOTIFICACION EMAIL] No se pudo obtener token:", err.message));
   }
 };
 

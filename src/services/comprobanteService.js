@@ -1,4 +1,4 @@
-import { db, storage } from "../firebase";
+import { db, storage, authHeaders } from "../firebase";
 import {
   collection,
   doc,
@@ -458,9 +458,10 @@ export const enviarComprobantePorCorreo = async (comprobante) => {
   const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
   const url = `${apiUrl}/api/comprobantes/enviar-correo`;
 
+  const headers = await authHeaders();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(comprobante),
   });
 

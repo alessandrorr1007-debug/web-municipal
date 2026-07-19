@@ -11,7 +11,7 @@ import {
   where,
 } from "firebase/firestore";
 
-import { db } from "../firebase";
+import { db, authHeaders } from "../firebase";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -26,11 +26,10 @@ export const guardarSolicitud = async (solicitud) => {
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
+    const headers = await authHeaders();
     const response = await fetch(`${API_URL}/api/solicitudes`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify(solicitud),
       signal: controller.signal,
     });
@@ -102,16 +101,18 @@ const crearNotificacionEnDb = async (uidUsuario, { titulo, descripcion, icono },
     console.log("[NOTIFICACION SOLICITUD] Creada con éxito:", titulo);
 
     if (correoUsuario) {
-      fetch(`${API_URL}/api/email/enviar-notificacion`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ correoUsuario, titulo, descripcion }),
-      }).then((res) => {
-        if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos.");
-        else console.log("[NOTIFICACION EMAIL] Enviado correctamente.");
-      }).catch((err) => {
-        console.error("[NOTIFICACION EMAIL] Error al conectar para enviar email:", err.message);
-      });
+      authHeaders().then(headers => {
+        fetch(`${API_URL}/api/email/enviar-notificacion`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ correoUsuario, titulo, descripcion }),
+        }).then((res) => {
+          if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos.");
+          else console.log("[NOTIFICACION EMAIL] Enviado correctamente.");
+        }).catch((err) => {
+          console.error("[NOTIFICACION EMAIL] Error al conectar para enviar email:", err.message);
+        });
+      }).catch(err => console.error("[NOTIFICACION EMAIL] No se pudo obtener token:", err.message));
     }
   } catch (err) {
     console.error("Error creating notification in db:", err);

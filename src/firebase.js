@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 
-import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence, onAuthStateChanged } from "firebase/auth";
 
 import { getFirestore } from "firebase/firestore";
 
@@ -30,5 +30,25 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
 export const db = getFirestore(app);
 
 export const storage = getStorage(app);
+
+export const getIdToken = async () => {
+  const user = auth.currentUser;
+  if (!user) return null;
+  try {
+    return await user.getIdToken();
+  } catch (error) {
+    console.error("Error obteniendo ID token:", error);
+    return null;
+  }
+};
+
+export const authHeaders = async () => {
+  const token = await getIdToken();
+  if (!token) throw new Error("No hay sesión activa.");
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+};
 
 export default app;
