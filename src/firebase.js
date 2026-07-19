@@ -7,17 +7,12 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyC_LEdrAj9R9epUNj9ZMhwE2al1TIfoUko",
-
-  authDomain: "web-municipal-32860.firebaseapp.com",
-
-  projectId: "web-municipal-32860",
-
-  storageBucket: "web-municipal-32860.firebasestorage.app",
-
-  messagingSenderId: "47406376313",
-
-  appId: "1:47406376313:web:d85dcf95515fe6a19a7ba8",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);
