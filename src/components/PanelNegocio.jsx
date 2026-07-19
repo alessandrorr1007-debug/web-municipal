@@ -15,8 +15,9 @@ import {
   imprimirComprobante,
   generarPdfComprobante,
 } from "../services/comprobanteService";
-import { abrirPdf } from "../services/pdfService";
+import { abrirPdf, convertirPdfABase64 } from "../services/pdfService";
 import { crearNotificacion } from "../services/notificacionService";
+import { determinarActividad, ACTIVIDADES_CONFIG } from "../config/documentosConfig";
 import { useAuth } from "../context/AuthContext";
 import {
   enviarOtpTelefono,
@@ -365,6 +366,7 @@ function PanelNegocio({ seccion }) {
   const [docSanitario, setDocSanitario] = useState(null);
   const [docDigemid, setDocDigemid] = useState(null);
   const [docRepresentacion, setDocRepresentacion] = useState(null);
+  const [docRepresentacionLegal, setDocRepresentacionLegal] = useState(null);
   const [relacionSolicitante, setRelacionSolicitante] = useState("Dueño");
 
   // Paso del wizard de nueva solicitud (1=DNI, 2=RUC, 3=Tipo, 4=Documentos)
@@ -384,6 +386,20 @@ function PanelNegocio({ seccion }) {
   const [tipoComprobante, setTipoComprobante] = useState("");
   const [comprobanteGenerado, setComprobanteGenerado] = useState(null);
   const [enviandoCorreo, setEnviandoCorreo] = useState(false);
+
+  const getDocumentStateMap = () => {
+    return {
+      identidad: { state: docIdentidad, setter: setDocIdentidad, label: "1. Documento de identidad del solicitante", hint: "DNI_Solicitante.pdf" },
+      ruc: { state: docFichaRuc, setter: setDocFichaRuc, label: "2. Ficha RUC SUNAT", hint: "Ficha_RUC.pdf" },
+      propiedad: { state: docAcreditaLocal, setter: setDocAcreditaLocal, label: "3. Documento que acredita propiedad o uso del local", hint: "Contrato_Local.pdf", isPropiedad: true },
+      plano: { state: docPlano, setter: setDocPlano, label: "4. Plano de distribución del establecimiento", hint: "Plano_Establecimiento.pdf" },
+      dj: { state: docDj, setter: setDocDj, label: "5. Declaración jurada de seguridad", hint: "Declaracion_Jurada.pdf" },
+      sanitario: { state: docSanitario, setter: setDocSanitario, label: "6. Certificado sanitario de salubridad", hint: "Certificado_Sanitario.pdf" },
+      autorizacion_sanitaria: { state: docDigemid, setter: setDocDigemid, label: "7. Autorización sanitaria del establecimiento", hint: "Autorizacion_Sanitaria.pdf" },
+      responsable_tecnico: { state: docRepresentacion, setter: setDocRepresentacion, label: "8. Título/Colegiatura del Responsable Técnico", hint: "Responsable_Tecnico.pdf" },
+      representacion: { state: docRepresentacionLegal, setter: setDocRepresentacionLegal, label: "9. Documento de representación legal", hint: "Representacion_Legal.pdf" }
+    };
+  };
 
   const [form, setForm] = useState({
     tipoTramite: "Nueva licencia",
@@ -693,8 +709,16 @@ function PanelNegocio({ seccion }) {
       return;
     }
 
-    const docObligatorios = [docIdentidad, docFichaRuc, docAcreditaLocal, docPlano, docDj];
-    if (docObligatorios.some((d) => !d)) {
+    const actividad = determinarActividad(form.giro);
+    const baseDocs = ACTIVIDADES_CONFIG[actividad]?.documentos || ACTIVIDADES_CONFIG.default.documentos;
+    const docsRequeridosKeys = [...baseDocs];
+    if (form.ruc.startsWith("20") && !docsRequeridosKeys.includes("representacion")) {
+      docsRequeridosKeys.push("representacion");
+    }
+
+    const stateMap = getDocumentStateMap();
+    const faltanObligatorios = docsRequeridosKeys.some(key => !stateMap[key]?.state);
+    if (faltanObligatorios) {
       alert("Debe subir todos los documentos obligatorios antes de continuar.");
       return;
     }
@@ -768,7 +792,7 @@ function PanelNegocio({ seccion }) {
 
     const todosLosDocs = [
       docIdentidad, docFichaRuc, docAcreditaLocal, docPlano,
-      docDj, docSanitario, docDigemid, docRepresentacion, ...archivos,
+      docDj, docSanitario, docDigemid, docRepresentacion, docRepresentacionLegal, ...archivos,
     ].filter(Boolean);
 
     if (todosLosDocs.length === 0) {
@@ -1700,125 +1724,75 @@ function PanelNegocio({ seccion }) {
 
                       {/* Documentos obligatorios */}
                       <div style={{ marginTop: "18px", display: "grid", gap: "14px" }}>
-                        <p style={{ fontWeight: "700", color: "#0f172a", fontSize: "14px", margin: 0 }}>📌 Documentos obligatorios</p>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <p style={{ fontWeight: "700", color: "#0f172a", fontSize: "14px", margin: 0 }}>📌 Documentos obligatorios</p>
+                          <span style={{ fontSize: "12.5px", background: "#eff6ff", color: "#1e40af", padding: "4px 10px", borderRadius: "8px", fontWeight: "600", border: "1px solid #bfdbfe" }}>
+                            Actividad: {ACTIVIDADES_CONFIG[determinarActividad(form.giro)]?.nombre || "General"}
+                          </span>
+                        </div>
 
-                        {/* DNI Solicitante */}
-                        {[
-                          { label: "1. Documento de identidad del solicitante", hint: "DNI_Solicitante.pdf", state: docIdentidad, setter: setDocIdentidad },
-                          { label: "2. Ficha RUC SUNAT", hint: "Ficha_RUC.pdf", state: docFichaRuc, setter: setDocFichaRuc },
-                          { label: "4. Plano de distribución del establecimiento", hint: "Plano_Establecimiento.pdf", state: docPlano, setter: setDocPlano },
-                          { label: "5. Declaración jurada de seguridad", hint: "Declaracion_Jurada.pdf", state: docDj, setter: setDocDj },
-                        ].map(({ label, hint, state, setter }) => (
-                          <div key={label} style={{ padding: "14px 16px", borderRadius: "10px", background: state ? "#f0fdf4" : "#f8fafc", border: `1px solid ${state ? "#86efac" : "#e2e8f0"}` }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                              <div>
-                                <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>{label}</p>
-                                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Ejemplo: {hint}</p>
-                              </div>
-                              {state
-                                ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                    <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {state.name}</span>
-                                    <button type="button" className="btn-quitar" onClick={() => setter(null)}>Quitar</button>
+                        {(() => {
+                          const actividad = determinarActividad(form.giro);
+                          const baseDocs = ACTIVIDADES_CONFIG[actividad]?.documentos || ACTIVIDADES_CONFIG.default.documentos;
+                          const reqKeys = [...baseDocs];
+                          if (form.ruc.startsWith("20") && !reqKeys.includes("representacion")) {
+                            reqKeys.push("representacion");
+                          }
+                          const stateMap = getDocumentStateMap();
+
+                          return reqKeys.map((key) => {
+                            const item = stateMap[key];
+                            if (!item) return null;
+
+                            if (item.isPropiedad) {
+                              return (
+                                <div key={key} style={{ padding: "14px 16px", borderRadius: "10px", background: item.state ? "#f0fdf4" : "#f8fafc", border: `1px solid ${item.state ? "#86efac" : "#e2e8f0"}` }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
+                                    <div style={{ flex: 1 }}>
+                                      <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>{item.label}</p>
+                                      <select value={tipoPropiedadLocal} onChange={(e) => setTipoPropiedadLocal(e.target.value)} style={{ marginTop: "6px", fontSize: "13px", padding: "6px 10px", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
+                                        <option>Contrato de alquiler</option>
+                                        <option>Título de propiedad</option>
+                                        <option>Cesión de uso</option>
+                                      </select>
+                                      <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Ejemplo: {item.hint}</p>
+                                    </div>
+                                    {item.state
+                                      ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                          <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {item.state.name}</span>
+                                          <button type="button" className="btn-quitar" onClick={() => item.setter(null)}>Quitar</button>
+                                        </div>
+                                      : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600", alignSelf: "flex-start" }}>
+                                          Seleccionar PDF
+                                          <input type="file" accept=".pdf" hidden onChange={subirDoc(item.setter)} />
+                                        </label>}
                                   </div>
-                                : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
-                                    Seleccionar PDF
-                                    <input type="file" accept=".pdf" hidden onChange={subirDoc(setter)} />
-                                  </label>}
-                            </div>
-                          </div>
-                        ))}
-
-                        {/* Documento propiedad local — con selector de tipo */}
-                        <div style={{ padding: "14px 16px", borderRadius: "10px", background: docAcreditaLocal ? "#f0fdf4" : "#f8fafc", border: `1px solid ${docAcreditaLocal ? "#86efac" : "#e2e8f0"}` }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
-                            <div style={{ flex: 1 }}>
-                              <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>3. Documento que acredita propiedad o uso del local</p>
-                              <select value={tipoPropiedadLocal} onChange={(e) => setTipoPropiedadLocal(e.target.value)} style={{ marginTop: "6px", fontSize: "13px", padding: "6px 10px", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
-                                <option>Contrato de alquiler</option>
-                                <option>Título de propiedad</option>
-                                <option>Cesión de uso</option>
-                              </select>
-                              <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Ejemplo: Contrato_Local.pdf</p>
-                            </div>
-                            {docAcreditaLocal
-                              ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                  <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {docAcreditaLocal.name}</span>
-                                  <button type="button" className="btn-quitar" onClick={() => setDocAcreditaLocal(null)}>Quitar</button>
                                 </div>
-                              : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600", alignSelf: "flex-start" }}>
-                                  Seleccionar PDF
-                                  <input type="file" accept=".pdf" hidden onChange={subirDoc(setDocAcreditaLocal)} />
-                                </label>}
-                          </div>
-                        </div>
+                              );
+                            }
+
+                            return (
+                              <div key={key} style={{ padding: "14px 16px", borderRadius: "10px", background: item.state ? "#f0fdf4" : "#f8fafc", border: `1px solid ${item.state ? "#86efac" : "#e2e8f0"}` }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                                  <div>
+                                    <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>{item.label}</p>
+                                    <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Ejemplo: {item.hint}</p>
+                                  </div>
+                                  {item.state
+                                    ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                        <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {item.state.name}</span>
+                                        <button type="button" className="btn-quitar" onClick={() => item.setter(null)}>Quitar</button>
+                                      </div>
+                                    : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
+                                        Seleccionar PDF
+                                        <input type="file" accept=".pdf" hidden onChange={subirDoc(item.setter)} />
+                                      </label>}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
                       </div>
-
-                      {/* Documentos adicionales según giro */}
-                      {(requiereDocSanitario || requiereDocDigemid || requiereDocRepresentacion) && (
-                        <div style={{ marginTop: "18px", display: "grid", gap: "14px" }}>
-                          <p style={{ fontWeight: "700", color: "#0f172a", fontSize: "14px", margin: 0 }}>📋 Documentos adicionales según su actividad</p>
-
-                          {requiereDocSanitario && (
-                            <div style={{ padding: "14px 16px", borderRadius: "10px", background: docSanitario ? "#f0fdf4" : "#fefce8", border: `1px solid ${docSanitario ? "#86efac" : "#fde047"}` }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                                <div>
-                                  <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>🍽️ Certificado sanitario</p>
-                                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Requerido para establecimientos de alimentos</p>
-                                </div>
-                                {docSanitario
-                                  ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                      <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {docSanitario.name}</span>
-                                      <button type="button" className="btn-quitar" onClick={() => setDocSanitario(null)}>Quitar</button>
-                                    </div>
-                                  : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#854d0e", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
-                                      Seleccionar PDF
-                                      <input type="file" accept=".pdf" hidden onChange={subirDoc(setDocSanitario)} />
-                                    </label>}
-                              </div>
-                            </div>
-                          )}
-
-                          {requiereDocDigemid && (
-                            <div style={{ padding: "14px 16px", borderRadius: "10px", background: docDigemid ? "#f0fdf4" : "#fefce8", border: `1px solid ${docDigemid ? "#86efac" : "#fde047"}` }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                                <div>
-                                  <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>💊 Autorización DIGEMID</p>
-                                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Requerido para farmacias y boticas</p>
-                                </div>
-                                {docDigemid
-                                  ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                      <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {docDigemid.name}</span>
-                                      <button type="button" className="btn-quitar" onClick={() => setDocDigemid(null)}>Quitar</button>
-                                    </div>
-                                  : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#854d0e", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
-                                      Seleccionar PDF
-                                      <input type="file" accept=".pdf" hidden onChange={subirDoc(setDocDigemid)} />
-                                    </label>}
-                              </div>
-                            </div>
-                          )}
-
-                          {requiereDocRepresentacion && (
-                            <div style={{ padding: "14px 16px", borderRadius: "10px", background: docRepresentacion ? "#f0fdf4" : "#fefce8", border: `1px solid ${docRepresentacion ? "#86efac" : "#fde047"}` }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                                <div>
-                                  <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>📜 Poder notarial / Documento de representación</p>
-                                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Requerido para representantes legales y apoderados</p>
-                                </div>
-                                {docRepresentacion
-                                  ? <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                      <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ {docRepresentacion.name}</span>
-                                      <button type="button" className="btn-quitar" onClick={() => setDocRepresentacion(null)}>Quitar</button>
-                                    </div>
-                                  : <label style={{ cursor: "pointer", padding: "6px 14px", background: "#854d0e", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
-                                      Seleccionar PDF
-                                      <input type="file" accept=".pdf" hidden onChange={subirDoc(setDocRepresentacion)} />
-                                    </label>}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
 
                       {/* Documentos adicionales libres (opcional) */}
                       <div style={{ marginTop: "18px", display: "grid", gap: "14px" }}>
