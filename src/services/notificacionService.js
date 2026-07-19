@@ -7,8 +7,9 @@ import {
 } from "firebase/firestore";
 
 const COLLECTION = "notificaciones";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-export const crearNotificacion = async (uidUsuario, { titulo, descripcion, icono }) => {
+export const crearNotificacion = async (uidUsuario, { titulo, descripcion, icono }, correoUsuario = "") => {
   if (!uidUsuario) return;
   const idNotificacion = doc(collection(db, COLLECTION)).id;
   const fechaHora = new Date().toISOString();
@@ -28,6 +29,19 @@ export const crearNotificacion = async (uidUsuario, { titulo, descripcion, icono
     console.log("[NOTIFICACION] Creada con éxito:", titulo);
   } catch (error) {
     console.error("[NOTIFICACION] Error al crear:", error);
+  }
+
+  if (correoUsuario) {
+    fetch(`${API_URL}/api/email/enviar-notificacion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ correoUsuario, titulo, descripcion }),
+    }).then((res) => {
+      if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos.");
+      else console.log("[NOTIFICACION EMAIL] Enviado correctamente.");
+    }).catch((err) => {
+      console.error("[NOTIFICACION EMAIL] Error al conectar para enviar email:", err.message);
+    });
   }
 };
 

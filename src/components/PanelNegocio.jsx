@@ -889,7 +889,7 @@ function PanelNegocio({ seccion }) {
         titulo: "Solicitud registrada",
         descripcion: `Su solicitud EXP-${nueva.id} de Licencia de Funcionamiento se ha registrado correctamente.`,
         icono: "📝",
-      });
+      }, usuario?.correo || "");
 
       let comp = null;
       if (estadoPago === "Confirmado") {
@@ -923,13 +923,13 @@ function PanelNegocio({ seccion }) {
           titulo: "Pago confirmado",
           descripcion: `Se ha confirmado el pago de S/ ${MONTO_TRAMITE.toFixed(2)} para la solicitud EXP-${nueva.id}.`,
           icono: "💳",
-        });
+        }, usuario?.correo || "");
 
         await crearNotificacion(usuario?.uid, {
           titulo: "Comprobante generado",
           descripcion: `Se generó con éxito el comprobante ${comp.serie}-${comp.numero} de su pago.`,
           icono: "📄",
-        });
+        }, usuario?.correo || "");
       }
 
       setGuardando(false);

@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import fs from "fs";
 import { smsProvider } from "./smsProvider.js";
+import { emailProvider } from "./emailProvider.js";
 import { initializeApp } from "firebase/app";
 import { initializeFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
 
@@ -733,6 +734,32 @@ app.post("/api/email-change/verificar-codigo-nuevo", async (req, res) => {
   changeEmailOtps.delete(correoNuevo);
 
   res.json({ success: true, mensaje: "Ambos correos verificados correctamente." });
+});
+
+app.post("/api/email/enviar-notificacion", async (req, res) => {
+  const { correoUsuario, titulo, descripcion } = req.body;
+  if (!correoUsuario || !titulo || !descripcion) {
+    return res.status(400).json({ error: "Faltan correoUsuario, titulo o descripcion." });
+  }
+
+  try {
+    let subject = titulo;
+    
+    // Standardize subjects based on requirements
+    if (titulo.toLowerCase().includes("registrada")) {
+      subject = "Solicitud registrada correctamente";
+    } else if (titulo.toLowerCase().includes("pago confirmado")) {
+      subject = "Pago confirmado";
+    } else if (titulo.toLowerCase().includes("comprobante generado")) {
+      subject = "Comprobante generado";
+    }
+
+    await emailProvider.sendEmail(correoUsuario, subject, descripcion);
+    res.json({ success: true, mensaje: "Correo de notificación enviado correctamente." });
+  } catch (err) {
+    console.error("[API NOTIFICACION CORREO] Error al enviar email:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/api/enviar-codigo", async (req, res) => {

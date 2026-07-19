@@ -85,7 +85,7 @@ export const obtenerSolicitudes = async () => {
   });
 };
 
-const crearNotificacionEnDb = async (uidUsuario, { titulo, descripcion, icono }) => {
+const crearNotificacionEnDb = async (uidUsuario, { titulo, descripcion, icono }, correoUsuario = "") => {
   if (!uidUsuario) return;
   try {
     const idNotificacion = doc(collection(db, "notificaciones")).id;
@@ -99,6 +99,20 @@ const crearNotificacionEnDb = async (uidUsuario, { titulo, descripcion, icono })
       fecha_hora: fechaHora,
       leida: false,
     });
+    console.log("[NOTIFICACION SOLICITUD] Creada con éxito:", titulo);
+
+    if (correoUsuario) {
+      fetch(`${API_URL}/api/email/enviar-notificacion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correoUsuario, titulo, descripcion }),
+      }).then((res) => {
+        if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos.");
+        else console.log("[NOTIFICACION EMAIL] Enviado correctamente.");
+      }).catch((err) => {
+        console.error("[NOTIFICACION EMAIL] Error al conectar para enviar email:", err.message);
+      });
+    }
   } catch (err) {
     console.error("Error creating notification in db:", err);
   }
@@ -112,6 +126,7 @@ export const actualizarSolicitud = async (id, cambios) => {
   const solicitudRef = doc(db, COLLECTION_NAME, id);
   
   let uidUsuario = "";
+  let correoUsuario = "";
   let estadoAnterior = "";
   let notificacionesAnteriores = [];
   try {
@@ -119,6 +134,7 @@ export const actualizarSolicitud = async (id, cambios) => {
     if (snapshot.exists()) {
       const data = snapshot.data();
       uidUsuario = data.uidUsuario || "";
+      correoUsuario = data.correoUsuario || "";
       estadoAnterior = data.estado || "";
       notificacionesAnteriores = data.notificaciones || [];
     }
@@ -159,7 +175,7 @@ export const actualizarSolicitud = async (id, cambios) => {
         titulo: title,
         descripcion: desc,
         icono: icon,
-      });
+      }, correoUsuario);
     }
 
     if (cambios.notificaciones && cambios.notificaciones.length > notificacionesAnteriores.length) {
@@ -174,7 +190,7 @@ export const actualizarSolicitud = async (id, cambios) => {
             titulo: item.titulo,
             descripcion: item.mensaje || item.descripcion || "",
             icono: icon,
-          });
+          }, correoUsuario);
         }
       }
     }
