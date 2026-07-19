@@ -25,6 +25,7 @@ export const crearUsuarioInterno = async (datos) => {
     cargo: datos.cargo || "",
     rol: datos.rol || "",
     estado: datos.estado || "activo",
+    activo: datos.activo !== false,
     permisos: datos.permisos || [],
     creadoEn: serverTimestamp(),
     actualizadoEn: serverTimestamp(),
@@ -48,7 +49,8 @@ export const actualizarUsuario = async (id, cambios) => {
 };
 
 export const eliminarUsuario = async (id) => {
-  await deleteDoc(doc(db, COLLECTION, id));
+  const ref = doc(db, COLLECTION, id);
+  await updateDoc(ref, { activo: false, estado: "desactivado", actualizadoEn: serverTimestamp() });
   return true;
 };
 

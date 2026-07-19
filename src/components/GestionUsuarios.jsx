@@ -3,8 +3,7 @@ import { initializeApp } from "firebase/app";
 import {
   getAuth,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updatePassword,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { firebaseConfig } from "../firebase";
 import {
@@ -70,32 +69,6 @@ function GestionUsuarios({ usuarios, onRecargar }) {
     e.preventDefault();
     try {
       if (editando) {
-        let updatePasswordSuccess = false;
-        if (form.password && form.password.trim() !== "") {
-          if (form.password.trim().length < 6) {
-            alert("La contraseña debe tener al menos 6 caracteres.");
-            return;
-          }
-          const appName = `TempApp_${Date.now()}`;
-          const tempApp = initializeApp(firebaseConfig, appName);
-          const tempAuth = getAuth(tempApp);
-          try {
-            const cred = await signInWithEmailAndPassword(tempAuth, form.correo, editando.contraseña || "123456");
-            await updatePassword(cred.user, form.password.trim());
-            updatePasswordSuccess = true;
-          } catch (authErr) {
-            console.warn("No se pudo iniciar sesión para actualizar contraseña, intentando registrar usuario:", authErr.message);
-            try {
-              const cred = await createUserWithEmailAndPassword(tempAuth, form.correo, form.password.trim());
-              updatePasswordSuccess = true;
-            } catch (createErr) {
-              console.error("No se pudo crear en Firebase Auth:", createErr);
-            }
-          } finally {
-            await tempApp.delete();
-          }
-        }
-
         const cambios = {
           nombre: form.nombre,
           dni: form.dni,
@@ -105,16 +78,25 @@ function GestionUsuarios({ usuarios, onRecargar }) {
           permisos: PERMISOS_POR_ROL[form.rol] || [],
         };
 
-        if (updatePasswordSuccess) {
-          cambios.contraseña = form.password.trim();
+        await actualizarUsuario(editando.uid, cambios);
+
+        if (form.password && form.password.trim() !== "") {
+          try {
+            const appName = `TempApp_${Date.now()}`;
+            const tempApp = initializeApp(firebaseConfig, appName);
+            const tempAuth = getAuth(tempApp);
+            await sendPasswordResetEmail(tempAuth, form.correo);
+            await tempApp.delete();
+          } catch (resetErr) {
+            console.warn("No se pudo enviar email de restablecimiento:", resetErr.message);
+          }
         }
 
-        await actualizarUsuario(editando.uid, cambios);
         await registrarAccion({
           usuario: usuario.nombre,
           usuarioId: usuario.uid,
           accion: "Actualizar usuario interno",
-          detalle: `Actualizó a ${form.nombre} (${ROL_ETIQUETAS[form.rol]})` + (updatePasswordSuccess ? " y su contraseña" : ""),
+          detalle: `Actualizó a ${form.nombre} (${ROL_ETIQUETAS[form.rol]})` + (form.password ? " y envió restablecimiento de contraseña" : ""),
         });
       } else {
         if (!form.password || form.password.trim().length < 6) {
@@ -145,7 +127,7 @@ function GestionUsuarios({ usuarios, onRecargar }) {
           telefono: form.telefono,
           cargo: form.cargo,
           rol: form.rol,
-          contraseña: form.password.trim(),
+          activo: true,
           permisos: PERMISOS_POR_ROL[form.rol] || [],
           creadoPor: usuario.nombre,
         });
@@ -195,14 +177,14 @@ function GestionUsuarios({ usuarios, onRecargar }) {
   };
 
   const eliminar = async (u) => {
-    if (!window.confirm(`Eliminar usuario "${u.nombre}"? Esta accion no se puede deshacer.`)) return;
+    if (!window.confirm(`Desactivar usuario "${u.nombre}"? Podrás reactivarlo desde la lista.`)) return;
     try {
-      await eliminarUsuarioService(u.uid || u.id);
+      await actualizarUsuario(u.uid || u.id, { activo: false, estado: "desactivado" });
       await registrarAccion({
         usuario: usuario.nombre,
         usuarioId: usuario.uid,
-        accion: "Eliminar usuario",
-        detalle: `Elimino usuario ${u.nombre} (${u.correo})`,
+        accion: "Desactivar usuario",
+        detalle: `Desactivó usuario ${u.nombre} (${u.correo})`,
       });
       onRecargar();
     } catch (err) {

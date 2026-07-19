@@ -227,10 +227,19 @@ function Login({ onVolver, modoInicial }) {
         setCargando(false);
         return;
       }
-      setPasoRecuperacion("nueva-contrasena");
+      setPasoRecuperacion("enviando-reset");
       setNuevaContrasena("");
       setConfirmarNuevaContrasena("");
       setErrorRecuperacion("");
+
+      try {
+        await cambiarContrasena(correoRecuperacion);
+        setPasoRecuperacion("exito-email");
+      } catch (err) {
+        console.error("[DEBUG] Error enviando enlace de restablecimiento:", err.message);
+        setErrorRecuperacion(err.message || "No se pudo enviar el enlace. Intenta de nuevo.");
+        setPasoRecuperacion("nueva-contrasena");
+      }
     } catch (err) {
       setErrorRecuperacion("Error al verificar el código.");
     } finally {
@@ -242,30 +251,12 @@ function Login({ onVolver, modoInicial }) {
     e.preventDefault();
     setErrorRecuperacion("");
 
-    if (!nuevaContrasena || nuevaContrasena.length < 8) {
-      setErrorRecuperacion("La contraseña debe tener al menos 8 caracteres.");
-      return;
-    }
-    if (!/[a-zA-Z]/.test(nuevaContrasena)) {
-      setErrorRecuperacion("La contraseña debe contener al menos una letra.");
-      return;
-    }
-    if (!/\d/.test(nuevaContrasena)) {
-      setErrorRecuperacion("La contraseña debe contener al menos un número.");
-      return;
-    }
-    if (nuevaContrasena !== confirmarNuevaContrasena) {
-      setErrorRecuperacion("Las contraseñas no coinciden.");
-      return;
-    }
-
-    setCargando(true);
     try {
-      await cambiarContrasena(correoRecuperacion, codigoRecuperacion, nuevaContrasena);
-      setPasoRecuperacion("exito");
+      await cambiarContrasena(correoRecuperacion);
+      setPasoRecuperacion("exito-email");
     } catch (err) {
-      console.error("[DEBUG] Error cambiando contraseña:", err.message);
-      setErrorRecuperacion(err.message || "No se pudo cambiar la contraseña. Intenta de nuevo.");
+      console.error("[DEBUG] Error enviando enlace de restablecimiento:", err.message);
+      setErrorRecuperacion(err.message || "No se pudo enviar el enlace. Intenta de nuevo.");
     } finally {
       setCargando(false);
     }
@@ -340,7 +331,18 @@ function Login({ onVolver, modoInicial }) {
                 &#8592; Volver al inicio de sesión
               </button>
 
-              {pasoRecuperacion === "exito" ? (
+              {pasoRecuperacion === "exito-email" ? (
+                <div style={{ textAlign: "center", padding: "20px 0" }}>
+                  <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#f0fdf4", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "36px", border: "2px solid #bbf7d0" }}>&#9989;</div>
+                  <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Correo enviado</h2>
+                  <p style={{ margin: "0 0 24px", color: "#475569", fontSize: "14px", lineHeight: "1.6" }}>
+                    Se ha enviado un enlace de restablecimiento a <strong>{correoRecuperacion}</strong>. Revisa tu bandeja de entrada y sigue las instrucciones para crear tu nueva contraseña.
+                  </p>
+                  <button type="button" onClick={() => { setMostrarRecuperar(false); setPasoRecuperacion("correo"); setModo("login"); setError(""); }} className="primary-btn" style={{ padding: "14px 32px", fontSize: "15px" }}>
+                    Volver al inicio de sesión
+                  </button>
+                </div>
+              ) : pasoRecuperacion === "exito" ? (
                 <div style={{ textAlign: "center", padding: "20px 0" }}>
                   <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#f0fdf4", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "36px", border: "2px solid #bbf7d0" }}>&#9989;</div>
                   <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Contraseña actualizada</h2>
@@ -350,6 +352,11 @@ function Login({ onVolver, modoInicial }) {
                   <button type="button" onClick={() => { setMostrarRecuperar(false); setPasoRecuperacion("correo"); setModo("login"); setError(""); }} className="primary-btn" style={{ padding: "14px 32px", fontSize: "15px" }}>
                     Iniciar sesión
                   </button>
+                </div>
+              ) : pasoRecuperacion === "enviando-reset" ? (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <div className="spinner" style={{ margin: "0 auto 16px" }} />
+                  <p style={{ color: "#64748b", fontSize: "14px" }}>Enviando enlace de restablecimiento...</p>
                 </div>
               ) : pasoRecuperacion === "nueva-contrasena" ? (
                 <div>

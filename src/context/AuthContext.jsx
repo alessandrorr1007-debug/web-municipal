@@ -16,11 +16,9 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       console.error("Error signing out:", e);
     }
-    // Clear any persisted storage
     localStorage.clear();
     sessionStorage.clear();
     setUsuario(null);
-    // Redirect to login page
     window.location.href = "/";
   };
 
@@ -35,6 +33,12 @@ export const AuthProvider = ({ children }) => {
 
           if (snap.exists()) {
             const data = snap.data();
+
+            if (data.activo === false || data.estado === "desactivado") {
+              handleUserRemoval();
+              return;
+            }
+
             setUsuario({
               uid: user.uid,
               correo: user.email,
@@ -42,18 +46,24 @@ export const AuthProvider = ({ children }) => {
               rol: data.rol || "",
               telefono: data.telefono || "",
               dni: data.dni || "",
+              activo: data.activo !== false,
               telefono_verificado: data.telefono_verificado || false,
               sms_habilitado: data.sms_habilitado || false,
               recibir_correos: data.recibir_correos !== false,
               fecha_verificacion: data.fecha_verificacion || null,
             });
-            // Listen for real‑time changes on the user document
+
             unsubscribeUserDoc = onSnapshot(ref, (docSnap) => {
               if (!docSnap.exists()) {
-                // User document removed -> clean up and sign out
                 handleUserRemoval();
               } else {
                 const updatedData = docSnap.data();
+
+                if (updatedData.activo === false || updatedData.estado === "desactivado") {
+                  handleUserRemoval();
+                  return;
+                }
+
                 setUsuario({
                   uid: user.uid,
                   correo: user.email,
@@ -61,6 +71,7 @@ export const AuthProvider = ({ children }) => {
                   rol: updatedData.rol || "",
                   telefono: updatedData.telefono || "",
                   dni: updatedData.dni || "",
+                  activo: updatedData.activo !== false,
                   telefono_verificado: updatedData.telefono_verificado || false,
                   sms_habilitado: updatedData.sms_habilitado || false,
                   recibir_correos: updatedData.recibir_correos !== false,
@@ -69,11 +80,9 @@ export const AuthProvider = ({ children }) => {
               }
             });
           } else {
-            // No document found – treat as non‑existent user
             handleUserRemoval();
           }
         } else {
-          // No authenticated user
           setUsuario(null);
         }
       } catch (error) {
@@ -84,7 +93,6 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    // Cleanup on unmount or when auth changes
     return () => {
       unsubscribeAuth();
       if (unsubscribeUserDoc) unsubscribeUserDoc();

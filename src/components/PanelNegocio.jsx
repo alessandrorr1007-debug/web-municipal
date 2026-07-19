@@ -117,6 +117,7 @@ function PanelNegocio({ seccion }) {
   const [nuevoCorreo, setNuevoCorreo] = useState("");
   const [codigoCorreoActual, setCodigoCorreoActual] = useState("");
   const [codigoCorreoNuevo, setCodigoCorreoNuevo] = useState("");
+  const [contrasenaActual, setContrasenaActual] = useState("");
   const [cargandoCambioCorreo, setCargandoCambioCorreo] = useState(false);
   const [errorCambioCorreo, setErrorCambioCorreo] = useState("");
   const [successCambioCorreo, setSuccessCambioCorreo] = useState("");
@@ -184,12 +185,16 @@ function PanelNegocio({ seccion }) {
       setErrorCambioCorreo("Ingresa el código de 6 dígitos.");
       return;
     }
+    if (!contrasenaActual || contrasenaActual.length < 6) {
+      setErrorCambioCorreo("Ingresa tu contraseña actual (mínimo 6 caracteres).");
+      return;
+    }
     setErrorCambioCorreo("");
     setSuccessCambioCorreo("");
     setCargandoCambioCorreo(true);
     try {
       await verificarOtpCorreoNuevo(usuario.correo, nuevoCorreo.trim().toLowerCase(), codigoCorreoNuevo);
-      await actualizarCorreoDeUsuario(usuario.uid, nuevoCorreo.trim().toLowerCase());
+      await actualizarCorreoDeUsuario(usuario.uid, nuevoCorreo.trim().toLowerCase(), contrasenaActual);
       
       setSuccessCambioCorreo("Correo electrónico actualizado correctamente.");
       setTimeout(() => {
@@ -198,11 +203,12 @@ function PanelNegocio({ seccion }) {
         setNuevoCorreo("");
         setCodigoCorreoActual("");
         setCodigoCorreoNuevo("");
+        setContrasenaActual("");
         setErrorCambioCorreo("");
         setSuccessCambioCorreo("");
       }, 3000);
     } catch (err) {
-      setErrorCambioCorreo(err.message || "Código incorrecto o inválido.");
+      setErrorCambioCorreo(err.message || "Código incorrecto o contraseña inválida.");
     } finally {
       setCargandoCambioCorreo(false);
     }
@@ -2805,7 +2811,7 @@ function PanelNegocio({ seccion }) {
                 </form>
               )}
 
-              {/* PASO 3: Ingresar código del nuevo correo */}
+              {/* PASO 3: Ingresar código del nuevo correo + contraseña */}
               {pasoCambioCorreo === 3 && (
                 <form onSubmit={manejarVerificarOtpNuevo} style={{ display: "grid", gap: "14px" }}>
                   <p style={{ margin: 0, fontSize: "13.5px", color: "#475569", lineHeight: 1.4 }}>
@@ -2821,6 +2827,17 @@ function PanelNegocio({ seccion }) {
                       value={codigoCorreoNuevo}
                       onChange={(e) => setCodigoCorreoNuevo(e.target.value.replace(/\D/g, "").slice(0, 6))}
                       style={{ width: "100%", padding: "10px", textAlign: "center", fontSize: "18px", letterSpacing: "2px", fontWeight: "bold", border: "1px solid #cbd5e1", borderRadius: "8px", boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>Contraseña actual (para confirmar identidad)</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Tu contraseña actual"
+                      value={contrasenaActual}
+                      onChange={(e) => setContrasenaActual(e.target.value)}
+                      style={{ width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: "8px", fontSize: "14px", boxSizing: "border-box" }}
                     />
                   </div>
                   <button type="submit" disabled={cargandoCambioCorreo} style={{ padding: "10px", background: "#16a34a", color: "white", border: "none", borderRadius: "8px", fontWeight: "600", cursor: "pointer" }}>

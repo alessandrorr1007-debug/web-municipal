@@ -1,4 +1,4 @@
-import { auth, db } from "../firebase";
+import { auth, db, authHeaders } from "../firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -53,10 +53,10 @@ export const registrarUsuario = async (datos) => {
     apellido_paterno: datos.apellido_paterno || "",
     apellido_materno: datos.apellido_materno || "",
     nombre_completo: datos.nombre_completo || datos.nombre || "",
-    contraseña: datos.password || "",
     telefono_verificado: false,
     sms_habilitado: false,
     recibir_correos: true,
+    activo: true,
   };
 
   await setDoc(doc(db, "usuarios", usuario.uid), nuevoUsuario);
@@ -231,34 +231,17 @@ export const enviarRecuperacion = async (correo) => {
   return codigo;
 };
 
-export const cambiarContrasena = async (correo, codigo, nuevaContrasena) => {
-  const url = `${API_URL}/api/cambiar-contrasena`;
-  console.log("[DEBUG] Cambiar contraseña - Llamando a:", url);
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ correo, codigo, nuevaContrasena }),
-  });
-
-  const contentType = response.headers.get("content-type");
-  if (!contentType || !contentType.includes("application/json")) {
-    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
-  }
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || `Error ${response.status}`);
-  }
-
-  return data;
+export const cambiarContrasena = async (correo) => {
+  await sendPasswordResetEmail(auth, correo);
+  return { mensaje: "Se ha enviado un enlace para restablecer tu contraseña a tu correo electrónico." };
 };
 
 export const enviarOtpTelefono = async (telefono) => {
   const url = `${API_URL}/api/sms/enviar-otp`;
+  const headers = await authHeaders();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ telefono }),
   });
 
@@ -276,9 +259,10 @@ export const enviarOtpTelefono = async (telefono) => {
 
 export const verificarOtpTelefono = async (telefono, codigo) => {
   const url = `${API_URL}/api/sms/verificar-otp`;
+  const headers = await authHeaders();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ telefono, codigo }),
   });
 
@@ -313,9 +297,10 @@ export const actualizarPreferenciasNotificaciones = async (uid, recibir_correos,
 
 export const enviarOtpCorreoActual = async (correoActual) => {
   const url = `${API_URL}/api/email-change/enviar-codigo-actual`;
+  const headers = await authHeaders();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ correoActual }),
   });
 
@@ -333,9 +318,10 @@ export const enviarOtpCorreoActual = async (correoActual) => {
 
 export const verificarOtpCorreoActual = async (correoActual, codigo) => {
   const url = `${API_URL}/api/email-change/verificar-codigo-actual`;
+  const headers = await authHeaders();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ correoActual, codigo }),
   });
 
@@ -359,9 +345,10 @@ export const enviarOtpCorreoNuevo = async (correoActual, correoNuevo) => {
   }
 
   const url = `${API_URL}/api/email-change/enviar-codigo-nuevo`;
+  const headers = await authHeaders();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ correoActual, correoNuevo }),
   });
 
@@ -379,9 +366,10 @@ export const enviarOtpCorreoNuevo = async (correoActual, correoNuevo) => {
 
 export const verificarOtpCorreoNuevo = async (correoActual, correoNuevo, codigo) => {
   const url = `${API_URL}/api/email-change/verificar-codigo-nuevo`;
+  const headers = await authHeaders();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ correoActual, correoNuevo, codigo }),
   });
 
@@ -397,9 +385,13 @@ export const verificarOtpCorreoNuevo = async (correoActual, correoNuevo, codigo)
   return data;
 };
 
-export const actualizarCorreoDeUsuario = async (uid, correoNuevo) => {
+export const actualizarCorreoDeUsuario = async (uid, correoNuevo, contrasenaActual) => {
   const user = auth.currentUser;
   if (!user) throw new Error("No hay un usuario autenticado.");
+
+  if (!contrasenaActual) {
+    throw new Error("Debes ingresar tu contraseña actual para cambiar el correo.");
+  }
 
   const userRef = doc(db, "usuarios", uid);
   const userSnap = await getDoc(userRef);
@@ -407,12 +399,9 @@ export const actualizarCorreoDeUsuario = async (uid, correoNuevo) => {
     throw new Error("No se encontró el documento de usuario en la base de datos.");
   }
   const data = userSnap.data();
-  const contrasena = data.contraseña || data.contrasena || "";
-  
-  if (contrasena) {
-    const credential = EmailAuthProvider.credential(user.email, contrasena);
-    await reauthenticateWithCredential(user, credential);
-  }
+
+  const credential = EmailAuthProvider.credential(user.email, contrasenaActual);
+  await reauthenticateWithCredential(user, credential);
 
   await updateEmail(user, correoNuevo);
   await updateDoc(userRef, {

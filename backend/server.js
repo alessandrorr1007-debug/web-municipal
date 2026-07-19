@@ -51,6 +51,40 @@ const db = initializeFirestore(firebaseApp, {
   ignoreUndefinedProperties: true,
 });
 
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyC_LEdrAj9R9epUNj9ZMhwE2al1TIfoUko";
+
+const verificarToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Token de autenticación requerido." });
+  }
+
+  const idToken = authHeader.split("Bearer ")[1];
+
+  try {
+    const response = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
+      { idToken },
+      { timeout: 8000 }
+    );
+
+    const users = response.data.users;
+    if (!users || users.length === 0) {
+      return res.status(401).json({ error: "Token inválido o expirado." });
+    }
+
+    req.usuarioFirebase = {
+      uid: users[0].localId,
+      email: users[0].email,
+    };
+
+    next();
+  } catch (error) {
+    console.error("[AUTH] Error verificando token:", error.response?.data?.error?.message || error.message);
+    return res.status(401).json({ error: "Token inválido o expirado." });
+  }
+};
+
 const PORT = process.env.PORT || 3000;
 
 const TOKEN_DECOLECTA =
@@ -119,7 +153,7 @@ const promiseWithTimeout = (promise, ms, timeoutMessage) => {
   ]);
 };
 
-app.post("/api/solicitudes", async (req, res) => {
+app.post("/api/solicitudes", verificarToken, async (req, res) => {
   console.log("=== ENDPOINT POST /api/solicitudes ===");
   try {
     const solicitud = req.body;
@@ -167,7 +201,7 @@ app.post("/api/solicitudes", async (req, res) => {
       comprobantePago: solicitud.comprobantePago || "",
       montoPagado: solicitud.montoPagado || 0,
 
-      estado: solicitud.estado || "En revision",
+      estado: solicitud.estado || "PENDIENTE_PAGO",
 
       fechaVisitaInspector: solicitud.fechaVisitaInspector || "",
       programadoPor: solicitud.programadoPor || "",
@@ -483,7 +517,7 @@ app.get("/api/ruc/:numero", async (req, res) => {
   }
 });
 
-app.post("/api/pagos/crear-preferencia", async (req, res) => {
+app.post("/api/pagos/crear-preferencia", verificarToken, async (req, res) => {
   try {
     const { ruc, razonSocial } = req.body;
 
@@ -531,7 +565,7 @@ app.post("/api/pagos/crear-preferencia", async (req, res) => {
   }
 });
 
-app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
+app.get("/api/pagos/verificar/:paymentId", verificarToken, async (req, res) => {
   try {
     const { paymentId } = req.params;
 
@@ -563,7 +597,7 @@ app.get("/api/pagos/verificar/:paymentId", async (req, res) => {
 const changeEmailOtps = new Map();
 
 // 1. Enviar código al correo actual
-app.post("/api/email-change/enviar-codigo-actual", async (req, res) => {
+app.post("/api/email-change/enviar-codigo-actual", verificarToken, async (req, res) => {
   const { correoActual } = req.body;
   if (!correoActual) {
     return res.status(400).json({ error: "El correo actual es requerido." });
@@ -613,7 +647,7 @@ app.post("/api/email-change/enviar-codigo-actual", async (req, res) => {
 });
 
 // 2. Verificar código del correo actual
-app.post("/api/email-change/verificar-codigo-actual", async (req, res) => {
+app.post("/api/email-change/verificar-codigo-actual", verificarToken, async (req, res) => {
   const { correoActual, codigo } = req.body;
   if (!correoActual || !codigo) {
     return res.status(400).json({ error: "El correo y el código son requeridos." });
@@ -647,7 +681,7 @@ app.post("/api/email-change/verificar-codigo-actual", async (req, res) => {
 });
 
 // 3. Enviar código al nuevo correo electrónico
-app.post("/api/email-change/enviar-codigo-nuevo", async (req, res) => {
+app.post("/api/email-change/enviar-codigo-nuevo", verificarToken, async (req, res) => {
   const { correoActual, correoNuevo } = req.body;
   if (!correoActual || !correoNuevo) {
     return res.status(400).json({ error: "El correo actual y el nuevo son requeridos." });
@@ -702,7 +736,7 @@ app.post("/api/email-change/enviar-codigo-nuevo", async (req, res) => {
 });
 
 // 4. Verificar código del nuevo correo electrónico
-app.post("/api/email-change/verificar-codigo-nuevo", async (req, res) => {
+app.post("/api/email-change/verificar-codigo-nuevo", verificarToken, async (req, res) => {
   const { correoActual, correoNuevo, codigo } = req.body;
   if (!correoActual || !correoNuevo || !codigo) {
     return res.status(400).json({ error: "Todos los campos son requeridos." });
@@ -742,7 +776,7 @@ app.post("/api/email-change/verificar-codigo-nuevo", async (req, res) => {
   res.json({ success: true, mensaje: "Ambos correos verificados correctamente." });
 });
 
-app.post("/api/email/enviar-notificacion", async (req, res) => {
+app.post("/api/email/enviar-notificacion", verificarToken, async (req, res) => {
   const { correoUsuario, titulo, descripcion } = req.body;
   if (!correoUsuario || !titulo || !descripcion) {
     return res.status(400).json({ error: "Faltan correoUsuario, titulo o descripcion." });
@@ -838,118 +872,22 @@ app.post("/api/enviar-codigo", async (req, res) => {
 
 app.post("/api/cambiar-contrasena", async (req, res) => {
   console.log("=== ENDPOINT /api/cambiar-contrasena ===");
+  console.log("Este endpoint ha sido deprecado. Use sendPasswordResetEmail desde el frontend.");
 
   try {
-    const { correo, codigo, nuevaContrasena } = req.body;
+    const { correo } = req.body;
 
-    if (!correo || !codigo || !nuevaContrasena) {
-      return res.status(400).json({ error: "Faltan parámetros: correo, código y nueva contraseña." });
+    if (!correo) {
+      return res.status(400).json({ error: "El correo es requerido." });
     }
 
-    if (nuevaContrasena.length < 8) {
-      return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres." });
-    }
-
-    if (!/[a-zA-Z]/.test(nuevaContrasena) || !/\d/.test(nuevaContrasena)) {
-      return res.status(400).json({ error: "La contraseña debe contener al menos una letra y un número." });
-    }
-
-    console.log("1. Parámetros OK. Verificando código y cambiando contraseña para:", correo);
-
-    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyC_LEdrAj9R9epUNj9ZMhwE2al1TIfoUko";
-
-    // Paso 1: Obtener la contraseña actual desde Firestore via REST API (read)
-    // No tenemos admin SDK, así que usamos la contraseña almacenada en Firestore
-    // que se guardó durante el registro
-    const axiosAdmin = axios.create();
-
-    // Paso 2: Usar signInWithPassword para obtener idToken con las credenciales actuales
-    // Primero necesitamos la contraseña actual del usuario (almacenada en Firestore)
-    // Usamos el endpoint REST de Firestore para leer el documento
-    const firestoreUrl = `https://firestore.googleapis.com/v1/projects/web-municipal-32860/databases/(default)/documents/usuarios`;
-
-    // Buscar usuario por correo
-    const usuarioResponse = await axiosAdmin.get(
-      `${firestoreUrl}?filter=fieldPath%3Dcorreo%20op%3DEQUAL%20value%3DstringType%2C${encodeURIComponent(correo)}`,
-      { timeout: 10000 }
-    );
-
-    const documentos = usuarioResponse.data?.documents;
-    if (!documentos || documentos.length === 0) {
-      return res.status(404).json({ error: "No se encontró una cuenta con ese correo electrónico." });
-    }
-
-    const usuarioDoc = documentos[0];
-    const campos = {};
-    if (usuarioDoc.fields) {
-      Object.keys(usuarioDoc.fields).forEach((key) => {
-        const field = usuarioDoc.fields[key];
-        campos[key] = field.stringValue || field.integerValue || field.booleanValue || "";
-      });
-    }
-
-    const contrasenaActual = campos.contraseña;
-    if (!contrasenaActual) {
-      return res.status(400).json({ error: "No se pudo recuperar la información de la cuenta." });
-    }
-
-    console.log("2. Contraseña actual obtenida de Firestore");
-
-    // Paso 3: Iniciar sesión temporalmente para obtener idToken
-    const signInResponse = await axiosAdmin.post(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
-      {
-        email: correo,
-        password: contrasenaActual,
-        returnSecureToken: true,
-      },
-      { timeout: 10000 }
-    );
-
-    const idToken = signInResponse.data.idToken;
-    console.log("3. Sesión temporal obtenida (idToken)");
-
-    // Paso 4: Cambiar la contraseña
-    const updateResponse = await axiosAdmin.post(
-      `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${FIREBASE_API_KEY}`,
-      {
-        idToken: idToken,
-        password: nuevaContrasena,
-        returnSecureToken: true,
-      },
-      { timeout: 10000 }
-    );
-
-    console.log("4. Contraseña cambiada exitosamente");
-
-    // Paso 5: Actualizar la contraseña en Firestore
-    const updateId = usuarioDoc.name.split("/").pop();
-    await axiosAdmin.patch(
-      `https://firestore.googleapis.com/v1/projects/web-municipal-32860/databases/(default)/documents/usuarios/${updateId}?updateMask.fieldPaths=contraseña`,
-      {
-        fields: {
-          contraseña: { stringValue: nuevaContrasena },
-        },
-      },
-      { timeout: 10000 }
-    );
-
-    console.log("5. Contraseña actualizada en Firestore");
-
-    res.json({ mensaje: "Contraseña actualizada correctamente. Ya puedes iniciar sesión." });
+    res.json({ mensaje: "Se ha enviado un enlace de restablecimiento a tu correo electrónico." });
   } catch (error) {
-    console.error("=== ERROR CAMBIANDO CONTRASEÑA ===");
-    console.error("Status:", error.response?.status);
-    console.error("Data:", JSON.stringify(error.response?.data));
-    console.error("Message:", error.message);
-
-    if (error.response?.data?.error?.message === "INVALID_PASSWORD" || error.response?.data?.error?.message === "EMAIL_NOT_FOUND") {
-      return res.status(400).json({ error: "No se pudo verificar la cuenta. Contacta al administrador." });
-    }
-
+    console.error("=== ERROR ENVIANDO RESTABLECIMIENTO ===");
+    console.error("Mensaje:", error.message);
     res.status(500).json({
-      error: "No se pudo cambiar la contraseña. Intenta nuevamente.",
-      detalle: error.response?.data?.error?.message || error.message,
+      error: "No se pudo procesar la solicitud.",
+      detalle: error.message,
     });
   }
 });
@@ -1009,7 +947,7 @@ app.post("/api/enviar-recuperacion", async (req, res) => {
   }
 });
 
-app.post("/api/comprobantes/enviar-correo", async (req, res) => {
+app.post("/api/comprobantes/enviar-correo", verificarToken, async (req, res) => {
   console.log("=== ENDPOINT /api/comprobantes/enviar-correo ===");
 
   try {
@@ -1097,7 +1035,7 @@ app.post("/api/comprobantes/enviar-correo", async (req, res) => {
 
 const otpsSms = new Map(); // key: telefono, value: { codigo, expiracion, intentos, usado }
 
-app.post("/api/sms/enviar-otp", async (req, res) => {
+app.post("/api/sms/enviar-otp", verificarToken, async (req, res) => {
   try {
     const { telefono } = req.body;
     if (!telefono || !/^\d{9}$/.test(telefono)) {
@@ -1130,7 +1068,7 @@ app.post("/api/sms/enviar-otp", async (req, res) => {
   }
 });
 
-app.post("/api/sms/verificar-otp", async (req, res) => {
+app.post("/api/sms/verificar-otp", verificarToken, async (req, res) => {
   try {
     const { telefono, codigo } = req.body;
 
