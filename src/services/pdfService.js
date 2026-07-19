@@ -46,3 +46,29 @@ export const subirArchivoACloudinary = async (file) => {
 };
 
 export const convertirPdfABase64 = subirArchivoACloudinary;
+
+export const abrirPdf = async (url) => {
+  if (!url) {
+    alert("El documento no está disponible.");
+    return;
+  }
+
+  // Validar URL básica
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    alert("El documento no está disponible o la URL es inválida.");
+    return;
+  }
+
+  try {
+    const response = await fetch(url, { method: "HEAD" });
+    if (response.ok) {
+      window.open(url, "_blank");
+    } else {
+      alert("El documento no está disponible.");
+    }
+  } catch (error) {
+    console.error("Error al validar el archivo PDF:", error);
+    // Si falla por CORS o red, fallback a apertura directa
+    window.open(url, "_blank");
+  }
+};

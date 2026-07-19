@@ -8,7 +8,7 @@ import { dirname, join } from "path";
 import fs from "fs";
 import { smsProvider } from "./smsProvider.js";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { initializeFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 
 import {
@@ -38,7 +38,10 @@ const firebaseConfig = {
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp);
+const db = initializeFirestore(firebaseApp, {
+  experimentalForceLongPolling: true,
+  ignoreUndefinedProperties: true,
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -92,6 +95,20 @@ if (transporter) {
 
 const generarIdExpediente = () => {
   return "EXP-" + Date.now().toString().slice(-6);
+};
+
+const promiseWithTimeout = (promise, ms, timeoutMessage) => {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+  });
+  return Promise.race([
+    promise.then((res) => {
+      clearTimeout(timeoutId);
+      return res;
+    }),
+    timeoutPromise,
+  ]);
 };
 
 app.post("/api/solicitudes", async (req, res) => {
@@ -176,23 +193,31 @@ app.post("/api/solicitudes", async (req, res) => {
       notificaciones: solicitud.notificaciones || [],
     };
 
-    // Save to Firestore
-    await setDoc(doc(db, "solicitudes", id), nuevaSolicitud);
+    // Save to Firestore with timeout
+    await promiseWithTimeout(
+      setDoc(doc(db, "solicitudes", id), nuevaSolicitud),
+      12000,
+      "Tiempo de espera agotado al guardar la solicitud en Firestore."
+    );
 
     // Save or update business local relationship in negocios collection
     if (solicitud.ruc && solicitud.uidUsuario) {
       try {
-        await setDoc(doc(db, "negocios", solicitud.ruc), {
-          ruc: solicitud.ruc,
-          uidUsuario: solicitud.uidUsuario,
-          razonSocial: solicitud.razonSocial || "",
-          nombreNegocio: solicitud.nombreNegocio || "",
-          direccion: solicitud.direccion || "",
-          giro: solicitud.giro || "",
-          estadoSunat: solicitud.estadoSunat || "",
-          condicionSunat: solicitud.condicionSunat || "",
-          actualizadoEn: serverTimestamp(),
-        }, { merge: true });
+        await promiseWithTimeout(
+          setDoc(doc(db, "negocios", solicitud.ruc), {
+            ruc: solicitud.ruc,
+            uidUsuario: solicitud.uidUsuario,
+            razonSocial: solicitud.razonSocial || "",
+            nombreNegocio: solicitud.nombreNegocio || "",
+            direccion: solicitud.direccion || "",
+            giro: solicitud.giro || "",
+            estadoSunat: solicitud.estadoSunat || "",
+            condicionSunat: solicitud.condicionSunat || "",
+            actualizadoEn: serverTimestamp(),
+          }, { merge: true }),
+          8000,
+          "Tiempo de espera agotado al guardar el negocio en Firestore."
+        );
         console.log("[DEBUG Backend] Negocio guardado/vinculado:", solicitud.ruc);
       } catch (e) {
         console.error("[DEBUG Backend] Error vinculando local de negocio:", e.message);
@@ -210,7 +235,9 @@ app.post("/api/solicitudes", async (req, res) => {
     console.error("=== ERROR GUARDANDO SOLICITUD EN BACKEND ===");
     console.error("Mensaje:", error.message);
     return res.status(500).json({
-      error: "Error al guardar la solicitud en la base de datos.",
+      success: false,
+      message: "Error al guardar la solicitud en la base de datos.",
+      error: error.message || "Error desconocido",
       detalle: error.message,
     });
   }

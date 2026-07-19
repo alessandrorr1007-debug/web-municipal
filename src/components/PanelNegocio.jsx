@@ -7,13 +7,16 @@ import {
   obtenerSolicitudes,
   obtenerNegociosPorUsuario,
 } from "../services/solicitudService";
-import { convertirPdfABase64 } from "../services/pdfService";
 import {
   generarComprobante,
   obtenerComprobantesPorUsuario,
   descargarComprobante,
   enviarComprobantePorCorreo,
+  imprimirComprobante,
+  generarPdfComprobante,
 } from "../services/comprobanteService";
+import { abrirPdf } from "../services/pdfService";
+import { crearNotificacion } from "../services/notificacionService";
 import { useAuth } from "../context/AuthContext";
 import {
   enviarOtpTelefono,
@@ -43,6 +46,65 @@ function PanelNegocio({ seccion }) {
   const [successSms, setSuccessSms] = useState("");
   const [tiempoRestanteSms, setTiempoRestanteSms] = useState(0);
   const [modalComprobante, setModalComprobante] = useState(null);
+  const [comprobantePdfUrl, setComprobantePdfUrl] = useState("");
+  const [notificaciones, setNotificaciones] = useState([]);
+  const [cargandoNotificaciones, setCargandoNotificaciones] = useState(false);
+
+  useEffect(() => {
+    if (!usuario) return;
+    setCargandoNotificaciones(true);
+    const q = query(
+      collection(db, "notificaciones"),
+      where("uid_usuario", "==", usuario.uid)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }));
+      items.sort((a, b) => (b.fecha_hora || "").localeCompare(a.fecha_hora || ""));
+      setNotificaciones(items);
+      setCargandoNotificaciones(false);
+    }, (err) => {
+      console.error("Error loading notifications:", err);
+      setCargandoNotificaciones(false);
+    });
+    return () => unsubscribe();
+  }, [usuario]);
+
+  const abrirNotificacion = async (noti) => {
+    if (!noti.leida) {
+      try {
+        await updateDoc(doc(db, "notificaciones", noti.id_notificacion), { leida: true });
+      } catch (err) {
+        console.error("Error marking notification as read:", err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    let activeUrl = "";
+    if (modalComprobante) {
+      (async () => {
+        try {
+          const docPdf = await generarPdfComprobante(modalComprobante);
+          const blob = docPdf.output("blob");
+          const url = URL.createObjectURL(blob);
+          activeUrl = url;
+          setComprobantePdfUrl(url);
+        } catch (err) {
+          console.error("Error al generar vista previa del comprobante:", err);
+        }
+      })();
+    } else {
+      setComprobantePdfUrl("");
+    }
+    return () => {
+      if (activeUrl) {
+        URL.revokeObjectURL(activeUrl);
+      }
+    };
+  }, [modalComprobante]);
 
   // Email Change states
   const [modalCambiarCorreo, setModalCambiarCorreo] = useState(false);
@@ -219,33 +281,7 @@ function PanelNegocio({ seccion }) {
     }
   };
 
-  const descargarComprobanteDesdeUrl = async (comprobante) => {
-    const url = comprobante.url_pdf || comprobante.archivo_pdf_url;
-    if (!url) return;
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `${comprobante.tipo_comprobante === "boleta" ? "BOLETA" : "FACTURA"}_${comprobante.serie}_${comprobante.numero}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      window.open(url, "_blank");
-    }
-  };
-
-  const imprimirComprobante = (comprobante) => {
-    const url = comprobante.url_pdf || comprobante.archivo_pdf_url;
-    if (!url) return;
-    const printWindow = window.open(url, "_blank");
-    if (printWindow) {
-      printWindow.focus();
-    }
-  };
+  // Las funciones locales de descarga e impresión han sido reemplazadas por las utilidades importadas del servicio
 
   const [archivos, setArchivos] = useState([]);
   const [buscando, setBuscando] = useState(false);
@@ -562,16 +598,29 @@ function PanelNegocio({ seccion }) {
     return lista;
   };
 
-  const manejarArchivos = (e) => {
-    const seleccionados = validarPdfs(e.target.files);
-    setArchivos((prev) => [...prev, ...seleccionados]);
-  };
+  const manejarArchivosAdicionales = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
-  const manejarDrop = (e) => {
-    e.preventDefault();
+    if (archivos.length + files.length > 2) {
+      alert("Ya alcanzó el límite de documentos adicionales.");
+      return;
+    }
 
-    const seleccionados = validarPdfs(e.dataTransfer.files);
-    setArchivos((prev) => [...prev, ...seleccionados]);
+    const noPdf = files.find((file) => file.type !== "application/pdf");
+    if (noPdf) {
+      alert("Solo se permiten archivos PDF.");
+      return;
+    }
+
+    const pesoExcedido = files.find((file) => file.size > 5 * 1024 * 1024);
+    if (pesoExcedido) {
+      alert(`El archivo ${pesoExcedido.name} supera el tamaño máximo de 5MB.`);
+      return;
+    }
+
+    setArchivos((prev) => [...prev, ...files]);
+    e.target.value = "";
   };
 
   const quitarArchivo = (index) => {
@@ -680,10 +729,7 @@ function PanelNegocio({ seccion }) {
         timeoutId = setTimeout(() => reject(new Error(mensajeError)), ms);
       });
       return Promise.race([
-        promesa.then((res) => {
-          clearTimeout(timeoutId);
-          return res;
-        }),
+        promesa.finally(() => clearTimeout(timeoutId)),
         promesaTimeout,
       ]);
     };
@@ -754,37 +800,57 @@ function PanelNegocio({ seccion }) {
       console.log("[SOLICITUD] Guardada:", nueva.id);
       setExpediente(nueva.id);
 
+      // Crear notificación de registro en la base de datos
+      await crearNotificacion(usuario?.uid, {
+        titulo: "Solicitud registrada",
+        descripcion: `Su solicitud EXP-${nueva.id} de Licencia de Funcionamiento se ha registrado correctamente.`,
+        icono: "📝",
+      });
+
       let comp = null;
       if (estadoPago === "Confirmado") {
         const tipoFinal = tipoComprobante || (form.ruc.startsWith("20") ? "factura" : "boleta");
-        comp = await conTimeout(
-          generarComprobante({
-            uidUsuario: usuario?.uid || "",
-            correoUsuario: usuario?.correo || "",
-            idSolicitud: nueva.id,
-            tipo: tipoFinal,
-            dniCliente: dniSolicitante,
-            nombresCliente: nombresSolicitante,
-            apellidosCliente: apellidosSolicitante,
-            rucCliente: form.ruc,
-            razonSocial: form.razonSocial,
-            direccionCliente: form.direccion,
-            descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
-            monto: MONTO_TRAMITE,
-            metodoPago,
-            estadoPago: "Pagado",
-            codigoOperacion: (detallePago?.id || detallePago?.paymentId || `DEMO-${Date.now().toString().slice(-8)}`),
-          }),
-          15000,
-          "Tiempo de espera agotado al generar el comprobante de pago."
-        );
+        comp = await generarComprobante({
+          uidUsuario: usuario?.uid || "",
+          correoUsuario: usuario?.correo || "",
+          idSolicitud: nueva.id,
+          tipo: tipoFinal,
+          dniCliente: dniSolicitante,
+          nombresCliente: nombresSolicitante,
+          apellidosCliente: apellidosSolicitante,
+          rucCliente: form.ruc,
+          razonSocial: form.razonSocial,
+          direccionCliente: form.direccion,
+          descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
+          monto: MONTO_TRAMITE,
+          metodoPago,
+          estadoPago: "Pagado",
+          codigoOperacion: (detallePago?.id || detallePago?.paymentId || `DEMO-${Date.now().toString().slice(-8)}`),
+        }, (updatedComp) => {
+          console.log("[COMPROBANTE] Subida completa en segundo plano:", updatedComp.url_pdf);
+          setComprobanteGenerado({ ...updatedComp });
+        });
         console.log("[9] Frontend recibió respuesta");
         setComprobanteGenerado(comp);
         console.log("[COMPROBANTE] Generado:", comp.codigo_unico);
+
+        // Crear notificaciones de pago y comprobante en la base de datos
+        await crearNotificacion(usuario?.uid, {
+          titulo: "Pago confirmado",
+          descripcion: `Se ha confirmado el pago de S/ ${MONTO_TRAMITE.toFixed(2)} para la solicitud EXP-${nueva.id}.`,
+          icono: "💳",
+        });
+
+        await crearNotificacion(usuario?.uid, {
+          titulo: "Comprobante generado",
+          descripcion: `Se generó con éxito el comprobante ${comp.serie}-${comp.numero} de su pago.`,
+          icono: "📄",
+        });
       }
 
       setGuardando(false);
       console.log("[10] Loading finalizado");
+      alert("¡Solicitud guardada correctamente!");
       setPaso("confirmacion");
 
       if (comp) {
@@ -1130,7 +1196,7 @@ function PanelNegocio({ seccion }) {
                   {s.archivosPdf?.length > 0 && (
                     <div className="solicitud-card-actions">
                       {s.archivosPdf.map((pdf, index) => (
-                        <a key={index} href={pdf.archivoUrl} target="_blank" rel="noreferrer">PDF {index + 1}</a>
+                        <a key={index} href={pdf.archivoUrl} onClick={(e) => { e.preventDefault(); abrirPdf(pdf.archivoUrl); }} target="_blank" rel="noreferrer">PDF {index + 1}</a>
                       ))}
                     </div>
                   )}
@@ -1176,44 +1242,57 @@ function PanelNegocio({ seccion }) {
             </div>
           </div>
 
-          {(() => {
-            const todasLasNotis = [];
-            misSolicitudes.forEach((s) => {
-              if (s.notificaciones) {
-                s.notificaciones.forEach((n) => {
-                  todasLasNotis.push({ ...n, solicitudId: s.id, nombreNegocio: s.nombreNegocio, estado: s.estado });
-                });
-              }
-            });
-            todasLasNotis.sort((a, b) => b.fecha?.localeCompare(a.fecha) || 0);
-
-            if (todasLasNotis.length === 0) {
-              return (
-                <div className="empty-state">
-                  <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128276;</div>
-                  <h3>No tienes notificaciones</h3>
-                  <p>Cuando haya novedades en tus solicitudes, aparecerán aquí.</p>
-                </div>
-              );
-            }
-
-            return (
-              <div>
-                {todasLasNotis.map((n, i) => (
-                  <div key={i} style={{ padding: "16px", border: `1px solid ${n.leida ? "#e2e8f0" : "#bfdbfe"}`, borderRadius: "14px", marginBottom: "10px", background: n.leida ? "#f8fafc" : "#eff6ff" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <strong style={{ color: "#1f3b57", fontSize: "15px" }}>{n.titulo}</strong>
-                        <p style={{ margin: "4px 0 0", fontSize: "14px", color: "#475569" }}>{n.mensaje}</p>
-                        <small style={{ color: "#94a3b8" }}>{n.fecha} | Expediente: {n.solicitudId}</small>
+          {cargandoNotificaciones ? (
+            <div className="empty-state">
+              <div className="spinner" style={{ margin: "0 auto 10px" }} />
+              <h3>Cargando notificaciones...</h3>
+            </div>
+          ) : notificaciones.length === 0 ? (
+            <div className="empty-state empty-state-modern">
+              <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "linear-gradient(135deg, #dbeafe, #93c5fd)", display: "grid", placeItems: "center", margin: "0 auto 16px", fontSize: "36px" }}>&#128276;</div>
+              <h3>No tienes notificaciones</h3>
+              <p>Cuando haya novedades en tus solicitudes, aparecerán aquí.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: "10px" }}>
+              {notificaciones.map((n) => (
+                <div
+                  key={n.id}
+                  onClick={() => abrirNotificacion(n)}
+                  style={{
+                    padding: "16px",
+                    border: `1px solid ${n.leida ? "#e2e8f0" : "#3b82f6"}`,
+                    borderRadius: "12px",
+                    background: n.leida ? "#ffffff" : "#f0f9ff",
+                    cursor: n.leida ? "default" : "pointer",
+                    transition: "all 0.2s ease",
+                    boxShadow: n.leida ? "none" : "0 2px 8px rgba(59, 130, 246, 0.08)",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
+                    <span style={{ fontSize: "24px", flexShrink: 0 }}>{n.icono || "🔔"}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                        <strong style={{ color: "#0f172a", fontSize: "14.5px" }}>{n.titulo}</strong>
+                        <span style={{
+                          fontSize: "11px",
+                          fontWeight: "700",
+                          padding: "2px 8px",
+                          borderRadius: "999px",
+                          background: n.leida ? "#f1f5f9" : "#dbeafe",
+                          color: n.leida ? "#475569" : "#1e40af",
+                        }}>
+                          {n.leida ? "Leída" : "No leída"}
+                        </span>
                       </div>
-                      {!n.leida && <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#2563eb", flexShrink: 0, marginTop: "6px" }} />}
+                      <p style={{ margin: "4px 0 6px", fontSize: "13.5px", color: "#334155", lineHeight: 1.4 }}>{n.descripcion}</p>
+                      <small style={{ color: "#94a3b8" }}>{new Date(n.fecha_hora).toLocaleString("es-PE")}</small>
                     </div>
                   </div>
-                ))}
-              </div>
-            );
-          })()}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -1682,27 +1761,40 @@ function PanelNegocio({ seccion }) {
                       )}
 
                       {/* Documentos adicionales libres (opcional) */}
-                      <div style={{ marginTop: "18px" }}>
-                        <p style={{ fontWeight: "700", color: "#0f172a", fontSize: "14px", margin: "0 0 10px" }}>📎 Documentos adicionales (opcional)</p>
-                        <div className="drop-zone drop-zone-modern" onDrop={manejarDrop} onDragOver={(e) => e.preventDefault()}>
-                          <div className="empty-icon">📄</div>
-                          <p>Sube documentos adicionales si el trámite lo requiere</p>
-                          <span>Máx. 5 PDFs. Arrastra o selecciona archivos.</span>
-                          <label className="file-label">
-                            Elegir PDFs
-                            <input type="file" accept=".pdf" multiple onChange={manejarArchivos} hidden />
-                          </label>
-                          {archivos.length > 0 && (
-                            <div className="archivo-box">
-                              {archivos.map((file, index) => (
-                                <div key={index} className="archivo-item">
-                                  <p className="archivo-seleccionado">PDF {index + 1}: {file.name}</p>
-                                  <button type="button" className="btn-quitar" onClick={() => quitarArchivo(index)}>Quitar</button>
-                                </div>
-                              ))}
+                      <div style={{ marginTop: "18px", display: "grid", gap: "14px" }}>
+                        <div style={{ padding: "14px 16px", borderRadius: "10px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                            <div>
+                              <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>📎 Documentos adicionales (opcional)</p>
+                              <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>Adjunta documentos adicionales si son necesarios.</p>
                             </div>
-                          )}
+                            {archivos.length < 2 && (
+                              <label style={{ cursor: "pointer", padding: "6px 14px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
+                                Seleccionar PDF
+                                <input type="file" accept=".pdf" hidden onChange={manejarArchivosAdicionales} />
+                              </label>
+                            )}
+                          </div>
                         </div>
+
+                        {archivos.length > 0 && (
+                          <div style={{ display: "grid", gap: "10px" }}>
+                            {archivos.map((file, index) => (
+                              <div key={index} style={{ padding: "14px 16px", borderRadius: "10px", background: "#f0fdf4", border: "1px solid #86efac" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                                  <div>
+                                    <p style={{ margin: 0, fontWeight: "600", fontSize: "13px", color: "#0f172a" }}>Documento adicional {index + 1}</p>
+                                    <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>{file.name}</p>
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>✓ Seleccionado</span>
+                                    <button type="button" className="btn-quitar" onClick={() => quitarArchivo(index)}>Quitar</button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
@@ -1858,7 +1950,7 @@ function PanelNegocio({ seccion }) {
                           </p>
                           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                             {comprobanteGenerado.url_pdf && (
-                              <a href={comprobanteGenerado.url_pdf} target="_blank" rel="noreferrer"
+                              <a href={comprobanteGenerado.url_pdf} onClick={(e) => { e.preventDefault(); abrirPdf(comprobanteGenerado.url_pdf); }} target="_blank" rel="noreferrer"
                                 style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#1e3a8a", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: "600", textDecoration: "none" }}>
                                 &#128196; Ver comprobante
                               </a>
@@ -1996,15 +2088,14 @@ function PanelNegocio({ seccion }) {
                           {comp.estado}
                         </span>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "4px 16px" }}>
-                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Solicitud:</strong> {comp.id_solicitud}</p>
-                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Fecha:</strong> {comp.fecha_emision}</p>
-                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Método:</strong> {comp.metodo_pago}</p>
-                        {comp.ruc_cliente && <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>RUC:</strong> {comp.ruc_cliente}</p>}
-                        {comp.dni_cliente && <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>DNI:</strong> {comp.dni_cliente}</p>}
-                        {comp.tipo_comprobante === "factura" && comp.monto_igv > 0 && (
-                          <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>IGV:</strong> S/{Number(comp.monto_igv).toFixed(2)}</p>
-                        )}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "4px 16px" }}>
+                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Código Operación:</strong> {comp.codigo_operacion || "N/A"}</p>
+                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Código Solicitud:</strong> {comp.id_solicitud}</p>
+                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Tipo de Trámite:</strong> {comp.tipo_tramite || "Licencia de Funcionamiento"}</p>
+                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Fecha/Hora Pago:</strong> {comp.fecha_emision} {comp.hora_emision || ""}</p>
+                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Método de Pago:</strong> {comp.metodo_pago}</p>
+                        {comp.ruc_cliente && <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>RUC Contribuyente:</strong> {comp.ruc_cliente}</p>}
+                        {comp.dni_cliente && <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>DNI Contribuyente:</strong> {comp.dni_cliente}</p>}
                       </div>
                     </div>
                     <div style={{ textAlign: "right", minWidth: "140px" }}>
@@ -2018,13 +2109,13 @@ function PanelNegocio({ seccion }) {
                           style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
                           onClick={() => setModalComprobante(comp)}
                         >
-                          👁 Ver
+                          👁 Ver comprobante
                         </button>
                         <button
                           type="button"
                           className="btn-ok"
                           style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
-                          onClick={() => descargarComprobanteDesdeUrl(comp)}
+                          onClick={() => descargarComprobante(comp)}
                         >
                           📥 Descargar PDF
                         </button>
@@ -2131,63 +2222,13 @@ function PanelNegocio({ seccion }) {
                       <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>Número telefónico</span>
                       <span style={{ fontSize: "12px", color: "#64748b" }}>{usuario.telefono || "No registrado"}</span>
                     </div>
-                    {usuario.telefono_verificado ? (
-                      <span style={{ background: "#f0fdf4", color: "#166534", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600" }}>✓ Verificado</span>
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span style={{ background: "#fffbeb", color: "#92400e", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600" }}>⚠ No verificado</span>
-                        {usuario.telefono && (
-                          <button 
-                            type="button" 
-                            onClick={manejarEnviarOtpSms} 
-                            disabled={cargandoSms} 
-                            style={{ padding: "6px 12px", fontSize: "12px", background: "#2563eb", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}
-                          >
-                            {cargandoSms ? "Enviando..." : "Verificar número"}
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ background: "#f1f5f9", color: "#475569", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600" }}>En desarrollo</span>
+                    </div>
                   </div>
-
-                  {/* Formulario de Código OTP */}
-                  {pasoVerificarTelefono && (
-                    <form onSubmit={manejarVerificarOtpSms} style={{ marginTop: "12px", padding: "12px", background: "white", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
-                      <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>
-                        Ingrese el código recibido por SMS (OTP de 6 dígitos)
-                      </label>
-                      <div style={{ display: "flex", gap: "10px" }}>
-                        <input
-                          type="text"
-                          maxLength="6"
-                          placeholder="Ej: 123456"
-                          value={codigoSms}
-                          onChange={(e) => setCodigoSms(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                          style={{ width: "120px", padding: "8px", textAlign: "center", fontSize: "16px", letterSpacing: "2px", fontWeight: "bold", border: "1px solid #cbd5e1", borderRadius: "6px" }}
-                          required
-                        />
-                        <button type="submit" disabled={cargandoSms} style={{ padding: "8px 16px", background: "#16a34a", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}>
-                          {cargandoSms ? "Verificando..." : "Verificar"}
-                        </button>
-                      </div>
-                      <div style={{ marginTop: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <button 
-                          type="button" 
-                          onClick={manejarEnviarOtpSms} 
-                          disabled={tiempoRestanteSms > 0 || cargandoSms} 
-                          style={{ background: "none", border: "none", color: tiempoRestanteSms > 0 ? "#94a3b8" : "#2563eb", fontSize: "12px", cursor: tiempoRestanteSms > 0 ? "default" : "pointer", fontWeight: "600" }}
-                        >
-                          Reenviar código
-                        </button>
-                        {tiempoRestanteSms > 0 && (
-                          <span style={{ fontSize: "12px", color: "#64748b" }}>Espera {tiempoRestanteSms}s</span>
-                        )}
-                      </div>
-                    </form>
-                  )}
-                  
-                  {errorSms && <div style={{ color: "#b91c1c", fontSize: "12px", marginTop: "8px", background: "#fef2f2", padding: "8px 12px", borderRadius: "6px", border: "1px solid #fecaca" }}>&#9888; {errorSms}</div>}
-                  {successSms && <div style={{ color: "#15803d", fontSize: "12px", marginTop: "8px", background: "#f0fdf4", padding: "8px 12px", borderRadius: "6px", border: "1px solid #bbf7d0" }}>&#10004; {successSms}</div>}
+                  <p style={{ margin: "6px 0 0", fontSize: "12px", color: "#475569", fontStyle: "italic" }}>
+                    La verificación telefónica por SMS se encuentra temporalmente en desarrollo.
+                  </p>
                 </div>
 
                 {/* Selección de Preferencias */}
@@ -2206,21 +2247,18 @@ function PanelNegocio({ seccion }) {
                     </label>
 
                     <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: usuario.telefono_verificado ? "pointer" : "not-allowed", fontSize: "14px", color: usuario.telefono_verificado ? "#334155" : "#94a3b8" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "not-allowed", fontSize: "14px", color: "#94a3b8" }}>
                         <input 
                           type="checkbox" 
-                          checked={usuario.sms_habilitado && usuario.telefono_verificado} 
-                          disabled={!usuario.telefono_verificado}
-                          onChange={(e) => manejarCambiarPreferencias("sms", e.target.checked)} 
-                          style={{ width: "16px", height: "16px", accentColor: "#1f3b57", cursor: usuario.telefono_verificado ? "pointer" : "not-allowed" }}
+                          checked={false} 
+                          disabled={true}
+                          style={{ width: "16px", height: "16px", accentColor: "#1f3b57", cursor: "not-allowed" }}
                         />
-                        Recibir SMS
+                        Recibir SMS (En desarrollo)
                       </label>
-                      {!usuario.telefono_verificado && (
-                        <p style={{ margin: "4px 0 0 24px", fontSize: "12px", color: "#b45309", fontWeight: "500" }}>
-                          Debes verificar tu número telefónico para recibir mensajes SMS.
-                        </p>
-                      )}
+                      <p style={{ margin: "4px 0 0 24px", fontSize: "12px", color: "#b45309", fontWeight: "500" }}>
+                        La recepción de SMS estará disponible una vez finalizada la integración de red del operador.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -2285,53 +2323,25 @@ function PanelNegocio({ seccion }) {
             </div>
 
             {/* Content / Details */}
-            <div style={{ padding: "20px", fontSize: "14px", color: "#334155" }}>
-              <div style={{ display: "grid", gap: "10px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                  <span style={{ color: "#64748b" }}>Código de solicitud</span>
-                  <strong style={{ color: "#0f172a" }}>{modalComprobante.id_solicitud}</strong>
+            {/* Content / Details */}
+            <div style={{ padding: "20px" }}>
+              {comprobantePdfUrl ? (
+                <iframe
+                  src={comprobantePdfUrl}
+                  style={{
+                    width: "100%",
+                    height: "480px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "8px",
+                    boxSizing: "border-box"
+                  }}
+                  title="Vista previa del comprobante"
+                />
+              ) : (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>
+                  Generando vista previa del comprobante...
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                  <span style={{ color: "#64748b" }}>Código de operación</span>
-                  <strong style={{ color: "#0f172a" }}>{modalComprobante.codigo_operacion}</strong>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                  <span style={{ color: "#64748b" }}>Tipo de comprobante</span>
-                  <strong style={{ color: "#0f172a" }}>{modalComprobante.tipo_comprobante === "boleta" ? "Boleta de Venta" : "Factura Electrónica"}</strong>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                  <span style={{ color: "#64748b" }}>Solicitante</span>
-                  <strong style={{ color: "#0f172a" }}>{modalComprobante.nombres_cliente} {modalComprobante.apellidos_cliente}</strong>
-                </div>
-                {modalComprobante.dni_cliente && (
-                  <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                    <span style={{ color: "#64748b" }}>DNI</span>
-                    <strong style={{ color: "#0f172a" }}>{modalComprobante.dni_cliente}</strong>
-                  </div>
-                )}
-                {modalComprobante.ruc_cliente && (
-                  <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                    <span style={{ color: "#64748b" }}>RUC</span>
-                    <strong style={{ color: "#0f172a" }}>{modalComprobante.ruc_cliente}</strong>
-                  </div>
-                )}
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                  <span style={{ color: "#64748b" }}>Monto pagado</span>
-                  <strong style={{ color: "#166534", fontSize: "16px" }}>S/{Number(modalComprobante.monto_total || modalComprobante.monto).toFixed(2)}</strong>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                  <span style={{ color: "#64748b" }}>Método de pago</span>
-                  <strong style={{ color: "#0f172a" }}>{modalComprobante.metodo_pago}</strong>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                  <span style={{ color: "#64748b" }}>Fecha</span>
-                  <strong style={{ color: "#0f172a" }}>{modalComprobante.fecha_emision}</strong>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "4px" }}>
-                  <span style={{ color: "#64748b" }}>Estado</span>
-                  <span style={{ background: "#dcfce7", color: "#15803d", padding: "4px 12px", borderRadius: "999px", fontSize: "12px", fontWeight: "700" }}>PAGADO</span>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Footer Buttons */}
@@ -2345,7 +2355,7 @@ function PanelNegocio({ seccion }) {
             }}>
               <button
                 type="button"
-                onClick={() => descargarComprobanteDesdeUrl(modalComprobante)}
+                onClick={() => descargarComprobante(modalComprobante)}
                 style={{
                   padding: "10px 16px",
                   fontSize: "13px",
@@ -2379,7 +2389,9 @@ function PanelNegocio({ seccion }) {
                 type="button"
                 onClick={() => {
                   setModalComprobante(null);
-                  setPaso("misSolicitudes");
+                  if (paso === "confirmacion") {
+                    setPaso("misSolicitudes");
+                  }
                 }}
                 style={{
                   padding: "10px 16px",

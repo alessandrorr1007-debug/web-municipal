@@ -21,7 +21,7 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.clear();
     setUsuario(null);
     // Redirect to login page
-    window.location.href = "/login";
+    window.location.href = "/";
   };
 
   useEffect(() => {

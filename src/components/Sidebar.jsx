@@ -37,7 +37,7 @@ const titulos = {
   "config-sistema": "Configuracion",
 };
 
-function Sidebar({ usuario, rolEtiqueta, rolColor, seccion, onCambiarSeccion, abierto, onToggle, secciones }) {
+function Sidebar({ usuario, rolEtiqueta, rolColor, seccion, onCambiarSeccion, abierto, onToggle, secciones, notificacionesNoLeidas }) {
   return (
     <aside className={`sidebar ${abierto ? "open" : "closed"}`}>
       <div className="sidebar-header">
@@ -68,9 +68,25 @@ function Sidebar({ usuario, rolEtiqueta, rolColor, seccion, onCambiarSeccion, ab
             type="button"
             className={`sidebar-item ${seccion === key ? "active" : ""}`}
             onClick={() => onCambiarSeccion(key)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}
           >
-            <span className="sidebar-item-icon" dangerouslySetInnerHTML={{ __html: iconos[key] || "&#9881;" }} />
-            <span className="sidebar-item-label">{titulos[key] || key}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span className="sidebar-item-icon" dangerouslySetInnerHTML={{ __html: iconos[key] || "&#9881;" }} />
+              <span className="sidebar-item-label">{titulos[key] || key}</span>
+            </div>
+            {key === "notificaciones" && notificacionesNoLeidas > 0 && (
+              <span style={{
+                background: "#ef4444",
+                color: "white",
+                borderRadius: "999px",
+                padding: "2px 8px",
+                fontSize: "11px",
+                fontWeight: "bold",
+                marginRight: "10px"
+              }}>
+                {notificacionesNoLeidas}
+              </span>
+            )}
           </button>
         ))}
       </nav>

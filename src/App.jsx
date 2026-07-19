@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import "./style.css";
+import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
+import { db } from "./firebase";
 
 import LandingPage from "./components/LandingPage";
 import Login from "./components/Login";
@@ -15,10 +17,53 @@ import { cerrarSesion } from "./services/authService";
 
 function App() {
   const { usuario, cargando } = useAuth();
-  const [vista, setVista] = useState("landing");
-  const [seccion, setSeccion] = useState("inicio");
+  const [vista, setVista] = useState(() => {
+    return localStorage.getItem("web_municipal_vista") || "landing";
+  });
+  const [seccion, setSeccion] = useState(() => {
+    return localStorage.getItem("web_municipal_seccion") || "inicio";
+  });
   const [sidebarAbierto, setSidebarAbierto] = useState(window.innerWidth > 1024);
   const [esMovil, setEsMovil] = useState(window.innerWidth <= 1024);
+
+  useEffect(() => {
+    if (usuario) {
+      if (["landing", "login", "registro"].includes(vista)) {
+        const storedVista = localStorage.getItem("web_municipal_vista");
+        const nextVista = (storedVista && storedVista !== "landing" && storedVista !== "login" && storedVista !== "registro")
+          ? storedVista
+          : "dashboard";
+        setVista(nextVista);
+        localStorage.setItem("web_municipal_vista", nextVista);
+      } else {
+        localStorage.setItem("web_municipal_vista", vista);
+      }
+    } else {
+      if (!["landing", "login", "registro"].includes(vista)) {
+        setVista("landing");
+        localStorage.setItem("web_municipal_vista", "landing");
+      }
+    }
+  }, [usuario, vista]);
+  const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(0);
+
+  useEffect(() => {
+    if (!usuario) {
+      setNotificacionesNoLeidas(0);
+      return;
+    }
+    const q = query(
+      collection(db, "notificaciones"),
+      where("uid_usuario", "==", usuario.uid),
+      where("leida", "==", false)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setNotificacionesNoLeidas(snapshot.size);
+    }, (err) => {
+      console.error("Error fetching unread notifications count:", err);
+    });
+    return () => unsubscribe();
+  }, [usuario]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -36,6 +81,7 @@ function App() {
 
   const cambiarSeccion = (nueva) => {
     setSeccion(nueva);
+    localStorage.setItem("web_municipal_seccion", nueva);
     if (window.innerWidth <= 1024) {
       setSidebarAbierto(false);
     }
@@ -43,6 +89,8 @@ function App() {
 
   const salir = async () => {
     await cerrarSesion();
+    localStorage.removeItem("web_municipal_vista");
+    localStorage.removeItem("web_municipal_seccion");
     setVista("landing");
     setSeccion("inicio");
   };
@@ -77,7 +125,7 @@ function App() {
   if ((vista === "login" || vista === "registro") && !usuario) {
     return (
       <Login
-        onVolver={() => setVista("landing")}
+        onVolver={() => { setVista("landing"); localStorage.setItem("web_municipal_vista", "landing"); }}
         modoInicial={vista === "registro" ? "registro" : "login"}
       />
     );
@@ -86,8 +134,8 @@ function App() {
   if (!usuario || vista === "landing") {
     return (
       <LandingPage
-        onLogin={() => setVista("login")}
-        onRegister={() => setVista("registro")}
+        onLogin={() => { setVista("login"); localStorage.setItem("web_municipal_vista", "login"); }}
+        onRegister={() => { setVista("registro"); localStorage.setItem("web_municipal_vista", "registro"); }}
       />
     );
   }
@@ -166,6 +214,7 @@ function App() {
         abierto={sidebarAbierto}
         onToggle={() => setSidebarAbierto(!sidebarAbierto)}
         secciones={seccionesPorRol[usuario.rol] || []}
+        notificacionesNoLeidas={notificacionesNoLeidas}
       />
 
       {sidebarAbierto && esMovil && (

@@ -3,6 +3,7 @@ import {
   obtenerSolicitudes,
   actualizarSolicitud,
 } from "../services/solicitudService";
+import { abrirPdf } from "../services/pdfService";
 
 function PanelFuncionario({ seccion }) {
   const [solicitudes, setSolicitudes] = useState([]);
@@ -197,13 +198,13 @@ function PanelFuncionario({ seccion }) {
       return (
         <div className="documentos-lista">
           {s.archivosPdf.map((pdf, i) => (
-            <a key={i} href={pdf.archivoUrl} target="_blank" rel="noreferrer">PDF {i + 1}</a>
+            <a key={i} href={pdf.archivoUrl} onClick={(e) => { e.preventDefault(); abrirPdf(pdf.archivoUrl); }} target="_blank" rel="noreferrer">PDF {i + 1}</a>
           ))}
         </div>
       );
     }
     if (s.archivoUrl) {
-      return <a className="file-pill" href={s.archivoUrl} target="_blank" rel="noreferrer">Ver PDF</a>;
+      return <a className="file-pill" href={s.archivoUrl} onClick={(e) => { e.preventDefault(); abrirPdf(s.archivoUrl); }} target="_blank" rel="noreferrer">Ver PDF</a>;
     }
     return <span className="file-pill">Sin PDF</span>;
   };
