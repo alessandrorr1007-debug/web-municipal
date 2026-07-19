@@ -31,7 +31,7 @@ import {
   restablecerContrasenaPorEmail
 } from "../services/authService";
 import Timeline from "./Timeline";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, onSnapshot, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 
 function PanelNegocio({ seccion }) {
