@@ -3,9 +3,12 @@ import {
   obtenerSolicitudes,
   actualizarSolicitud,
 } from "../services/solicitudService";
+import { registrarDecisionFuncionario } from "../services/auditService";
 import { abrirPdf } from "../services/pdfService";
+import { useAuth } from "../context/AuthContext";
 
 function PanelFuncionario({ seccion }) {
+  const { usuario } = useAuth();
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [observacionesRechazo, setObservacionesRechazo] = useState({});
@@ -119,6 +122,7 @@ function PanelFuncionario({ seccion }) {
       licenciaRenovada: esRenovacion,
       fechaRenovacion: esRenovacion ? fechaAprobacion : "",
       resultadoFinal: "Licencia emitida",
+      hashFirmante: "",
       notificaciones: [
         ...(solicitud.notificaciones || []),
         {
@@ -129,6 +133,20 @@ function PanelFuncionario({ seccion }) {
         },
       ],
     });
+
+    const resultadoAuditoria = await registrarDecisionFuncionario({
+      usuario: usuario?.nombre || "Funcionario",
+      usuarioId: usuario?.uid || "",
+      solicitudId: solicitud.id,
+      decision: "Aprobada",
+      observacion: "",
+    });
+
+    if (resultadoAuditoria?.hashFirma) {
+      await actualizarSolicitud(solicitud.id, {
+        hashFirmante: resultadoAuditoria.hashFirma,
+      });
+    }
 
     await cargarSolicitudes();
   };
@@ -146,6 +164,7 @@ function PanelFuncionario({ seccion }) {
       observacionFuncionario: observacion,
       fechaDecisionFuncionario: formatearFechaHora(),
       resultadoFinal: "Rechazado",
+      hashFirmante: "",
       notificaciones: [
         ...(solicitud.notificaciones || []),
         {
@@ -156,6 +175,20 @@ function PanelFuncionario({ seccion }) {
         },
       ],
     });
+
+    const resultadoAuditoria = await registrarDecisionFuncionario({
+      usuario: usuario?.nombre || "Funcionario",
+      usuarioId: usuario?.uid || "",
+      solicitudId: solicitud.id,
+      decision: "Rechazada",
+      observacion: observacion,
+    });
+
+    if (resultadoAuditoria?.hashFirma) {
+      await actualizarSolicitud(solicitud.id, {
+        hashFirmante: resultadoAuditoria.hashFirma,
+      });
+    }
 
     await cargarSolicitudes();
   };
