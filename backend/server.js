@@ -124,7 +124,13 @@ app.post("/api/solicitudes", async (req, res) => {
   try {
     const solicitud = req.body;
     const id = generarIdExpediente();
-    const archivosPdf = solicitud.archivosPdf || [];
+    const archivosPdfRaw = solicitud.archivosPdf || [];
+    const archivosPdf = archivosPdfRaw.map((pdf, idx) => ({
+      ...pdf,
+      userId: solicitud.uidUsuario || "",
+      solicitudId: id,
+      documentId: pdf.publicId || `doc-${id}-${idx}-${Math.random().toString(36).substr(2, 5)}`
+    }));
 
     const nuevaSolicitud = {
       id,

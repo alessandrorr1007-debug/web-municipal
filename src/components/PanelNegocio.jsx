@@ -1315,10 +1315,10 @@ function PanelNegocio({ seccion }) {
 
                   <Timeline solicitud={s} />
 
-                  {s.archivosPdf?.length > 0 && (
+                  {s.archivosPdf?.filter(pdf => pdf && pdf.archivoUrl).length > 0 && (
                     <div className="solicitud-card-actions">
-                      {s.archivosPdf.map((pdf, index) => (
-                        <a key={index} href={pdf.archivoUrl} onClick={(e) => { e.preventDefault(); abrirPdf(pdf.archivoUrl); }} target="_blank" rel="noreferrer">PDF {index + 1}</a>
+                      {s.archivosPdf.filter(pdf => pdf && pdf.archivoUrl).map((pdf, index) => (
+                        <a key={pdf.documentId || index} href={pdf.archivoUrl} onClick={(e) => { e.preventDefault(); abrirPdf(pdf.archivoUrl); }} target="_blank" rel="noreferrer">📄 PDF {index + 1}</a>
                       ))}
                     </div>
                   )}
