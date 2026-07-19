@@ -42,10 +42,10 @@ function Sidebar({ usuario, rolEtiqueta, rolColor, seccion, onCambiarSeccion, ab
     <aside className={`sidebar ${abierto ? "open" : "closed"}`}>
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">&#9881;</div>
+          <div className="sidebar-logo-icon">&#127760;</div>
           <div className="sidebar-logo-text">
-            <strong>Municipalidad</strong>
-            <span>Trujillo</span>
+            <strong>WEB</strong>
+            <span>MUNICIPAL</span>
           </div>
         </div>
         <button type="button" className="sidebar-close" onClick={onToggle}>&#10005;</button>

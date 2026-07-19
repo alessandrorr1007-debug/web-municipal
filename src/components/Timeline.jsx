@@ -83,19 +83,18 @@ function Timeline({ solicitud }) {
   }
 
   return (
-    <div className="timeline">
+    <div className="timeline-modern">
       {pasos.map((paso, i) => (
-        <div className="timeline-item" key={i}>
-          <div className="timeline-line">
-            <div className={`timeline-dot ${paso.estado}`} />
-            {i < pasos.length - 1 && (
-              <div className={`timeline-connector ${paso.estado === "completado" ? "completed" : ""}`} />
-            )}
-          </div>
-          <div className="timeline-content">
+        <div className="timeline-step-modern" key={i}>
+          <div className={`timeline-dot-modern ${paso.estado}`} />
+          <div className="timeline-content-modern">
             <h4>{paso.titulo}</h4>
             <p>{paso.desc}</p>
-            {paso.fecha && <div className="timeline-date">{paso.fecha}</div>}
+            {paso.fecha && (
+              <span style={{ fontSize: "11px", color: "#94a3b8", display: "inline-block", marginTop: "4px" }}>
+                &#128197; {paso.fecha}
+              </span>
+            )}
           </div>
         </div>
       ))}

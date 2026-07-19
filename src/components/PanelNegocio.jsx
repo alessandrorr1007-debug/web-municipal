@@ -337,7 +337,8 @@ function PanelNegocio({ seccion }) {
     }
   };
 
-  // Las funciones locales de descarga e impresión han sido reemplazadas por las utilidades importadas del servicio
+  const [solicitudDetalle, setSolicitudDetalle] = useState(null);
+  const [filtroNoti, setFiltroNoti] = useState("nuevas");
 
   const [archivos, setArchivos] = useState([]);
   const [buscando, setBuscando] = useState(false);
@@ -399,6 +400,74 @@ function PanelNegocio({ seccion }) {
       responsable_tecnico: { state: docRepresentacion, setter: setDocRepresentacion, label: "8. Título/Colegiatura del Responsable Técnico", hint: "Responsable_Tecnico.pdf" },
       representacion: { state: docRepresentacionLegal, setter: setDocRepresentacionLegal, label: "9. Documento de representación legal", hint: "Representacion_Legal.pdf" }
     };
+  };
+
+  const obtenerProximoPaso = (s) => {
+    if (s.estadoPago !== "Confirmado") {
+      return {
+        texto: "Debe realizar el pago del derecho de trámite de S/ 3.00 para continuar con la evaluación.",
+        accion: "Pago Pendiente",
+        clase: "pending",
+        color: "#ef4444"
+      };
+    }
+    if (["En revision", "En revisión", "En revision (Inspección)", "En revisión (Inspección)"].includes(s.estado)) {
+      if (!s.fechaVisitaInspector) {
+        return {
+          texto: "Esperando programación de inspección técnica de seguridad por parte del personal de la municipalidad.",
+          accion: "Evaluación en Proceso",
+          clase: "review",
+          color: "#f59e0b"
+        };
+      } else {
+        return {
+          texto: `Recibir al inspector de seguridad programado para el día ${s.fechaVisitaInspector} a las ${s.horaVisitaInspector || "08:00"}.`,
+          accion: "Inspección Programada",
+          clase: "review",
+          color: "#f59e0b"
+        };
+      }
+    }
+    if (["Observado", "Observada"].includes(s.estado)) {
+      return {
+        texto: `Subsanar las observaciones indicadas por el inspector: ${s.observacionFuncionario || s.observacionInspector || ""}`,
+        accion: "Subsanar Observaciones",
+        clase: "pending",
+        color: "#ef4444"
+      };
+    }
+    if (["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado)) {
+      return {
+        texto: "Su trámite ha finalizado exitosamente. Ya puede descargar e imprimir su Licencia de Funcionamiento.",
+        accion: "Trámite Completado",
+        clase: "success",
+        color: "#10b981"
+      };
+    }
+    if (["Licencia rechazada", "Rechazado", "Rechazada"].includes(s.estado)) {
+      return {
+        texto: `Trámite denegado. Motivo: ${s.observacionFuncionario || "No cumple con las normativas municipales."}`,
+        accion: "Rechazado",
+        clase: "pending",
+        color: "#ef4444"
+      };
+    }
+    return {
+      texto: "Esperando validación de la solicitud en las oficinas municipales.",
+      accion: "Revisión Inicial",
+      clase: "review",
+      color: "#64748b"
+    };
+  };
+
+  const obtenerIconoNotificacion = (n) => {
+    const t = (n.titulo || "").toLowerCase();
+    const d = (n.descripcion || "").toLowerCase();
+    if (t.includes("pago") || d.includes("pago")) return "💳";
+    if (t.includes("comprobante") || d.includes("comprobante")) return "📄";
+    if (t.includes("documento") || t.includes("archivo") || d.includes("documento")) return "📎";
+    if (t.includes("solicitud") || t.includes("expediente") || d.includes("solicitud")) return "📝";
+    return n.icono || "🔔";
   };
 
   const [form, setForm] = useState({
@@ -1226,52 +1295,94 @@ function PanelNegocio({ seccion }) {
         <section className="section-card section-card-modern">
           <div className="panel-hero panel-hero-modern">
             <div>
-              <span className="eyebrow">Portal del solicitante</span>
-              <h1>Licencia de funcionamiento</h1>
-              <p>Registra tu solicitud, realiza el pago y consulta el avance de tu expediente.</p>
+              <span className="eyebrow">Portal Digital Ciudadano</span>
+              <h1>WEB-MUNICIPAL</h1>
+              <p>Gestiona tus solicitudes de licencias, realiza tus pagos y descarga tus comprobantes oficiales de forma ágil y transparente.</p>
             </div>
             <div className="hero-card">
-              <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Monto del trámite</span>
+              <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#dbeafe" }}>Derecho de trámite</span>
               <strong style={{ fontSize: "28px" }}>S/{MONTO_TRAMITE.toFixed(2)}</strong>
-              <small>Derecho de trámite municipal</small>
+              <small style={{ color: "#bfdbfe" }}>Tasa única de Licencia</small>
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginTop: "20px" }}>
-            <div style={{ background: "#f0fdf4", padding: "20px", borderRadius: "14px", border: "1px solid #bbf7d0" }}>
-              <div style={{ fontSize: "24px", marginBottom: "8px" }}>&#128196;</div>
-              <strong style={{ fontSize: "24px", color: "#166534" }}>{misSolicitudes.length}</strong>
-              <p style={{ margin: "4px 0 0", color: "#166534", fontSize: "13px" }}>Solicitudes enviadas</p>
+          <div className="dashboard-grid-modern">
+            <div className="dashboard-card-modern">
+              <div className="dashboard-card-icon-wrapper" style={{ background: "#eff6ff", color: "#2563eb" }}>📄</div>
+              <div className="dashboard-card-info">
+                <h3>Solicitudes Activas</h3>
+                <div className="count">{misSolicitudes.filter(s => !["Licencia aprobada", "Licencia emitida", "Aprobado", "Licencia rechazada", "Rechazado"].includes(s.estado)).length}</div>
+              </div>
             </div>
-            <div style={{ background: "#eff6ff", padding: "20px", borderRadius: "14px", border: "1px solid #bfdbfe" }}>
-              <div style={{ fontSize: "24px", marginBottom: "8px" }}>&#128276;</div>
-              <strong style={{ fontSize: "24px", color: "#1e3a8a" }}>{notificacionesPendientes}</strong>
-              <p style={{ margin: "4px 0 0", color: "#1e3a8a", fontSize: "13px" }}>Notificaciones nuevas</p>
+
+            <div className="dashboard-card-modern">
+              <div className="dashboard-card-icon-wrapper" style={{ background: "#fef3c7", color: "#d97706" }}>💳</div>
+              <div className="dashboard-card-info">
+                <h3>Pagos Pendientes</h3>
+                <div className="count">{misSolicitudes.filter(s => s.estadoPago !== "Confirmado").length}</div>
+              </div>
             </div>
-            <div style={{ background: "#fef3c7", padding: "20px", borderRadius: "14px", border: "1px solid #fde68a" }}>
-              <div style={{ fontSize: "24px", marginBottom: "8px" }}>&#128197;</div>
-              <strong style={{ fontSize: "24px", color: "#92400e" }}>{misSolicitudes.filter(s => ["En revision", "En revisión"].includes(s.estado)).length}</strong>
-              <p style={{ margin: "4px 0 0", color: "#92400e", fontSize: "13px" }}>En revisión</p>
+
+            <div className="dashboard-card-modern">
+              <div className="dashboard-card-icon-wrapper" style={{ background: "#f0fdf4", color: "#166534" }}>📎</div>
+              <div className="dashboard-card-info">
+                <h3>Documentos subidos</h3>
+                <div className="count">{misSolicitudes.reduce((acc, s) => acc + (s.archivosPdf?.filter(pdf => pdf && pdf.archivoUrl).length || 0), 0)}</div>
+              </div>
             </div>
-            <div style={{ background: "#f0fdf4", padding: "20px", borderRadius: "14px", border: "1px solid #bbf7d0" }}>
-              <div style={{ fontSize: "24px", marginBottom: "8px" }}>&#9989;</div>
-              <strong style={{ fontSize: "24px", color: "#166534" }}>{misSolicitudes.filter(s => ["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado)).length}</strong>
-              <p style={{ margin: "4px 0 0", color: "#166534", fontSize: "13px" }}>Aprobadas</p>
+
+            <div className="dashboard-card-modern">
+              <div className="dashboard-card-icon-wrapper" style={{ background: "#fdf2f8", color: "#db2777" }}>🔔</div>
+              <div className="dashboard-card-info">
+                <h3>Alertas nuevas</h3>
+                <div className="count">{notificaciones.filter(n => !n.leida).length}</div>
+              </div>
             </div>
           </div>
 
           {misSolicitudes.length > 0 && (
-            <div style={{ marginTop: "24px" }}>
-              <h3 style={{ color: "#0f172a", marginBottom: "12px" }}>Últimas solicitudes</h3>
-              {misSolicitudes.slice(0, 3).map((s) => (
-                <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", background: "#f8fafc", borderRadius: "12px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
-                  <div>
-                    <strong style={{ color: "#0f172a", fontSize: "14px" }}>{s.id}</strong>
-                    <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: "13px" }}>{s.nombreNegocio} - {s.tipoTramite}</p>
-                  </div>
-                  <span className={`badge ${badgeClase(obtenerEstadoVisible(s))}`}>{obtenerEstadoVisible(s)}</span>
-                </div>
-              ))}
+            <div style={{ marginTop: "32px" }}>
+              <h3 style={{ color: "#0f172a", marginBottom: "16px", fontWeight: "800", fontSize: "16px" }}>Estado de tus Expedientes</h3>
+              <div style={{ display: "grid", gap: "12px" }}>
+                {misSolicitudes.slice(0, 5).map((s) => {
+                  const esCompletado = ["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado);
+                  const esAccionRequerida = s.estadoPago !== "Confirmado" || ["Observado", "Observada", "Licencia rechazada", "Rechazado", "Rechazada"].includes(s.estado);
+                  const statusIndicator = esCompletado ? "🟢" : esAccionRequerida ? "🔴" : "🟡";
+                  const statusText = esCompletado ? "Completado" : esAccionRequerida ? "Requiere acción" : "En proceso";
+                  
+                  return (
+                    <div 
+                      key={s.id} 
+                      style={{ 
+                        display: "flex", 
+                        justifyContent: "space-between", 
+                        alignItems: "center", 
+                        padding: "16px 20px", 
+                        background: "#ffffff", 
+                        borderRadius: "12px", 
+                        border: "1px solid #e2e8f0",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.01)"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <span style={{ fontSize: "18px" }}>{statusIndicator}</span>
+                        <div>
+                          <strong style={{ color: "#0f172a", fontSize: "14px", fontFamily: "monospace" }}>{s.id}</strong>
+                          <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: "12.5px" }}>
+                            {s.nombreNegocio} • <span style={{ fontWeight: "600" }}>{s.tipoTramite || "Licencia"}</span>
+                          </p>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <span className={`badge ${badgeClase(obtenerEstadoVisible(s))}`} style={{ fontSize: "11px" }}>
+                          {obtenerEstadoVisible(s)}
+                        </span>
+                        <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#94a3b8" }}>{statusText}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </section>
@@ -1295,61 +1406,60 @@ function PanelNegocio({ seccion }) {
             </div>
           ) : (
             <div className="solicitudes-grid">
-              {misSolicitudes.map((s) => (
-                <article className="solicitud-card" key={s.id}>
-                  <div className="solicitud-card-header">
+              {misSolicitudes.map((s) => {
+                const pasoInfo = obtenerProximoPaso(s);
+                return (
+                  <article className="solicitud-card" key={s.id} style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                     <div>
-                      <span>Expediente</span>
-                      <h3>{s.id}</h3>
+                      <div className="solicitud-card-header" style={{ marginBottom: "12px" }}>
+                        <div>
+                          <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", letterSpacing: "0.05em" }}>Expediente</span>
+                          <h3 style={{ fontFamily: "monospace", fontSize: "18px", margin: "2px 0 0 0", color: "#0f172a" }}>{s.id}</h3>
+                        </div>
+                        <span className={`badge ${badgeClase(obtenerEstadoVisible(s))}`} style={{ padding: "4px 10px", fontSize: "11.5px" }}>
+                          {obtenerEstadoVisible(s)}
+                        </span>
+                      </div>
+                      
+                      <div className="solicitud-card-body" style={{ background: "#f8fafc", padding: "14px", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "13px", display: "grid", gap: "6px" }}>
+                        <p style={{ margin: 0 }}><strong>Tipo de Trámite:</strong> {s.tipoTramite || "Nueva licencia"}</p>
+                        <p style={{ margin: 0 }}><strong>Negocio:</strong> {s.nombreNegocio}</p>
+                        <p style={{ margin: 0 }}><strong>Fecha de Registro:</strong> {s.fecha}</p>
+                      </div>
+
+                      {/* Cuadro destacado de Próximo Paso */}
+                      <div className={`proximo-paso-box ${pasoInfo.clase}`} style={{ margin: "14px 0" }}>
+                        <div style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", color: pasoInfo.color, letterSpacing: "0.05em", marginBottom: "4px" }}>
+                          Próximo Paso: {pasoInfo.accion}
+                        </div>
+                        <p style={{ margin: 0, fontSize: "12.5px", color: "#334155", lineHeight: 1.4 }}>{pasoInfo.texto}</p>
+                      </div>
                     </div>
-                    <span className={`badge ${badgeClase(obtenerEstadoVisible(s))}`}>{obtenerEstadoVisible(s)}</span>
-                  </div>
-                  <div className="solicitud-card-body">
-                    <p><strong>RUC:</strong> {s.ruc}</p>
-                    <p><strong>Negocio:</strong> {s.nombreNegocio}</p>
-                    <p><strong>Trámite:</strong> {s.tipoTramite || "Nueva licencia"}</p>
-                    <p><strong>Fecha:</strong> {s.fecha}</p>
-                    <p><strong>Pago:</strong> {s.estadoPago}</p>
-                    <p><strong>Inspección:</strong> {s.inspeccion || "Sin inspección"}</p>
-                  </div>
 
-                  <Timeline solicitud={s} />
-
-                  {s.archivosPdf?.filter(pdf => pdf && pdf.archivoUrl).length > 0 && (
-                    <div className="solicitud-card-actions">
-                      {s.archivosPdf.filter(pdf => pdf && pdf.archivoUrl).map((pdf, index) => (
-                        <a key={pdf.documentId || index} href={pdf.archivoUrl} onClick={(e) => { e.preventDefault(); abrirPdf(pdf.archivoUrl); }} target="_blank" rel="noreferrer">📄 PDF {index + 1}</a>
-                      ))}
+                    <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+                      <button 
+                        type="button" 
+                        className="btn-secundario" 
+                        style={{ flex: 1, fontSize: "13px", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                        onClick={() => setSolicitudDetalle(s)}
+                      >
+                        👁 Ver detalle completo
+                      </button>
+                      
+                      {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado) && !licenciaVencida(s) && (
+                        <button 
+                          type="button" 
+                          className="btn-ok" 
+                          style={{ fontSize: "13px", padding: "10px 14px" }}
+                          onClick={() => descargarLicencia(s)}
+                        >
+                          📥 Licencia
+                        </button>
+                      )}
                     </div>
-                  )}
-
-                  {["Licencia rechazada", "Rechazado"].includes(s.estado) && (
-                    <div className="motivo-rechazo">
-                      <strong>Motivo:</strong>
-                      <p>{s.observacionFuncionario || s.observacionInspector || "No se registró motivo del rechazo."}</p>
-                    </div>
-                  )}
-
-                  {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado) && (
-                    <div className="vigencia-box">
-                      <strong>Vence:</strong> {formatearFecha(obtenerFechaExpiracion(s))}
-                    </div>
-                  )}
-
-                  <div className="solicitud-card-footer">
-                    {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado) ? (
-                      <>
-                        {!licenciaVencida(s) && (
-                          <button type="button" className="btn-ok" onClick={() => descargarLicencia(s)}>Descargar licencia</button>
-                        )}
-                        <button type="button" className="btn-secundario" onClick={() => renovarLicencia(s)}>Renovar</button>
-                      </>
-                    ) : (
-                      <span className="text-muted">Licencia no disponible aún</span>
-                    )}
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
@@ -1357,11 +1467,26 @@ function PanelNegocio({ seccion }) {
 
       {seccion === "notificaciones" && (
         <section className="section-card section-card-modern">
-          <div className="section-header">
+          <div className="section-header" style={{ marginBottom: "16px" }}>
             <div>
-              <h2>Mis notificaciones</h2>
-              <p>Actualizaciones sobre tus solicitudes de licencia.</p>
+              <h2>Centro de notificaciones</h2>
+              <p>Actualizaciones sobre tus solicitudes y comprobantes en la plataforma.</p>
             </div>
+          </div>
+
+          <div className="noti-tabs">
+            <button 
+              className={`noti-tab-btn ${filtroNoti === "nuevas" ? "active" : ""}`}
+              onClick={() => setFiltroNoti("nuevas")}
+            >
+              Nuevas ({notificaciones.filter(n => !n.leida).length})
+            </button>
+            <button 
+              className={`noti-tab-btn ${filtroNoti === "leidas" ? "active" : ""}`}
+              onClick={() => setFiltroNoti("leidas")}
+            >
+              Leídas ({notificaciones.filter(n => n.leida).length})
+            </button>
           </div>
 
           {cargandoNotificaciones ? (
@@ -1369,52 +1494,71 @@ function PanelNegocio({ seccion }) {
               <div className="spinner" style={{ margin: "0 auto 10px" }} />
               <h3>Cargando notificaciones...</h3>
             </div>
-          ) : notificaciones.length === 0 ? (
-            <div className="empty-state empty-state-modern">
-              <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "linear-gradient(135deg, #dbeafe, #93c5fd)", display: "grid", placeItems: "center", margin: "0 auto 16px", fontSize: "36px" }}>&#128276;</div>
-              <h3>No tienes notificaciones</h3>
-              <p>Cuando haya novedades en tus solicitudes, aparecerán aquí.</p>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: "10px" }}>
-              {notificaciones.map((n) => (
-                <div
-                  key={n.id}
-                  onClick={() => abrirNotificacion(n)}
-                  style={{
-                    padding: "16px",
-                    border: `1px solid ${n.leida ? "#e2e8f0" : "#3b82f6"}`,
-                    borderRadius: "12px",
-                    background: n.leida ? "#ffffff" : "#f0f9ff",
-                    cursor: n.leida ? "default" : "pointer",
-                    transition: "all 0.2s ease",
-                    boxShadow: n.leida ? "none" : "0 2px 8px rgba(59, 130, 246, 0.08)",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
-                    <span style={{ fontSize: "24px", flexShrink: 0 }}>{n.icono || "🔔"}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
-                        <strong style={{ color: "#0f172a", fontSize: "14.5px" }}>{n.titulo}</strong>
-                        <span style={{
-                          fontSize: "11px",
-                          fontWeight: "700",
-                          padding: "2px 8px",
-                          borderRadius: "999px",
-                          background: n.leida ? "#f1f5f9" : "#dbeafe",
-                          color: n.leida ? "#475569" : "#1e40af",
-                        }}>
-                          {n.leida ? "Leída" : "No leída"}
-                        </span>
-                      </div>
-                      <p style={{ margin: "4px 0 6px", fontSize: "13.5px", color: "#334155", lineHeight: 1.4 }}>{n.descripcion}</p>
-                      <small style={{ color: "#94a3b8" }}>{new Date(n.fecha_hora).toLocaleString("es-PE")}</small>
-                    </div>
-                  </div>
+          ) : (() => {
+            const listado = notificaciones.filter(n => filtroNoti === "nuevas" ? !n.leida : n.leida);
+            if (listado.length === 0) {
+              return (
+                <div className="empty-state empty-state-modern">
+                  <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "linear-gradient(135deg, #dbeafe, #93c5fd)", display: "grid", placeItems: "center", margin: "0 auto 16px", fontSize: "36px" }}>🔔</div>
+                  <h3>No tienes notificaciones {filtroNoti === "nuevas" ? "nuevas" : "leídas"}</h3>
+                  <p>Cuando haya novedades sobre tu trámite, aparecerán en esta sección.</p>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            }
+            return (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {listado.map((n) => {
+                  const icono = obtenerIconoNotificacion(n);
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => abrirNotificacion(n)}
+                      style={{
+                        padding: "16px 20px",
+                        border: `1px solid ${n.leida ? "#e2e8f0" : "#bfdbfe"}`,
+                        borderRadius: "12px",
+                        background: n.leida ? "#ffffff" : "#f0f9ff",
+                        cursor: n.leida ? "default" : "pointer",
+                        transition: "all 0.2s ease",
+                        boxShadow: n.leida ? "none" : "0 2px 8px rgba(37, 99, 235, 0.04)",
+                      }}
+                    >
+                      <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
+                        <span style={{ 
+                          fontSize: "20px", 
+                          flexShrink: 0,
+                          width: "40px",
+                          height: "40px",
+                          background: n.leida ? "#f1f5f9" : "#dbeafe",
+                          borderRadius: "10px",
+                          display: "grid",
+                          placeItems: "center"
+                        }}>{icono}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                            <strong style={{ color: "#0f172a", fontSize: "14px" }}>{n.titulo}</strong>
+                            <span style={{
+                              fontSize: "10px",
+                              fontWeight: "800",
+                              textTransform: "uppercase",
+                              padding: "2px 8px",
+                              borderRadius: "999px",
+                              background: n.leida ? "#f1f5f9" : "#dbeafe",
+                              color: n.leida ? "#475569" : "#1e40af",
+                            }}>
+                              {n.leida ? "Leída" : "Nueva"}
+                            </span>
+                          </div>
+                          <p style={{ margin: "4px 0 6px", fontSize: "13px", color: "#334155", lineHeight: 1.4 }}>{n.descripcion}</p>
+                          <small style={{ color: "#94a3b8" }}>{new Date(n.fecha_hora).toLocaleString("es-PE")}</small>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </section>
       )}
 
@@ -2109,7 +2253,7 @@ function PanelNegocio({ seccion }) {
 
           {cargandoComprobantes ? (
             <div className="empty-state">
-              <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128196;</div>
+              <div className="spinner" style={{ margin: "0 auto 10px" }} />
               <h3>Cargando comprobantes...</h3>
             </div>
           ) : comprobantes.length === 0 ? (
@@ -2119,91 +2263,81 @@ function PanelNegocio({ seccion }) {
               <p>Cuando realices el pago de una solicitud, tu comprobante aparecerá aquí.</p>
             </div>
           ) : (
-            <div style={{ display: "grid", gap: "14px" }}>
-              {comprobantes.map((comp) => (
-                <div key={comp.id_comprobante} style={{
-                  padding: "20px",
-                  borderRadius: "14px",
-                  border: "1px solid #e2e8f0",
-                  background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
-                    <div style={{ flex: 1, minWidth: "220px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
+              {comprobantes.map((comp) => {
+                const esPagado = comp.estado === "Pagado" || comp.estado === "emitido" || comp.estado === "Emitido";
+                return (
+                  <div key={comp.id_comprobante} style={{
+                    padding: "24px",
+                    borderRadius: "16px",
+                    border: "1px solid #e2e8f0",
+                    background: "#ffffff",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    gap: "16px"
+                  }}>
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                         <span style={{
-                          display: "inline-block",
-                          padding: "3px 10px",
-                          borderRadius: "999px",
-                          fontSize: "11px",
-                          fontWeight: "700",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          background: comp.tipo_comprobante === "boleta" ? "#eff6ff" : "#f0fdf4",
-                          color: comp.tipo_comprobante === "boleta" ? "#1e40af" : "#166534",
-                          border: `1px solid ${comp.tipo_comprobante === "boleta" ? "#bfdbfe" : "#bbf7d0"}`,
+                          fontFamily: "monospace",
+                          fontWeight: "800",
+                          color: "#1e3a8a",
+                          fontSize: "14.5px"
                         }}>
-                          {comp.tipo_comprobante === "boleta" ? "Boleta" : "Factura"}
-                        </span>
-                        <span style={{ fontFamily: "monospace", fontWeight: "700", color: "#0f172a", fontSize: "15px" }}>
-                          {comp.serie}-{comp.numero}
+                          {comp.tipo_comprobante === "boleta" ? "BOLETA" : "FACTURA"} {comp.serie}-{comp.numero}
                         </span>
                         <span style={{
-                          display: "inline-block",
-                          padding: "3px 10px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "4px 10px",
                           borderRadius: "999px",
                           fontSize: "11px",
-                          fontWeight: "700",
-                          background: "#dcfce7",
-                          color: "#166534",
+                          fontWeight: "800",
+                          background: esPagado ? "#dcfce7" : "#fef3c7",
+                          color: esPagado ? "#15803d" : "#b45309"
                         }}>
-                          {comp.estado}
+                          {esPagado ? "✅ Pagado" : "⏳ Pendiente"}
                         </span>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "4px 16px" }}>
-                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Código Operación:</strong> {comp.codigo_operacion || "N/A"}</p>
-                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Código Solicitud:</strong> {comp.id_solicitud}</p>
-                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Tipo de Trámite:</strong> {comp.tipo_tramite || "Licencia de Funcionamiento"}</p>
-                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Fecha/Hora Pago:</strong> {comp.fecha_emision} {comp.hora_emision || ""}</p>
-                        <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>Método de Pago:</strong> {comp.metodo_pago}</p>
-                        {comp.ruc_cliente && <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>RUC Contribuyente:</strong> {comp.ruc_cliente}</p>}
-                        {comp.dni_cliente && <p style={{ margin: "3px 0", fontSize: "13px", color: "#64748b" }}><strong>DNI Contribuyente:</strong> {comp.dni_cliente}</p>}
+                      
+                      <div style={{ display: "grid", gap: "6px", fontSize: "13px", color: "#475569" }}>
+                        <p style={{ margin: 0 }}><strong>Código Solicitud:</strong> <span style={{ fontFamily: "monospace" }}>{comp.id_solicitud}</span></p>
+                        <p style={{ margin: 0 }}><strong>Fecha de Emisión:</strong> {comp.fecha_emision} {comp.hora_emision || ""}</p>
+                        <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {comp.metodo_pago}</p>
+                        <p style={{ margin: 0 }}><strong>Operación:</strong> <span style={{ fontFamily: "monospace" }}>{comp.codigo_operacion || "N/A"}</span></p>
                       </div>
                     </div>
-                    <div style={{ textAlign: "right", minWidth: "140px" }}>
-                      <p style={{ margin: "0 0 8px", fontSize: "24px", fontWeight: "800", color: "#166534" }}>
-                        S/{Number(comp.monto_total || comp.monto).toFixed(2)}
-                      </p>
-                      <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end", flexWrap: "wrap" }}>
+
+                    <div style={{ borderTop: "1px dashed #e2e8f0", paddingTop: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <span style={{ fontSize: "11px", color: "#94a3b8", display: "block" }}>MONTO TOTAL</span>
+                        <strong style={{ fontSize: "20px", color: "#166534" }}>S/ {Number(comp.monto_total || comp.monto).toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: "flex", gap: "6px" }}>
                         <button
                           type="button"
                           className="btn-outline"
-                          style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
+                          style={{ fontSize: "12px", padding: "6px 12px", borderRadius: "8px" }}
                           onClick={() => setModalComprobante(comp)}
                         >
-                          👁 Ver comprobante
+                          👁 Ver
                         </button>
                         <button
                           type="button"
                           className="btn-ok"
-                          style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
+                          style={{ fontSize: "12px", padding: "6px 12px", borderRadius: "8px" }}
                           onClick={() => descargarComprobante(comp)}
                         >
-                          📥 Descargar PDF
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-secundario"
-                          style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
-                          onClick={() => imprimirComprobante(comp)}
-                        >
-                          🖨 Imprimir
+                          📥 Descargar
                         </button>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -2715,6 +2849,129 @@ function PanelNegocio({ seccion }) {
               >
                 Cancelar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALLE DE EXPEDIENTE */}
+      {solicitudDetalle && (
+        <div className="modal-backdrop-modern" onClick={() => setSolicitudDetalle(null)}>
+          <div className="modal-content-modern" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-modern">
+              <div>
+                <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", letterSpacing: "0.05em" }}>Expediente Completo</span>
+                <h2 style={{ fontFamily: "monospace", fontSize: "18px" }}>{solicitudDetalle.id}</h2>
+              </div>
+              <button className="modal-close-btn" onClick={() => setSolicitudDetalle(null)}>&#10005;</button>
+            </div>
+            
+            <div className="modal-body-modern">
+              
+              {/* Tarjeta 1: Información General */}
+              <div className="detail-section-card">
+                <h3 className="detail-section-title">🏢 Información General del Establecimiento</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px 24px", fontSize: "13px" }}>
+                  <p style={{ margin: 0 }}><strong>RUC:</strong> {solicitudDetalle.ruc}</p>
+                  <p style={{ margin: 0 }}><strong>Nombre de Negocio:</strong> {solicitudDetalle.nombreNegocio}</p>
+                  <p style={{ margin: 0 }}><strong>Razón Social:</strong> {solicitudDetalle.razonSocial || "N/A"}</p>
+                  <p style={{ margin: 0 }}><strong>Giro Comercial:</strong> {solicitudDetalle.giro}</p>
+                  <p style={{ margin: 0 }}><strong>Dirección:</strong> {solicitudDetalle.direccion}</p>
+                  <p style={{ margin: 0 }}><strong>Ubigeo:</strong> {solicitudDetalle.distrito}, {solicitudDetalle.provincia}, {solicitudDetalle.departamento}</p>
+                  <p style={{ margin: 0 }}><strong>DNI Solicitante:</strong> {solicitudDetalle.dniSolicitante || "N/A"}</p>
+                  <p style={{ margin: 0 }}><strong>Nombres Solicitante:</strong> {solicitudDetalle.nombresSolicitante || "N/A"} {solicitudDetalle.apellidosSolicitante || ""}</p>
+                </div>
+              </div>
+
+              {/* Tarjeta 2: Información de Pago */}
+              <div className="detail-section-card">
+                <h3 className="detail-section-title">💳 Estado de Pago</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px 24px", fontSize: "13px" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>Estado del Pago:</strong>{" "}
+                    <span style={{ 
+                      padding: "2px 8px", 
+                      borderRadius: "999px", 
+                      fontSize: "11px", 
+                      fontWeight: "700",
+                      background: solicitudDetalle.estadoPago === "Confirmado" ? "#dcfce7" : "#fee2e2",
+                      color: solicitudDetalle.estadoPago === "Confirmado" ? "#166534" : "#991b1b"
+                    }}>
+                      {solicitudDetalle.estadoPago === "Confirmado" ? "Confirmado" : solicitudDetalle.estadoPago || "Pendiente"}
+                    </span>
+                  </p>
+                  <p style={{ margin: 0 }}><strong>Monto Pagado:</strong> S/ {Number(solicitudDetalle.montoPagado || 3).toFixed(2)}</p>
+                  <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {solicitudDetalle.metodoPago || "No registrado"}</p>
+                  <p style={{ margin: 0 }}><strong>Código Operación:</strong> {solicitudDetalle.pagoId || "N/A"}</p>
+                </div>
+              </div>
+
+              {/* Tarjeta 3: Documentos Adjuntados */}
+              <div className="detail-section-card">
+                <h3 className="detail-section-title">📄 Documentos Adjuntos</h3>
+                {(!solicitudDetalle.archivosPdf || solicitudDetalle.archivosPdf.filter(pdf => pdf && pdf.archivoUrl).length === 0) ? (
+                  <p style={{ margin: 0, fontSize: "13px", color: "#64748b", fontStyle: "italic" }}>No hay documentos disponibles</p>
+                ) : (
+                  <div className="file-grid">
+                    {solicitudDetalle.archivosPdf.filter(pdf => pdf && pdf.archivoUrl).map((pdf, idx) => (
+                      <div className="file-card-modern" key={pdf.documentId || idx}>
+                        <div className="file-card-icon">📄</div>
+                        <div className="file-card-info">
+                          <p className="name" title={pdf.archivoNombre || `Documento ${idx + 1}`}>{pdf.archivoNombre || `Documento ${idx + 1}`}</p>
+                          <p className="meta">{pdf.tipo === "application/pdf" ? "Archivo PDF" : "Documento"} • {pdf.tamaño ? `${(pdf.tamaño / 1024 / 1024).toFixed(2)} MB` : "Verificado"}</p>
+                        </div>
+                        <a 
+                          href={pdf.archivoUrl} 
+                          onClick={(e) => { e.preventDefault(); abrirPdf(pdf.archivoUrl); }}
+                          className="file-card-btn"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Ver documento
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Tarjeta 4: Estado del Trámite & Timeline */}
+              <div className="detail-section-card">
+                <h3 className="detail-section-title">⏳ Historial y Estado del Trámite</h3>
+                <div style={{ padding: "10px 0" }}>
+                  <Timeline solicitud={solicitudDetalle} />
+                </div>
+              </div>
+
+              {/* Observación / Rechazo / Motivo si aplica */}
+              {["Licencia rechazada", "Rechazado", "Observado", "Observada"].includes(solicitudDetalle.estado) && (
+                <div className="detail-section-card" style={{ background: "#fff5f5", border: "1px solid #fecaca" }}>
+                  <h3 className="detail-section-title" style={{ color: "#991b1b" }}>⚠️ Observaciones de la Municipalidad</h3>
+                  <p style={{ margin: 0, fontSize: "13.5px", color: "#991b1b", lineHeight: 1.5 }}>
+                    {solicitudDetalle.observacionFuncionario || solicitudDetalle.observacionInspector || "Revisión técnica pendiente de subsanación."}
+                  </p>
+                </div>
+              )}
+
+              {/* Acciones principales en el pie del expediente */}
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "10px", borderTop: "1px solid #e2e8f0", paddingTop: "18px" }}>
+                <button type="button" className="btn-outline" onClick={() => setSolicitudDetalle(null)}>
+                  Cerrar Detalles
+                </button>
+                {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(solicitudDetalle.estado) && (
+                  <>
+                    {!licenciaVencida(solicitudDetalle) && (
+                      <button type="button" className="btn-ok" onClick={() => descargarLicencia(solicitudDetalle)}>
+                        Descargar Licencia
+                      </button>
+                    )}
+                    <button type="button" className="btn-secundario" onClick={() => { setSolicitudDetalle(null); renovarLicencia(solicitudDetalle); }}>
+                      Renovar Licencia
+                    </button>
+                  </>
+                )}
+              </div>
+              
             </div>
           </div>
         </div>
