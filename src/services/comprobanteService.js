@@ -111,20 +111,31 @@ export const generarComprobante = async ({
   // sin esperar con 'await' a que termine para retornar inmediatamente
   (async () => {
     try {
-      console.log("[6] Guardando PDF en segundo plano");
-      const storageRef = ref(storage, `comprobantes/${uidUsuario}/${idSolicitud}/${nombrePdf}`);
-      await uploadBytes(storageRef, pdfBlob, { contentType: "application/pdf" });
-      const urlPdf = await getDownloadURL(storageRef);
-      comprobante.url_pdf = urlPdf;
-      comprobante.archivo_pdf_url = urlPdf;
-
+      // 1. Guardar metadatos en Firestore primero
+      console.log("[6] Guardando metadatos del comprobante en Firestore");
       await setDoc(doc(db, COLLECTION, comprobante.id_comprobante), comprobante);
-      console.log("[7] PDF y metadatos guardados en Firestore en segundo plano");
+      console.log("[7] Metadatos del comprobante guardados con éxito en Firestore");
+      
+      // 2. Intentar subir el PDF a Storage de forma aislada
+      try {
+        console.log("[8] Subiendo PDF a Firebase Storage");
+        const storageRef = ref(storage, `comprobantes/${uidUsuario}/${idSolicitud}/${nombrePdf}`);
+        await uploadBytes(storageRef, pdfBlob, { contentType: "application/pdf" });
+        const urlPdf = await getDownloadURL(storageRef);
+        
+        comprobante.url_pdf = urlPdf;
+        comprobante.archivo_pdf_url = urlPdf;
+        await setDoc(doc(db, COLLECTION, comprobante.id_comprobante), comprobante, { merge: true });
+        console.log("[9] URL del PDF asociada correctamente en Firestore");
+      } catch (storageErr) {
+        console.error("[COMPROBANTE] Error al subir el PDF a Storage (se mantendrá visible en local):", storageErr);
+      }
+
       if (onUploadComplete) {
         onUploadComplete(comprobante);
       }
     } catch (firebaseErr) {
-      console.error("[COMPROBANTE] Error guardando en Firebase (segundo plano):", firebaseErr);
+      console.error("[COMPROBANTE] Error crítico guardando comprobante en Firebase:", firebaseErr);
     }
   })();
 

@@ -517,7 +517,45 @@ function PanelNegocio({ seccion }) {
   const cargarComprobantes = async () => {
     try {
       setCargandoComprobantes(true);
-      const lista = await obtenerComprobantesPorUsuario(usuario?.uid);
+      let lista = await obtenerComprobantesPorUsuario(usuario?.uid);
+      
+      const solicitudesDeUsuario = misSolicitudes.length > 0 ? misSolicitudes : await obtenerSolicitudes(usuario?.uid);
+      const solicitudesPagadas = solicitudesDeUsuario.filter(sol => sol.estadoPago === "Confirmado");
+      
+      let huboCambios = false;
+      for (const sol of solicitudesPagadas) {
+        const tieneComprobante = lista.some(comp => comp.id_solicitud === sol.id);
+        if (!tieneComprobante) {
+          console.log(`[COMPROBANTE AUTO-GEN] Generando comprobante faltante para solicitud: ${sol.id}`);
+          const tipoFinal = sol.ruc?.startsWith("20") ? "factura" : "boleta";
+          const dNombres = sol.nombresSolicitante || usuario?.nombre || "";
+          const dApellidos = sol.apellidosSolicitante || "";
+          
+          await generarComprobante({
+            uidUsuario: usuario?.uid || "",
+            correoUsuario: usuario?.correo || "",
+            idSolicitud: sol.id,
+            tipo: tipoFinal,
+            dniCliente: sol.dniSolicitante || usuario?.dni || "",
+            nombresCliente: dNombres,
+            apellidosCliente: dApellidos,
+            rucCliente: sol.ruc || "",
+            razonSocial: sol.razonSocial || "",
+            direccionCliente: sol.direccion || "",
+            descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
+            monto: MONTO_TRAMITE,
+            metodoPago: sol.metodoPago || "Pago registrado",
+            estadoPago: "Pagado",
+            codigoOperacion: `DEMO-${Date.now().toString().slice(-8)}`
+          });
+          huboCambios = true;
+        }
+      }
+      
+      if (huboCambios) {
+        lista = await obtenerComprobantesPorUsuario(usuario?.uid);
+      }
+      
       setComprobantes(lista);
     } catch (error) {
       console.error("Error al cargar comprobantes:", error);
