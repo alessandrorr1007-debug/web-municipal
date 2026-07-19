@@ -151,20 +151,19 @@ function LandingPage({ onLogin, onRegister }) {
       </section>
 
       <section className="landing-contacto" style={{ background: "#1f3b57", color: "white", padding: "60px 24px", textAlign: "center" }}>
-        <h2 style={{ margin: "0 0 12px" }}>Municipalidad de Trujillo</h2>
+        <h2 style={{ margin: "0 0 12px" }}>WEB-MUNICIPAL</h2>
         <p style={{ color: "#93c5fd", margin: "0 0 24px", fontSize: "16px" }}>
-          Av. España Nro. 456, Centro de Trujillo - La Libertad
+          Plataforma Digital de Trámites Municipales
         </p>
         <div style={{ display: "flex", gap: "24px", justifyContent: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "14px", color: "#bfdbfe" }}>&#128222; (044) 234567</span>
-          <span style={{ fontSize: "14px", color: "#bfdbfe" }}>&#128231; tramites@mtrujillo.gob.pe</span>
-          <span style={{ fontSize: "14px", color: "#bfdbfe" }}>&#128205; Trujillo, La Libertad</span>
+          <span style={{ fontSize: "14px", color: "#bfdbfe" }}>&#128231; webmunicipal01@gmail.com</span>
+          <span style={{ fontSize: "14px", color: "#bfdbfe" }}>&#127760; https://web-municipal-1.onrender.com</span>
         </div>
       </section>
 
       <footer className="landing-footer" style={{ background: "#0f172a", color: "#64748b", padding: "24px", textAlign: "center", fontSize: "13px" }}>
         <p style={{ margin: "0 0 4px" }}>Sistema Web de Gestión de Licencias de Funcionamiento v1.0</p>
-        <p style={{ margin: 0 }}>Municipalidad Provincial de Trujillo &copy; {new Date().getFullYear()}</p>
+        <p style={{ margin: 0 }}>WEB-MUNICIPAL &copy; {new Date().getFullYear()}</p>
       </footer>
     </div>
   );

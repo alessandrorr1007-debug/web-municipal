@@ -15,6 +15,15 @@ import QRCode from "qrcode";
 const COLLECTION = "comprobantes_pago";
 const IGV_RATE = 0.18;
 
+export const MUNICIPALIDAD_CONFIG = {
+  nombre: "WEB-MUNICIPAL",
+  direccion: "Plataforma Digital de Trámites Municipales",
+  telefono: "",
+  email: "webmunicipal01@gmail.com",
+  web: "https://web-municipal-1.onrender.com",
+  ruc: "20456789012"
+};
+
 const generarSerie = (tipo) => {
   return tipo === "boleta" ? "B001" : "F001";
 };
@@ -200,14 +209,14 @@ export const generarPdfComprobante = async (comprobante) => {
   docPdf.setTextColor(30, 58, 138);
   docPdf.setFont("helvetica", "bold");
   docPdf.setFontSize(11);
-  docPdf.text("MUNICIPALIDAD PROVINCIAL DE TRUJILLO", 34, 18);
+  docPdf.text(MUNICIPALIDAD_CONFIG.nombre, 34, 18);
   
   docPdf.setTextColor(71, 85, 105);
   docPdf.setFont("helvetica", "normal");
   docPdf.setFontSize(8);
-  docPdf.text("Jr. San Martín 328, Trujillo, La Libertad - Perú", 34, 22);
-  docPdf.text("Teléfono: (044) 231234 | Email: contacto@munitrujillo.gob.pe", 34, 26);
-  docPdf.text("Web: www.munitrujillo.gob.pe", 34, 30);
+  docPdf.text(MUNICIPALIDAD_CONFIG.direccion, 34, 22);
+  docPdf.text(`Email: ${MUNICIPALIDAD_CONFIG.email}`, 34, 26);
+  docPdf.text(`Web: ${MUNICIPALIDAD_CONFIG.web}`, 34, 30);
 
   // Recuadro derecho de Boleta/Factura
   docPdf.setDrawColor(30, 58, 138);

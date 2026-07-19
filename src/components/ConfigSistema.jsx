@@ -5,11 +5,11 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 
 const CONFIG_DEFAULT = {
-  nombreMunicipalidad: "Municipalidad Provincial de Trujillo",
-  direccionMunicipal: "Av. España Nro. 456, Centro de Trujillo",
-  telefonoMunicipal: "(044) 234567",
-  correoMunicipal: "tramites@mtrujillo.gob.pe",
-  rucMunicipal: "20481265478",
+  nombreMunicipalidad: "WEB-MUNICIPAL",
+  direccionMunicipal: "Plataforma Digital de Trámites Municipales",
+  telefonoMunicipal: "N/A",
+  correoMunicipal: "webmunicipal01@gmail.com",
+  rucMunicipal: "20456789012",
 
   montoTramite: 3,
   vigenciaLicencia: 365,

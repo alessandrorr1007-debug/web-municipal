@@ -18,6 +18,13 @@ import {
 } from "mercadopago";
 
 const __filename = fileURLToPath(import.meta.url);
+
+const MUNICIPALIDAD_CONFIG = {
+  nombre: "WEB-MUNICIPAL",
+  correo: "webmunicipal01@gmail.com",
+  url: "https://web-municipal-1.onrender.com",
+  sistemaNombre: "Sistema de Licencias v1.0"
+};
 const __dirname = dirname(__filename);
 
 dotenv.config({ path: join(__dirname, ".env") });
@@ -987,13 +994,13 @@ app.post("/api/comprobantes/enviar-correo", async (req, res) => {
     const nombrePdf = `${tipo_comprobante === "boleta" ? "BOLETA" : "FACTURA"}_${serie || codigo_unico.split("-")[0]}_${numero || codigo_unico.split("-")[1]}.pdf`;
 
     const mailOptions = {
-      from: `"Municipalidad de Trujillo" <${SMTP_EMAIL}>`,
+      from: `"${MUNICIPALIDAD_CONFIG.nombre}" <${SMTP_EMAIL}>`,
       to: correo_usuario,
       subject: `${tipoLabel} — ${codigo_unico} | Comprobante de pago municipal`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
           <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: #1f3b57; border-radius: 10px;">
-            <h1 style="color: white; font-size: 18px; margin: 0;">Municipalidad de Trujillo</h1>
+            <h1 style="color: white; font-size: 18px; margin: 0;">${MUNICIPALIDAD_CONFIG.nombre}</h1>
             <p style="color: #93c5fd; font-size: 12px; margin: 4px 0 0;">Sistema de Licencias Municipales</p>
           </div>
 
@@ -1037,8 +1044,8 @@ app.post("/api/comprobantes/enviar-correo", async (req, res) => {
           ` : ""}
 
           <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 16px; text-align: center;">
-            Este comprobante fue generado automáticamente por el sistema municipal.<br/>
-            Municipalidad de Trujillo — Sistema de Licencias v1.0
+            Este comprobante fue generado automáticamente por la plataforma.<br/>
+            ${MUNICIPALIDAD_CONFIG.nombre} — ${MUNICIPALIDAD_CONFIG.sistemaNombre}
           </p>
         </div>
       `,
