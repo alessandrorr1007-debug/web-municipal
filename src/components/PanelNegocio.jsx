@@ -740,6 +740,7 @@ function PanelNegocio({ seccion }) {
 
       // 1. Subir documentos a Cloudinary uno por uno
       const pdfsSubidos = [];
+      const erroresSubida = [];
       for (const archivo of todosLosDocs) {
         try {
           const resultado = await conTimeout(
@@ -750,11 +751,15 @@ function PanelNegocio({ seccion }) {
           pdfsSubidos.push(resultado);
         } catch (err) {
           console.error("[SOLICITUD] Error subiendo archivo:", archivo.name, err);
+          erroresSubida.push(`${archivo.name}: ${err.message}`);
         }
       }
 
       if (pdfsSubidos.length === 0) {
-        alert("No se pudo subir ningún archivo. Verifique su conexión e intente nuevamente.");
+        const errorMsg = erroresSubida.length > 0
+          ? `No se pudo subir ningún archivo:\n${erroresSubida.join("\n")}`
+          : "No se pudo subir ningún archivo. Verifique su conexión e intente nuevamente.";
+        alert(errorMsg);
         setGuardando(false);
         return;
       }

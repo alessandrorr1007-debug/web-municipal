@@ -24,7 +24,14 @@ export const subirArchivoACloudinary = async (file) => {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error("No se pudo subir el archivo a Cloudinary.");
+      let detail = "";
+      try {
+        const errData = await response.json();
+        detail = errData.error?.message || JSON.stringify(errData);
+      } catch (e) {
+        detail = response.statusText;
+      }
+      throw new Error(`Error de Cloudinary (${response.status}): ${detail}`);
     }
 
     const data = await response.json();
