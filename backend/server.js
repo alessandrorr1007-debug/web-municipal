@@ -86,6 +86,14 @@ const PORT = process.env.PORT || 3000;
 const TOKEN_DECOLECTA =
   process.env.DECOLECTA_TOKEN;
 
+console.log("═══════════════════════════════════════════════");
+console.log("  DECOLECTA TOKEN — DIAGNÓSTICO");
+console.log("═══════════════════════════════════════════════");
+console.log("[DECOLECTA] Token cargado:", !!TOKEN_DECOLECTA);
+console.log("[DECOLECTA] Longitud:", TOKEN_DECOLECTA?.length || 0);
+console.log("[DECOLECTA] Empieza con 'sk_':", TOKEN_DECOLECTA?.startsWith("sk_") || false);
+console.log("═══════════════════════════════════════════════");
+
 const FLOW_API_KEY = process.env.FLOW_API_KEY || "";
 const FLOW_SECRET_KEY = process.env.FLOW_SECRET_KEY || "";
 const FLOW_BASE_URL =
@@ -440,7 +448,8 @@ app.get("/api/consultar-dni/:dni", async (req, res) => {
     console.error("Message:", error.message);
 
     if (error.response?.status === 401) {
-      return res.status(501).json({ error: "Token de Decolecta inválido o expirado." });
+      console.error("[DNI] Decolecta 401 — Token longitud:", TOKEN_DECOLECTA?.length || 0, "sk_:", TOKEN_DECOLECTA?.startsWith("sk_") || false);
+      return res.status(501).json({ error: "Token de Decolecta inválido o expirado. Verifica DECOLECTA_TOKEN en Render." });
     }
     if (error.response?.status === 404) {
       return res.status(404).json({ error: "DNI no encontrado" });
@@ -562,7 +571,8 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
     console.error("Message:", error.message);
 
     if (error.response?.status === 401) {
-      return res.status(501).json({ error: "Token de Decolecta inválido o expirado." });
+      console.error("[RUC] Decolecta 401 — Token longitud:", TOKEN_DECOLECTA?.length || 0, "sk_:", TOKEN_DECOLECTA?.startsWith("sk_") || false);
+      return res.status(501).json({ error: "Token de Decolecta inválido o expirado. Verifica DECOLECTA_TOKEN en Render." });
     }
     if (error.response?.status === 404) {
       return res.status(404).json({ error: "El RUC ingresado no se encuentra registrado en SUNAT." });
