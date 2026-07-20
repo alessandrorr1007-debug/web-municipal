@@ -1074,17 +1074,126 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
 
   const iniciarPagoCaja = () => {
     setMetodoPago("Pago presencial en caja");
-    setEstadoPago("Pendiente");
+    setEstadoPago("Pendiente de pago en caja");
     setDetallePago({
       id: "PENDIENTE-CAJA",
       status: "pending",
       metodo: "caja_municipal",
     });
-    alert("Opción de pago en caja seleccionada. Ya puedes enviar la solicitud.");
+    alert("Pago en caja seleccionado. Debe acercarse a la Municipalidad para realizar el pago de S/ 3.00 antes de que su solicitud sea procesada. Ya puedes enviar la solicitud.");
+  };
+
+  const iniciarPagoDemo = async () => {
+    try {
+      setProcesandoPago(true);
+
+      const emailUsuario = usuario?.correo || usuario?.email || "";
+
+      if (!emailUsuario || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailUsuario)) {
+        alert(
+          "Tu perfil no tiene un correo electrónico válido. Actualiza tu perfil antes de continuar."
+        );
+        cambiarSeccion?.("mi-cuenta");
+        return;
+      }
+
+      const todosLosDocs = [
+        docIdentidad, docFichaRuc, docAcreditaLocal, docPlano,
+        docDj, docSanitario, docDigemid, docRepresentacion, docRepresentacionLegal, ...archivos,
+      ].filter(Boolean);
+
+      if (todosLosDocs.length === 0) {
+        alert("Debe subir al menos un documento antes de continuar con el pago.");
+        return;
+      }
+
+      const conTimeout = (promesa, ms, mensajeError) => {
+        let timeoutId;
+        const promesaTimeout = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error(mensajeError)), ms);
+        });
+        return Promise.race([
+          promesa.finally(() => clearTimeout(timeoutId)),
+          promesaTimeout,
+        ]);
+      };
+
+      console.log("[DEMO] Subiendo documentos...");
+      const pdfsSubidos = [];
+      for (const archivo of todosLosDocs) {
+        try {
+          const resultado = await conTimeout(
+            convertirPdfABase64(archivo),
+            15000,
+            `Tiempo de espera agotado al subir el archivo ${archivo.name}.`
+          );
+          pdfsSubidos.push(resultado);
+        } catch (err) {
+          console.error("[DEMO] Error subiendo archivo:", archivo.name, err);
+        }
+      }
+
+      if (pdfsSubidos.length === 0) {
+        alert("No se pudo subir ningún archivo.");
+        return;
+      }
+
+      const tipoContribuyente = form.ruc.startsWith("20") ? "Persona Jurídica" : "Persona Natural";
+
+      console.log("[DEMO] Guardando solicitud...");
+      const nueva = await conTimeout(
+        guardarSolicitud({
+          uidUsuario: usuario?.uid || "",
+          correoUsuario: emailUsuario,
+          tipoTramite: form.tipoTramite,
+          dniSolicitante, nombresSolicitante, apellidosSolicitante,
+          ruc: form.ruc, nombreNegocio: form.nombreNegocio,
+          razonSocial: form.razonSocial, direccion: form.direccion,
+          giro: form.giro, estadoSunat: form.estadoSunat,
+          condicionSunat: form.condicionSunat,
+          departamento: form.departamento, provincia: form.provincia,
+          distrito: form.distrito,
+          tipoContribuyente, relacionSolicitante,
+          archivosPdf: pdfsSubidos,
+          archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
+          archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
+          metodoPago: "Demo",
+          estadoPago: "Confirmado Demo",
+          comprobantePago: "Pago simulado (Demo)",
+          estado: "PENDIENTE_PAGO",
+          inspeccion: "Sin inspección",
+          recomendacionInspector: "", observacionInspector: "",
+          evidenciasInspector: [], decisionFuncionario: "",
+          observacionFuncionario: "", numeroLicencia: "",
+          fechaAprobacion: "", fechaExpiracionLicencia: "",
+          pagoId: `DEMO-${Date.now().toString().slice(-8)}`,
+          pagoEstadoDetalle: "approved_demo",
+        }),
+        15000,
+        "Tiempo de espera agotado al registrar la solicitud."
+      );
+
+      console.log("[DEMO] Solicitud guardada:", nueva.id);
+
+      await crearNotificacion(usuario?.uid, {
+        titulo: "Solicitud registrada (Demo)",
+        descripcion: `Su solicitud EXP-${nueva.id} ha sido registrada en modo demo. El pago ha sido simulado.`,
+        icono: "🧪",
+      }, emailUsuario);
+
+      alert("Pago demo simulado correctamente. Tu solicitud EXP-" + nueva.id + " ha sido registrada.");
+      cargarMisSolicitudes().catch(() => {});
+      cambiarSeccion?.("mis-solicitudes");
+    } catch (error) {
+      console.error("[DEMO] Error:", error);
+      alert(getErrorMessage(error) || "No se pudo procesar el pago demo.");
+    } finally {
+      setProcesandoPago(false);
+    }
   };
 
   const enviarSolicitud = async () => {
-    if (metodoPago !== "Pago presencial en caja" && estadoPago !== "Confirmado") {
+    if (metodoPago !== "Pago presencial en caja" && estadoPago !== "Confirmado" && estadoPago !== "Confirmado Demo") {
       alert("Debe realizar y confirmar el pago antes de enviar la solicitud.");
       return;
     }
@@ -2339,7 +2448,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                     <p><strong>Comprobante:</strong> {tipoComprobante === "boleta" ? "Boleta de Venta" : "Factura Electrónica"}</p>
                   )}
                   <div className="monto-box"><span>Total a pagar</span><strong>S/{MONTO_TRAMITE.toFixed(2)}</strong></div>
-                  <span className={`badge ${estadoPago === "Confirmado" ? "ok" : "warning"}`}>{estadoPago}</span>
+                  <span className={`badge ${estadoPago === "Confirmado" || estadoPago === "Confirmado Demo" ? "ok" : "warning"}`}>{estadoPago}</span>
                   {detallePago?.id && <p className="text-muted"><strong>Operación:</strong> {detallePago.id}</p>}
                 </aside>
 
@@ -2427,6 +2536,12 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                               <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Paga en la Municipalidad.</p>
                               <button type="button" className="btn-outline btn-full" onClick={iniciarPagoCaja} disabled={procesandoPago} style={{ fontSize: "13px" }}>Seleccionar caja</button>
                             </div>
+                            <div style={{ border: "1px solid #e9d5ff", background: "#faf5ff", borderRadius: "14px", padding: "18px" }}>
+                              <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#129513;</div>
+                              <h4 style={{ margin: "0 0 6px", color: "#6b21a8", fontSize: "14px" }}>Pago Demo (simulación)</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Simula un pago aprobado sin costo. Solo para pruebas.</p>
+                              <button type="button" className="btn-outline btn-full" onClick={iniciarPagoDemo} disabled={procesandoPago} style={{ fontSize: "13px", color: "#6b21a8", borderColor: "#d8b4fe" }}>Simular pago Demo</button>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -2483,7 +2598,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
 
               <div className="acciones-pago acciones-pago-modern">
                 <button type="button" onClick={() => setPaso("solicitud")}>Volver</button>
-                <button type="button" className="btn-pago" onClick={enviarSolicitud} disabled={guardando || !tipoComprobante || (estadoPago !== "Confirmado" && metodoPago !== "Pago presencial en caja")}>{guardando ? "Guardando solicitud..." : "Enviar solicitud"}</button>
+                <button type="button" className="btn-pago" onClick={enviarSolicitud} disabled={guardando || !tipoComprobante || (estadoPago !== "Confirmado" && estadoPago !== "Confirmado Demo" && metodoPago !== "Pago presencial en caja")}>{guardando ? "Guardando solicitud..." : "Enviar solicitud"}</button>
               </div>
             </section>
           )}
@@ -2498,7 +2613,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                 <p><strong>Solicitante:</strong> {nombresSolicitante} {apellidosSolicitante}</p>
                 <p><strong>Tipo de trámite:</strong> {form.tipoTramite}</p>
                 <p><strong>Estado de solicitud:</strong> Registrada</p>
-                <p><strong>Estado de pago:</strong> PAGADO</p>
+                <p><strong>Estado de pago:</strong> {estadoPago === "Confirmado" ? "PAGADO" : estadoPago}</p>
                 <p><strong>Monto:</strong> S/{MONTO_TRAMITE.toFixed(2)}</p>
                 {comprobanteGenerado && (
                   <p><strong>Comprobante:</strong> {comprobanteGenerado.serie}-{comprobanteGenerado.numero} ({comprobanteGenerado.tipo_comprobante === "boleta" ? "Boleta" : "Factura"})</p>
