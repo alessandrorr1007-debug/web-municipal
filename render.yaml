@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: web-municipal
+    env: node
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: node backend/server.js
