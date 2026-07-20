@@ -1688,6 +1688,8 @@ function PanelFuncionario({ seccion }) {
   };
 
   const puedeAgendar = (s) => {
+    const pagoConfirmado = s.estadoPago === "Confirmado" || s.estado === "Pago confirmado" || s.estado === "Pagado";
+    if (!pagoConfirmado) return false;
     const estado = normalizarEstado(s);
     return estado === ESTADOS.PAGO_CONFIRMADO || estado === ESTADOS.REVISION_FUNCIONARIO || s.estado === "Pago confirmado" || s.estado === "Documentos validados";
   };
