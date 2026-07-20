@@ -321,6 +321,12 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+app.get("/api/config/payment-config", (req, res) => {
+  res.json({
+    demoEnabled: process.env.PAYMENT_DEMO_ENABLED === "true",
+  });
+});
+
 app.get("/api/documento-proxy", verificarToken, async (req, res) => {
   try {
     const { url } = req.query;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { consultarRuc } from "../services/rucService";
 import { consultarDni } from "../services/dniService";
-import { crearOrdenFlow, verificarPagoFlow } from "../services/pagoService";
+import { crearOrdenFlow, verificarPagoFlow, obtenerConfiguracionPago } from "../services/pagoService";
 import {
   guardarSolicitud,
   obtenerSolicitudes,
@@ -408,6 +408,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
   const [tipoComprobante, setTipoComprobante] = useState("");
   const [comprobanteGenerado, setComprobanteGenerado] = useState(null);
   const [enviandoCorreo, setEnviandoCorreo] = useState(false);
+  const [demoHabilitado, setDemoHabilitado] = useState(false);
 
   const getDocumentStateMap = () => {
     return {
@@ -939,6 +940,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
     }
 
     setPaso("pago");
+    obtenerConfiguracionPago().then(cfg => setDemoHabilitado(cfg.demoEnabled)).catch(() => {});
   };
 
   const iniciarPagoFlow = async () => {
@@ -1157,9 +1159,10 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
           archivosPdf: pdfsSubidos,
           archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
           archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
-          metodoPago: "Demo",
-          estadoPago: "Confirmado Demo",
-          comprobantePago: "Pago simulado (Demo)",
+          metodoPago: "DEMO",
+          estadoPago: "Confirmado",
+          comprobantePago: "Pago simulado (DEMO)",
+          fechaPago: new Date().toISOString(),
           estado: "PENDIENTE_PAGO",
           inspeccion: "Sin inspección",
           recomendacionInspector: "", observacionInspector: "",
@@ -1193,7 +1196,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
   };
 
   const enviarSolicitud = async () => {
-    if (metodoPago !== "Pago presencial en caja" && estadoPago !== "Confirmado" && estadoPago !== "Confirmado Demo") {
+    if (metodoPago !== "Pago presencial en caja" && estadoPago !== "Confirmado") {
       alert("Debe realizar y confirmar el pago antes de enviar la solicitud.");
       return;
     }
@@ -2448,7 +2451,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                     <p><strong>Comprobante:</strong> {tipoComprobante === "boleta" ? "Boleta de Venta" : "Factura Electrónica"}</p>
                   )}
                   <div className="monto-box"><span>Total a pagar</span><strong>S/{MONTO_TRAMITE.toFixed(2)}</strong></div>
-                  <span className={`badge ${estadoPago === "Confirmado" || estadoPago === "Confirmado Demo" ? "ok" : "warning"}`}>{estadoPago}</span>
+                  <span className={`badge ${estadoPago === "Confirmado" ? "ok" : "warning"}`}>{estadoPago}</span>
                   {detallePago?.id && <p className="text-muted"><strong>Operación:</strong> {detallePago.id}</p>}
                 </aside>
 
@@ -2536,12 +2539,14 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                               <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Paga en la Municipalidad.</p>
                               <button type="button" className="btn-outline btn-full" onClick={iniciarPagoCaja} disabled={procesandoPago} style={{ fontSize: "13px" }}>Seleccionar caja</button>
                             </div>
+                            {demoHabilitado && (
                             <div style={{ border: "1px solid #e9d5ff", background: "#faf5ff", borderRadius: "14px", padding: "18px" }}>
                               <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#129513;</div>
                               <h4 style={{ margin: "0 0 6px", color: "#6b21a8", fontSize: "14px" }}>Pago Demo (simulación)</h4>
                               <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Simula un pago aprobado sin costo. Solo para pruebas.</p>
                               <button type="button" className="btn-outline btn-full" onClick={iniciarPagoDemo} disabled={procesandoPago} style={{ fontSize: "13px", color: "#6b21a8", borderColor: "#d8b4fe" }}>Simular pago Demo</button>
                             </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -2598,7 +2603,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
 
               <div className="acciones-pago acciones-pago-modern">
                 <button type="button" onClick={() => setPaso("solicitud")}>Volver</button>
-                <button type="button" className="btn-pago" onClick={enviarSolicitud} disabled={guardando || !tipoComprobante || (estadoPago !== "Confirmado" && estadoPago !== "Confirmado Demo" && metodoPago !== "Pago presencial en caja")}>{guardando ? "Guardando solicitud..." : "Enviar solicitud"}</button>
+                <button type="button" className="btn-pago" onClick={enviarSolicitud} disabled={guardando || !tipoComprobante || (estadoPago !== "Confirmado" && metodoPago !== "Pago presencial en caja")}>{guardando ? "Guardando solicitud..." : "Enviar solicitud"}</button>
               </div>
             </section>
           )}

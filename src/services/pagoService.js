@@ -60,3 +60,13 @@ export const verificarPagoFlow = async (token) => {
 
   return response.json();
 };
+
+export const obtenerConfiguracionPago = async () => {
+  try {
+    const response = await fetch(`${API_URL}/api/config/payment-config`);
+    if (!response.ok) return { demoEnabled: false };
+    return response.json();
+  } catch {
+    return { demoEnabled: false };
+  }
+};
