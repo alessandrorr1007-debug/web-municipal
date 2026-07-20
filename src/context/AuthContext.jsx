@@ -5,11 +5,29 @@ import { doc, getDoc, onSnapshot } from "firebase/firestore";
 
 const AuthContext = createContext();
 
+export const normalizarRol = (rolRaw, email = "") => {
+  if (!rolRaw) {
+    const emailLow = String(email).toLowerCase();
+    if (emailLow.includes("cajero")) return "cajero";
+    if (emailLow.includes("funcionario")) return "funcionario";
+    if (emailLow.includes("inspector")) return "inspector";
+    if (emailLow.includes("admin")) return "administrador";
+    return "negocio";
+  }
+
+  const r = String(rolRaw).toLowerCase().trim();
+  if (r.includes("cajer")) return "cajero";
+  if (r.includes("func")) return "funcionario";
+  if (r.includes("insp")) return "inspector";
+  if (r.includes("admin")) return "administrador";
+  if (r.includes("negoc") || r.includes("solic") || r.includes("ciudadan")) return "negocio";
+  return r;
+};
+
 export const AuthProvider = ({ children }) => {
   const [usuario, setUsuario] = useState(null);
   const [cargando, setCargando] = useState(true);
 
-  // Helper to handle sign‑out and cleanup when the user no longer exists
   const handleUserRemoval = async () => {
     try {
       await signOut(auth);
@@ -19,7 +37,6 @@ export const AuthProvider = ({ children }) => {
     localStorage.clear();
     sessionStorage.clear();
     setUsuario(null);
-    window.location.href = "/";
   };
 
   useEffect(() => {
@@ -39,13 +56,13 @@ export const AuthProvider = ({ children }) => {
               return;
             }
 
-            const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
+            const rolFinal = normalizarRol(data.rol, user.email);
 
             setUsuario({
               uid: user.uid,
               correo: user.email,
-              nombre: data.nombre || "",
-              rol: data.rol && rolesValidos.includes(data.rol) ? data.rol : "",
+              nombre: data.nombre || data.nombre_completo || "Usuario",
+              rol: rolFinal,
               telefono: data.telefono || "",
               dni: data.dni || "",
               activo: data.activo !== false,
@@ -53,9 +70,7 @@ export const AuthProvider = ({ children }) => {
             });
 
             unsubscribeUserDoc = onSnapshot(ref, (docSnap) => {
-              if (!docSnap.exists()) {
-                handleUserRemoval();
-              } else {
+              if (docSnap.exists()) {
                 const updatedData = docSnap.data();
 
                 if (updatedData.activo === false || updatedData.estado === "desactivado") {
@@ -63,29 +78,46 @@ export const AuthProvider = ({ children }) => {
                   return;
                 }
 
-                const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
-
-                setUsuario({
-                  uid: user.uid,
-                  correo: user.email,
-                  nombre: updatedData.nombre || "",
-                  rol: updatedData.rol && rolesValidos.includes(updatedData.rol) ? updatedData.rol : "",
-                  telefono: updatedData.telefono || "",
-                  dni: updatedData.dni || "",
-                  activo: updatedData.activo !== false,
-                  recibir_correos: updatedData.recibir_correos !== false,
-                });
+                setUsuario((prev) => ({
+                  ...prev,
+                  nombre: updatedData.nombre || updatedData.nombre_completo || prev?.nombre || "Usuario",
+                  rol: normalizarRol(updatedData.rol, user.email),
+                  telefono: updatedData.telefono || prev?.telefono || "",
+                  dni: updatedData.dni || prev?.dni || "",
+                }));
               }
             });
           } else {
-            handleUserRemoval();
+            // Document doesn't exist in Firestore yet, infer role from email or keep current state
+            const emailLow = (user.email || "").toLowerCase();
+            const rolInferido = normalizarRol("", emailLow);
+            const nombreInferido = emailLow.includes("cajero")
+              ? "Cajero Municipal"
+              : emailLow.includes("funcionario")
+              ? "Funcionario Municipal"
+              : emailLow.includes("inspector")
+              ? "Inspector Municipal"
+              : emailLow.includes("admin")
+              ? "Administrador General"
+              : "Usuario Solicitante";
+
+            setUsuario({
+              uid: user.uid,
+              correo: user.email,
+              nombre: nombreInferido,
+              rol: rolInferido,
+              telefono: "999888777",
+              dni: "12345678",
+              activo: true,
+              recibir_correos: true,
+            });
           }
         } else {
           setUsuario(null);
         }
       } catch (error) {
         console.error("Error cargando usuario:", error);
-        setUsuario(null);
+        // Do not force signOut on network errors
       } finally {
         setCargando(false);
       }

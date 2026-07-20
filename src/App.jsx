@@ -14,7 +14,7 @@ import PanelAdmin from "./components/PanelAdmin";
 import PagoExitoso from "./components/PagoExitoso";
 import ErrorBoundary from "./components/ErrorBoundary";
 
-import { useAuth } from "./context/AuthContext";
+import { useAuth, normalizarRol } from "./context/AuthContext";
 import { cerrarSesion } from "./services/authService";
 
 function App() {
@@ -141,6 +141,8 @@ function App() {
     );
   }
 
+  const rolNorm = normalizarRol(usuario.rol, usuario.correo);
+
   const seccionesPorRol = {
     negocio: ["inicio", "nueva-solicitud", "mis-solicitudes", "mis-pagos", "notificaciones", "mi-cuenta"],
     cajero: ["inicio", "nueva-solicitud", "historial"],
@@ -166,7 +168,7 @@ function App() {
   };
 
   const renderSeccion = () => {
-    if (usuario.rol === "negocio") {
+    if (rolNorm === "negocio") {
       switch (seccion) {
         case "nueva-solicitud": return <PanelNegocio seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
         case "mis-solicitudes": return <PanelNegocio seccion="mis-solicitudes" cambiarSeccion={cambiarSeccion} />;
@@ -177,7 +179,7 @@ function App() {
         default: return <PanelNegocio seccion="inicio" cambiarSeccion={cambiarSeccion} />;
       }
     }
-    if (usuario.rol === "cajero") {
+    if (rolNorm === "cajero") {
       switch (seccion) {
         case "nueva-solicitud": return <PanelCajero seccion="nueva-solicitud" />;
         case "historial": return <PanelCajero seccion="historial" />;
@@ -185,7 +187,7 @@ function App() {
         default: return <PanelCajero seccion="inicio" />;
       }
     }
-    if (usuario.rol === "funcionario") {
+    if (rolNorm === "funcionario") {
       switch (seccion) {
         case "solicitudes": return <PanelFuncionario seccion="solicitudes" />;
         case "registro-presencial": return <PanelFuncionario seccion="registro-presencial" />;
@@ -195,7 +197,7 @@ function App() {
         default: return <PanelFuncionario seccion="inicio" />;
       }
     }
-    if (usuario.rol === "inspector") {
+    if (rolNorm === "inspector") {
       switch (seccion) {
         case "inspecciones-hoy": return <PanelInspector seccion="inspecciones-hoy" />;
         case "historial": return <PanelInspector seccion="historial" />;
@@ -203,7 +205,7 @@ function App() {
         default: return <PanelInspector seccion="inicio" />;
       }
     }
-    if (usuario.rol === "administrador") {
+    if (rolNorm === "administrador") {
       switch (seccion) {
         case "gestion-usuarios": return <PanelAdmin seccion="gestion-usuarios" />;
         case "gestion-roles": return <PanelAdmin seccion="gestion-roles" />;
@@ -225,14 +227,14 @@ function App() {
   return (
     <div className="dashboard">
       <Sidebar
-        usuario={usuario}
+        usuario={{ ...usuario, rol: rolNorm }}
         rolEtiqueta={rolEtiqueta}
         rolColor={rolColor}
         seccion={seccion}
         onCambiarSeccion={cambiarSeccion}
         abierto={sidebarAbierto}
         onToggle={() => setSidebarAbierto(!sidebarAbierto)}
-        secciones={seccionesPorRol[usuario.rol] || []}
+        secciones={seccionesPorRol[rolNorm] || []}
         notificacionesNoLeidas={notificacionesNoLeidas}
       />
 
@@ -274,13 +276,13 @@ function App() {
 
           <div className="topbar-user">
             <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.1)", padding: "8px 16px", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(8px)" }}>
-              <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: rolColor[usuario.rol] || "#6366f1", display: "grid", placeItems: "center", color: "white", fontWeight: 800, fontSize: "14px" }}>
+              <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: rolColor[rolNorm] || "#6366f1", display: "grid", placeItems: "center", color: "white", fontWeight: 800, fontSize: "14px" }}>
                 {usuario.nombre?.charAt(0)?.toUpperCase() || "U"}
               </div>
               <div>
                 <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "white" }}>{usuario.nombre || "Usuario"}</p>
-                <span style={{ fontSize: "11px", fontWeight: 700, color: rolColor[usuario.rol] || "#6366f1", background: "white", padding: "2px 8px", borderRadius: "999px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                  {rolEtiqueta[usuario.rol] || usuario.rol}
+                <span style={{ fontSize: "11px", fontWeight: 700, color: rolColor[rolNorm] || "#6366f1", background: "white", padding: "2px 8px", borderRadius: "999px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {rolEtiqueta[rolNorm] || rolNorm}
                 </span>
               </div>
             </div>
