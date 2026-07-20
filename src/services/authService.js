@@ -78,11 +78,13 @@ export const iniciarSesion = async (correo, password) => {
 
   const data = usuarioSnap.data();
 
+    const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
+
   return {
     uid: usuario.uid,
     correo: usuario.email,
     nombre: data.nombre || "",
-    rol: data.rol || "",
+    rol: data.rol && rolesValidos.includes(data.rol) ? data.rol : "",
     telefono: data.telefono || "",
     dni: data.dni || "",
     digito_verificador: data.digito_verificador || "",

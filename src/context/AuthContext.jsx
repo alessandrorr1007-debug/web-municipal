@@ -39,11 +39,13 @@ export const AuthProvider = ({ children }) => {
               return;
             }
 
+            const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
+
             setUsuario({
               uid: user.uid,
               correo: user.email,
               nombre: data.nombre || "",
-              rol: data.rol || "",
+              rol: data.rol && rolesValidos.includes(data.rol) ? data.rol : "",
               telefono: data.telefono || "",
               dni: data.dni || "",
               activo: data.activo !== false,
@@ -64,11 +66,13 @@ export const AuthProvider = ({ children }) => {
                   return;
                 }
 
+                const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
+
                 setUsuario({
                   uid: user.uid,
                   correo: user.email,
                   nombre: updatedData.nombre || "",
-                  rol: updatedData.rol || "",
+                  rol: updatedData.rol && rolesValidos.includes(updatedData.rol) ? updatedData.rol : "",
                   telefono: updatedData.telefono || "",
                   dni: updatedData.dni || "",
                   activo: updatedData.activo !== false,

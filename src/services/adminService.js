@@ -23,7 +23,7 @@ export const crearUsuarioInterno = async (datos) => {
     dni: datos.dni || "",
     telefono: datos.telefono || "",
     cargo: datos.cargo || "",
-    rol: datos.rol || "",
+    rol: datos.rol || "cajero",
     estado: datos.estado || "activo",
     activo: datos.activo !== false,
     permisos: datos.permisos || [],
