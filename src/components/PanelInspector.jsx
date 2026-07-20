@@ -6,7 +6,7 @@ import {
 import { crearNotificacion } from "../services/notificacionService";
 import { abrirPdf } from "../services/pdfService";
 import { useAuth } from "../context/AuthContext";
-import { formatearFechaLocal } from "../config/inspeccionConfig";
+import { formatearFechaLocal, calcularFecha30DiasMas } from "../config/inspeccionConfig";
 
 function PanelInspector({ seccion }) {
   const { usuario } = useAuth();
@@ -167,6 +167,7 @@ function PanelInspector({ seccion }) {
       if (resultado === "Aprobado" || resultado === "Cumple todos los requisitos") {
         await actualizarSolicitud(solicitud.id, {
           inspeccion: "Aprobada",
+          estadoInspeccion: "Realizada",
           recomendacionInspector: "Aprobar",
           observacionInspector: observacion,
           evidenciasInspector: evidencias,
@@ -176,6 +177,19 @@ function PanelInspector({ seccion }) {
           estadoNormalizado: "REVISION_FUNCIONARIO",
           inspectorNombre: usuario?.nombre || "Inspector",
           inspectorUid: usuario?.uid || "",
+          historialInspecciones: [
+            ...(solicitud.historialInspecciones || []),
+            {
+              fechaRealizacion: formatearFechaHora(),
+              fechaVisita: solicitud.fechaVisitaInspector,
+              horaVisita: solicitud.horaVisitaInspector || solicitud.horaVisitaLabel,
+              resultado: "Cumple todos los requisitos",
+              observacion,
+              evidenciasCount: evidencias.length,
+              inspector: usuario?.nombre || "Inspector",
+              estadoInspeccion: "Realizada",
+            },
+          ],
         });
 
         await crearNotificacion(
@@ -190,30 +204,53 @@ function PanelInspector({ seccion }) {
 
         alert("Resultado de aprobación enviado al funcionario.");
       } else {
+        const fechaOriginalStr = solicitud.fechaVisitaInspector || formatearFechaLocal(new Date());
+        const nuevaFecha = calcularFecha30DiasMas(fechaOriginalStr);
+        const mismaHoraVal = solicitud.horaVisitaInspector || "10:00";
+        const mismaHoraLabel = solicitud.horaVisitaLabel || "10:00 AM - 12:00 PM";
+
         await actualizarSolicitud(solicitud.id, {
-          inspeccion: "No aprobada por inspección",
-          recomendacionInspector: "Rechazar",
+          inspeccion: "Reprogramada",
+          estadoInspeccion: "Reprogramada",
+          recomendacionInspector: "Reobservar",
           observacionInspector: observacion,
           evidenciasInspector: evidencias,
           fechaInspeccion: formatearFechaHora(),
           resultadoInspeccion: resultado,
           estado: "No aprobada por inspección",
-          estadoNormalizado: "REVISION_FUNCIONARIO",
+          estadoNormalizado: "INSPECCION_REPROGRAMADA",
+          fechaVisitaInspector: nuevaFecha,
+          horaVisitaInspector: mismaHoraVal,
+          horaVisitaLabel: mismaHoraLabel,
           inspectorNombre: usuario?.nombre || "Inspector",
           inspectorUid: usuario?.uid || "",
+          historialInspecciones: [
+            ...(solicitud.historialInspecciones || []),
+            {
+              fechaRealizacion: formatearFechaHora(),
+              fechaOriginal: fechaOriginalStr,
+              horaOriginal: mismaHoraVal,
+              resultado,
+              observacion,
+              evidenciasCount: evidencias.length,
+              nuevaFechaReprogramada: nuevaFecha,
+              inspector: usuario?.nombre || "Inspector",
+              estadoInspeccion: "Realizada",
+            },
+          ],
         });
 
         await crearNotificacion(
           solicitud.uidUsuario,
           {
-            titulo: "Inspección no aprobada",
-            descripcion: "La inspección no fue aprobada. Puede volver a solicitar una nueva inspección después del periodo establecido.",
-            icono: "❌",
+            titulo: "Inspección no aprobada - Reprogramada a 30 días",
+            descripcion: `La inspección del local EXP-${solicitud.id} resultó en "${resultado}". Se ha reprogramado automáticamente para el ${nuevaFecha} a las ${mismaHoraLabel} con el mismo inspector.`,
+            icono: "📅",
           },
           solicitud.correoUsuario
         );
 
-        alert("Resultado de inspección enviado al funcionario.");
+        alert(`Resultado enviado. Reprogramación automática registrada para el ${nuevaFecha} a las ${mismaHoraLabel}.`);
       }
 
       limpiarFormulario(solicitud.id);

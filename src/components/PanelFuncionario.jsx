@@ -5,6 +5,7 @@ import {
   contarInspeccionesEnFecha,
   obtenerInspectores,
   guardarSolicitud,
+  obtenerHorariosOcupadosInspector,
 } from "../services/solicitudService";
 import { consultarDni } from "../services/dniService";
 import { consultarRuc } from "../services/rucService";
@@ -27,6 +28,7 @@ import {
   DIAS_LABORABLES,
   obtenerCapacidadColor,
   formatearFechaLocal,
+  esHorarioPasado,
 } from "../config/inspeccionConfig";
 import { obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
 
@@ -37,9 +39,9 @@ const INSPECTORES_DEFAULT = [
 ];
 
 const MOTIVOS_RECHAZO_DOCS = [
-  "Documento incorrecto",
   "Documento faltante",
-  "Información incorrecta",
+  "Documento incorrecto",
+  "Datos inconsistentes",
   "Otro",
 ];
 
@@ -1207,6 +1209,7 @@ function PanelFuncionario({ seccion }) {
   const [inspectoresLista, setInspectoresLista] = useState([]);
   const [inspectorSeleccionadoUid, setInspectorSeleccionadoUid] = useState("");
   const [notasInspector, setNotasInspector] = useState("");
+  const [horariosOcupados, setHorariosOcupados] = useState([]);
   const [capacidades, setCapacidades] = useState({});
   const [cargandoCapacidad, setCargandoCapacidad] = useState(false);
   const [modalAprobar, setModalAprobar] = useState(null);
@@ -1214,6 +1217,16 @@ function PanelFuncionario({ seccion }) {
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [paso, setPaso] = useState(seccion || "solicitudes");
+
+  useEffect(() => {
+    if (fechaSeleccionada) {
+      obtenerHorariosOcupadosInspector(fechaSeleccionada, inspectorSeleccionadoUid).then((data) => {
+        setHorariosOcupados(data.map((item) => item.slot));
+      });
+    } else {
+      setHorariosOcupados([]);
+    }
+  }, [fechaSeleccionada, inspectorSeleccionadoUid]);
 
   useEffect(() => {
     if (seccion) {
@@ -2259,16 +2272,28 @@ function PanelFuncionario({ seccion }) {
                         Elegir Horario Disponible *
                       </label>
                       <div className="time-slots-grid">
-                        {TIME_SLOTS.map((slot) => (
-                          <button
-                            key={slot.value}
-                            type="button"
-                            className={`time-slot ${slotSeleccionado === slot.value ? "seleccionado" : ""}`}
-                            onClick={() => setSlotSeleccionado(slot.value)}
-                          >
-                            {slot.label}
-                          </button>
-                        ))}
+                        {TIME_SLOTS.map((slot) => {
+                          const esPasado = esHorarioPasado(fechaSeleccionada, slot.value);
+                          const esOcupado = horariosOcupados.includes(slot.value);
+                          const deshabilitado = esPasado || esOcupado;
+
+                          let estadoTag = "";
+                          if (esOcupado) estadoTag = " 🔒 (Ocupado)";
+                          else if (esPasado) estadoTag = " ❌ (Hora pasada)";
+
+                          return (
+                            <button
+                              key={slot.value}
+                              type="button"
+                              className={`time-slot ${slotSeleccionado === slot.value ? "seleccionado" : ""} ${deshabilitado ? "deshabilitado" : ""}`}
+                              onClick={() => !deshabilitado && setSlotSeleccionado(slot.value)}
+                              disabled={deshabilitado}
+                              style={deshabilitado ? { opacity: 0.5, cursor: "not-allowed", background: "#f1f5f9" } : {}}
+                            >
+                              {slot.label}{estadoTag}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

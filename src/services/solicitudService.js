@@ -281,3 +281,26 @@ export const obtenerInspectores = async () => {
     return [];
   }
 };
+
+export const obtenerHorariosOcupadosInspector = async (fechaStr, inspectorUid = "") => {
+  try {
+    const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+    const ocupados = [];
+    snapshot.docs.forEach((docSnap) => {
+      const s = docSnap.data();
+      if (!s.fechaVisitaInspector || s.fechaVisitaInspector !== fechaStr) return;
+      if (inspectorUid && s.inspectorAsignadoUid && s.inspectorAsignadoUid !== inspectorUid) return;
+      if (s.horaVisitaInspector) {
+        ocupados.push({
+          slot: s.horaVisitaInspector,
+          estadoInspeccion: s.estadoInspeccion || s.inspeccion || "Programada",
+          expedienteId: docSnap.id,
+        });
+      }
+    });
+    return ocupados;
+  } catch (error) {
+    console.error("Error al consultar horarios ocupados:", error);
+    return [];
+  }
+};
