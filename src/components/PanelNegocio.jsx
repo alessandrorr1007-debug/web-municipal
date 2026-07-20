@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { consultarRuc } from "../services/rucService";
 import { consultarDni } from "../services/dniService";
-import { crearPreferenciaPago } from "../services/pagoService";
+import { crearOrdenFlow, verificarPagoFlow } from "../services/pagoService";
 import {
   guardarSolicitud,
   obtenerSolicitudes,
@@ -14,9 +14,11 @@ import {
   enviarComprobantePorCorreo,
   imprimirComprobante,
   generarPdfComprobante,
+  existeComprobanteParaSolicitud,
+  eliminarComprobante,
 } from "../services/comprobanteService";
-import { abrirPdf, convertirPdfABase64 } from "../services/pdfService";
-import { crearNotificacion } from "../services/notificacionService";
+import { abrirPdf, convertirPdfABase64, normalizarTexto } from "../services/pdfService";
+import { crearNotificacion, marcarComoLeida, marcarTodasComoLeidas } from "../services/notificacionService";
 import { determinarActividad, ACTIVIDADES_CONFIG } from "../config/documentosConfig";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -35,9 +37,21 @@ import Timeline from "./Timeline";
 import { collection, query, where, getDocs, onSnapshot, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 
-function PanelNegocio({ seccion }) {
+function PanelNegocio({ seccion, cambiarSeccion }) {
   const { usuario } = useAuth();
   const MONTO_TRAMITE = 3;
+
+  const getErrorMessage = (err) => {
+    if (!err) return "Ocurrió un error inesperado";
+    if (typeof err === "string") return err;
+    if (err?.response?.data) {
+      const d = err.response.data;
+      if (typeof d === "string") return d;
+      return d.detalle || d.error || d.message || JSON.stringify(d);
+    }
+    if (err?.message) return err.message;
+    try { return JSON.stringify(err); } catch { return String(err); }
+  };
 
   // SMS Notification Verification states
   const [cargandoSms, setCargandoSms] = useState(false);
@@ -344,6 +358,7 @@ function PanelNegocio({ seccion }) {
   };
 
   const [solicitudDetalle, setSolicitudDetalle] = useState(null);
+  const [detalleEnriquecido, setDetalleEnriquecido] = useState(null);
   const [filtroNoti, setFiltroNoti] = useState("nuevas");
 
   const [archivos, setArchivos] = useState([]);
@@ -476,6 +491,48 @@ function PanelNegocio({ seccion }) {
     return n.icono || "🔔";
   };
 
+  const abrirNotificacion = async (n) => {
+    if (!n.leida) {
+      await marcarComoLeida(n.id);
+    }
+  };
+
+  const marcarTodasLeidas = async () => {
+    if (!usuario?.uid) return;
+    await marcarTodasComoLeidas(usuario.uid);
+  };
+
+  useEffect(() => {
+    if (!solicitudDetalle) {
+      setDetalleEnriquecido(null);
+      return;
+    }
+
+    const base = { ...solicitudDetalle };
+    setDetalleEnriquecido(base);
+
+    const tieneUbigeo = base.departamento || base.provincia || base.distrito;
+    if (tieneUbigeo || !base.ruc) return;
+
+    let cancelado = false;
+    (async () => {
+      try {
+        const data = await consultarRuc(base.ruc);
+        if (cancelado) return;
+        setDetalleEnriquecido((prev) => ({
+          ...prev,
+          departamento: prev.departamento || data.departamento || "",
+          provincia: prev.provincia || data.provincia || "",
+          distrito: prev.distrito || data.distrito || "",
+        }));
+      } catch (e) {
+        console.error("No se pudo enriquecer ubigeo:", e);
+      }
+    })();
+
+    return () => { cancelado = true; };
+  }, [solicitudDetalle?.id]);
+
   const [form, setForm] = useState({
     tipoTramite: "Nueva licencia",
     ruc: "",
@@ -490,65 +547,87 @@ function PanelNegocio({ seccion }) {
     distrito: "",
   });
 
-  const confirmarPagoMercadoPago = (datosPago = {}) => {
-    setMetodoPago("Mercado Pago Checkout Pro TEST");
+  const confirmarPagoFlow = (datosPago = {}) => {
+    setMetodoPago("Flow");
     setEstadoPago("Confirmado");
     setDetallePago((prev) => ({
       ...(prev || {}),
       ...datosPago,
       status: "approved",
-      metodo: "checkout_pro_test",
+      metodo: "flow",
     }));
   };
 
-  const registrarPagoDemo = () => {
-    const codigoOperacion = `DEMO-${Date.now().toString().slice(-8)}`;
+  const verificarPagoFlowToken = async (token) => {
+    try {
+      setProcesandoPago(true);
+      const resultado = await verificarPagoFlow(token);
 
-    setMetodoPago("Pago demo municipal");
-    setEstadoPago("Confirmado");
-    setDetallePago({
-      id: codigoOperacion,
-      paymentId: codigoOperacion,
-      preferenceId: codigoOperacion,
-      status: "approved",
-      metodo: "demo_municipal",
-    });
+      if (resultado.status === 1) {
+        const solicitudId = resultado.commerceOrder;
+        console.log("[FLOW] Pago aprobado. commerceOrder:", solicitudId);
 
-    alert("Pago demo registrado correctamente. Ya puedes enviar la solicitud.");
+        try {
+          await updateDoc(doc(db, "solicitudes", solicitudId), {
+            estadoPago: "Confirmado",
+            pago: "Confirmado",
+            metodoPago: "Flow",
+            comprobantePago: "Pago confirmado vía Flow",
+            montoPagado: resultado.amount || MONTO_TRAMITE,
+            pagoId: String(resultado.flowOrder || token),
+            pagoEstadoDetalle: "approved",
+            flowToken: token,
+            actualizadoEn: new Date().toISOString(),
+          });
+          console.log("[FLOW] Solicitud actualizada en Firestore");
+        } catch (fireErr) {
+          console.error("[FLOW] Error actualizando Firestore:", fireErr);
+        }
+
+        localStorage.removeItem("flow_pago_pendiente");
+        localStorage.removeItem("flow_pago_estado");
+
+        alert("¡Pago confirmado correctamente! Tu solicitud EXP-" + solicitudId + " ha sido registrada.");
+        cargarMisSolicitudes().catch(() => {});
+        cambiarSeccion?.("mis-solicitudes");
+      } else {
+        setEstadoPago("Pendiente");
+        localStorage.removeItem("flow_pago_pendiente");
+      }
+    } catch (error) {
+      console.error("Error verificando pago Flow:", error);
+      alert(getErrorMessage(error) || "No se pudo verificar el estado del pago.");
+    } finally {
+      setProcesandoPago(false);
+    }
   };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const status = params.get("status") || params.get("collection_status");
-    const paymentId = params.get("payment_id") || params.get("collection_id");
-    const preferenceId = params.get("preference_id");
+    const flowToken = params.get("token");
 
-    if (status === "approved") {
-      const datosPago = {
-        id: paymentId || preferenceId || `MP-${Date.now().toString().slice(-8)}`,
-        paymentId: paymentId || "",
-        preferenceId: preferenceId || "",
-        status,
-      };
-
-      localStorage.setItem("mp_pago_estado", JSON.stringify(datosPago));
-      confirmarPagoMercadoPago(datosPago);
-      setPaso("pago");
+    if (flowToken) {
+      localStorage.setItem("flow_pago_pendiente", JSON.stringify({
+        id: flowToken,
+        token: flowToken,
+        status: "pending",
+      }));
+      verificarPagoFlowToken(flowToken);
       window.history.replaceState({}, document.title, window.location.pathname);
       return;
     }
 
-    const pagoGuardado = localStorage.getItem("mp_pago_estado");
+    const pagoGuardado = localStorage.getItem("flow_pago_pendiente");
 
     if (pagoGuardado) {
       try {
         const datosPago = JSON.parse(pagoGuardado);
 
-        if (datosPago?.status === "approved") {
-          confirmarPagoMercadoPago(datosPago);
+        if (datosPago?.token) {
+          verificarPagoFlowToken(datosPago.token);
         }
       } catch (error) {
-        console.error("No se pudo leer el estado del pago.", error);
+        console.error("No se pudo leer el estado del pago de Flow.", error);
       }
     }
   }, []);
@@ -599,32 +678,35 @@ function PanelNegocio({ seccion }) {
       
       let huboCambios = false;
       for (const sol of solicitudesPagadas) {
-        const tieneComprobante = lista.some(comp => comp.id_solicitud === sol.id);
-        if (!tieneComprobante) {
-          console.log(`[COMPROBANTE AUTO-GEN] Generando comprobante faltante para solicitud: ${sol.id}`);
-          const tipoFinal = sol.ruc?.startsWith("20") ? "factura" : "boleta";
-          const dNombres = sol.nombresSolicitante || usuario?.nombre || "";
-          const dApellidos = sol.apellidosSolicitante || "";
-          
-          await generarComprobante({
-            uidUsuario: usuario?.uid || "",
-            correoUsuario: usuario?.correo || "",
-            idSolicitud: sol.id,
-            tipo: tipoFinal,
-            dniCliente: sol.dniSolicitante || usuario?.dni || "",
-            nombresCliente: dNombres,
-            apellidosCliente: dApellidos,
-            rucCliente: sol.ruc || "",
-            razonSocial: sol.razonSocial || "",
-            direccionCliente: sol.direccion || "",
-            descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
-            monto: MONTO_TRAMITE,
-            metodoPago: sol.metodoPago || "Pago registrado",
-            estadoPago: "Pagado",
-            codigoOperacion: `DEMO-${Date.now().toString().slice(-8)}`
-          });
-          huboCambios = true;
-        }
+        const tieneComprobanteVisible = lista.some(comp => comp.id_solicitud === sol.id);
+        if (tieneComprobanteVisible) continue;
+
+        const existioComprobante = await existeComprobanteParaSolicitud(usuario?.uid, sol.id);
+        if (existioComprobante) continue;
+
+        console.log(`[COMPROBANTE AUTO-GEN] Generando comprobante faltante para solicitud: ${sol.id}`);
+        const tipoFinal = sol.ruc?.startsWith("20") ? "factura" : "boleta";
+        const dNombres = sol.nombresSolicitante || usuario?.nombre || "";
+        const dApellidos = sol.apellidosSolicitante || "";
+        
+        await generarComprobante({
+          uidUsuario: usuario?.uid || "",
+          correoUsuario: usuario?.correo || "",
+          idSolicitud: sol.id,
+          tipo: tipoFinal,
+          dniCliente: sol.dniSolicitante || usuario?.dni || "",
+          nombresCliente: dNombres,
+          apellidosCliente: dApellidos,
+          rucCliente: sol.ruc || "",
+          razonSocial: sol.razonSocial || "",
+          direccionCliente: sol.direccion || "",
+          descripcionPago: "Pago por derecho de trámite de licencia de funcionamiento",
+          monto: MONTO_TRAMITE,
+          metodoPago: sol.metodoPago || "Pago registrado",
+          estadoPago: "Pagado",
+          codigoOperacion: `DEMO-${Date.now().toString().slice(-8)}`
+        });
+        huboCambios = true;
       }
       
       if (huboCambios) {
@@ -647,6 +729,18 @@ function PanelNegocio({ seccion }) {
       cargarComprobantes();
     }
   }, [usuario, seccion]);
+
+  const handleEliminarComprobante = async (comp) => {
+    if (!window.confirm("¿Está seguro de eliminar este comprobante? No volverá a aparecer en esta lista.")) return;
+    try {
+      await eliminarComprobante(comp.id);
+      setComprobantes((prev) => prev.filter((c) => c.id !== comp.id));
+      alert("Comprobante eliminado correctamente.");
+    } catch (error) {
+      console.error("Error al eliminar comprobante:", error);
+      alert("No se pudo eliminar el comprobante.");
+    }
+  };
 
   useEffect(() => {
     if (seccion === "nueva-solicitud") {
@@ -678,6 +772,14 @@ function PanelNegocio({ seccion }) {
       setFechaNacimientoSolicitante(data.fecha_nacimiento || "");
       setDniValidado(true);
       setSuccessDni("Identidad verificada correctamente.");
+
+      if (usuario?.uid && dniSolicitante.trim()) {
+        try {
+          await updateDoc(doc(db, "usuarios", usuario.uid), { dni: dniSolicitante.trim() });
+        } catch (e) {
+          console.error("No se pudo guardar DNI en perfil:", e);
+        }
+      }
     } catch (error) {
       console.error(error);
       const msg = error.message || "";
@@ -839,51 +941,135 @@ function PanelNegocio({ seccion }) {
     setPaso("pago");
   };
 
-  const iniciarPagoMercadoPago = async () => {
+  const iniciarPagoFlow = async () => {
     try {
       setProcesandoPago(true);
 
-      const data = await crearPreferenciaPago({
-        ruc: form.ruc,
-        razonSocial: form.razonSocial,
-      });
+      const emailUsuario = usuario?.correo || usuario?.email || "";
 
-      const urlPago = data.sandbox_init_point || data.init_point;
-
-      if (!urlPago) {
-        throw new Error("Mercado Pago no devolvió un enlace de pago.");
+      if (!emailUsuario || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailUsuario)) {
+        alert(
+          "Tu perfil no tiene un correo electrónico válido. Actualiza tu perfil antes de continuar con el pago."
+        );
+        cambiarSeccion?.("mi-cuenta");
+        return;
       }
 
-      const datosPendientes = {
-        id: data.id || "",
-        preferenceId: data.id || "",
-        initPoint: urlPago,
-        status: "pending",
+      const todosLosDocs = [
+        docIdentidad, docFichaRuc, docAcreditaLocal, docPlano,
+        docDj, docSanitario, docDigemid, docRepresentacion, docRepresentacionLegal, ...archivos,
+      ].filter(Boolean);
+
+      if (todosLosDocs.length === 0) {
+        alert("Debe subir al menos un documento antes de continuar con el pago.");
+        return;
+      }
+
+      const conTimeout = (promesa, ms, mensajeError) => {
+        let timeoutId;
+        const promesaTimeout = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error(mensajeError)), ms);
+        });
+        return Promise.race([
+          promesa.finally(() => clearTimeout(timeoutId)),
+          promesaTimeout,
+        ]);
       };
 
-      setMetodoPago("Mercado Pago Checkout Pro TEST");
-      setEstadoPago("Pendiente de pago");
-      setDetallePago(datosPendientes);
+      console.log("[FLOW] Subiendo documentos...");
+      const pdfsSubidos = [];
+      const erroresSubida = [];
+      for (const archivo of todosLosDocs) {
+        try {
+          const resultado = await conTimeout(
+            convertirPdfABase64(archivo),
+            15000,
+            `Tiempo de espera agotado al subir el archivo ${archivo.name}.`
+          );
+          pdfsSubidos.push(resultado);
+        } catch (err) {
+          console.error("[FLOW] Error subiendo archivo:", archivo.name, err);
+          erroresSubida.push(`${archivo.name}: ${err.message}`);
+        }
+      }
 
-      localStorage.removeItem("mp_pago_estado");
-      localStorage.setItem("mp_pago_pendiente", JSON.stringify(datosPendientes));
+      if (pdfsSubidos.length === 0) {
+        const errorMsg = erroresSubida.length > 0
+          ? `No se pudo subir ningún archivo:\n${erroresSubida.join("\n")}`
+          : "No se pudo subir ningún archivo. Verifique su conexión e intente nuevamente.";
+        alert(errorMsg);
+        return;
+      }
 
-      window.open(urlPago, "_blank", "noopener,noreferrer");
+      const tipoContribuyente = form.ruc.startsWith("20") ? "Persona Jurídica" : "Persona Natural";
+
+      console.log("[FLOW] Guardando solicitud...");
+      const nueva = await conTimeout(
+        guardarSolicitud({
+          uidUsuario: usuario?.uid || "",
+          correoUsuario: emailUsuario,
+          tipoTramite: form.tipoTramite,
+          dniSolicitante, nombresSolicitante, apellidosSolicitante,
+          ruc: form.ruc, nombreNegocio: form.nombreNegocio,
+          razonSocial: form.razonSocial, direccion: form.direccion,
+          giro: form.giro, estadoSunat: form.estadoSunat,
+          condicionSunat: form.condicionSunat,
+          departamento: form.departamento, provincia: form.provincia,
+          distrito: form.distrito,
+          tipoContribuyente, relacionSolicitante,
+          archivosPdf: pdfsSubidos,
+          archivoNombre: pdfsSubidos[0]?.archivoNombre || "Sin archivo",
+          archivoUrl: pdfsSubidos[0]?.archivoUrl || "",
+          metodoPago: "Flow",
+          estadoPago: "Pendiente",
+          comprobantePago: "Pago pendiente vía Flow",
+          estado: "PENDIENTE_PAGO",
+          inspeccion: "Sin inspección",
+          recomendacionInspector: "", observacionInspector: "",
+          evidenciasInspector: [], decisionFuncionario: "",
+          observacionFuncionario: "", numeroLicencia: "",
+          fechaAprobacion: "", fechaExpiracionLicencia: "",
+          pagoId: "", pagoEstadoDetalle: "",
+        }),
+        15000,
+        "Tiempo de espera agotado al registrar la solicitud."
+      );
+
+      console.log("[FLOW] Solicitud guardada:", nueva.id);
+
+      await crearNotificacion(usuario?.uid, {
+        titulo: "Solicitud registrada",
+        descripcion: `Su solicitud EXP-${nueva.id} de Licencia de Funcionamiento se ha registrado correctamente. Pendiente de pago.`,
+        icono: "📝",
+      }, emailUsuario);
+
+      const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Ciudadano";
+
+      console.log("[FLOW] Creando orden de pago con commerceOrder:", nueva.id);
+      const resultado = await crearOrdenFlow({
+        solicitudId: nueva.id,
+        amount: 3,
+        email: emailUsuario,
+        buyerName: nombreCompleto,
+        subject: "Derecho de trámite - Licencia Municipal",
+      });
+
+      localStorage.removeItem("flow_pago_pendiente");
+      localStorage.setItem(
+        "flow_pago_pendiente",
+        JSON.stringify({
+          token: resultado.token,
+          solicitudId: nueva.id,
+        })
+      );
+
+      window.location.href = resultado.paymentUrl || resultado.url;
     } catch (error) {
-      console.error(error);
-      alert(error.message || "No se pudo iniciar el pago con Mercado Pago.");
+      console.error("[FLOW] Error:", error);
+      alert(getErrorMessage(error) || "No se pudo iniciar el pago con Flow.");
     } finally {
       setProcesandoPago(false);
     }
-  };
-
-  const iniciarPagoDemo = () => {
-    setProcesandoPago(true);
-
-    setTimeout(() => {
-      registrarPagoDemo();
-      setProcesandoPago(false);
-    }, 600);
   };
 
   const iniciarPagoCaja = () => {
@@ -1062,7 +1248,7 @@ function PanelNegocio({ seccion }) {
     } catch (error) {
       console.error("[SOLICITUD] Error general:", error);
       setGuardando(false);
-      alert(error.message || "No se pudo guardar la solicitud. Intente nuevamente.");
+      alert(getErrorMessage(error) || "No se pudo guardar la solicitud. Intente nuevamente.");
     }
   };
 
@@ -1100,8 +1286,8 @@ function PanelNegocio({ seccion }) {
     setDocRepresentacion(null);
     setRelacionSolicitante("Dueño");
     setTipoPropiedadLocal("Contrato de alquiler");
-    localStorage.removeItem("mp_pago_estado");
-    localStorage.removeItem("mp_pago_pendiente");
+    localStorage.removeItem("flow_pago_estado");
+    localStorage.removeItem("flow_pago_pendiente");
 
     setForm({
       tipoTramite: "Nueva licencia",
@@ -1197,8 +1383,8 @@ function PanelNegocio({ seccion }) {
     setExpediente("");
     setDetallePago(null);
     setProcesandoPago(false);
-    localStorage.removeItem("mp_pago_estado");
-    localStorage.removeItem("mp_pago_pendiente");
+    localStorage.removeItem("flow_pago_estado");
+    localStorage.removeItem("flow_pago_pendiente");
 
     setForm({
       tipoTramite: "Renovación anual",
@@ -1303,92 +1489,170 @@ function PanelNegocio({ seccion }) {
             <div>
               <span className="eyebrow">Portal Digital Ciudadano</span>
               <h1>WEB-MUNICIPAL</h1>
-              <p>Gestiona tus solicitudes de licencias, realiza tus pagos y descarga tus comprobantes oficiales de forma ágil y transparente.</p>
+              <p>Gestiona tus solicitudes de licencia de funcionamiento de forma digital, rapida y transparente.</p>
             </div>
             <div className="hero-card">
-              <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#dbeafe" }}>Derecho de trámite</span>
+              <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#dbeafe" }}>Derecho de tramite</span>
               <strong style={{ fontSize: "28px" }}>S/{MONTO_TRAMITE.toFixed(2)}</strong>
-              <small style={{ color: "#bfdbfe" }}>Tasa única de Licencia</small>
+              <small style={{ color: "#bfdbfe" }}>Tasa unica de Licencia</small>
             </div>
           </div>
 
-          <div className="dashboard-grid-modern">
+          <div className="dashboard-grid-modern" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
             <div className="dashboard-card-modern">
               <div className="dashboard-card-icon-wrapper" style={{ background: "#eff6ff", color: "#2563eb" }}>📄</div>
               <div className="dashboard-card-info">
-                <h3>Solicitudes Activas</h3>
-                <div className="count">{misSolicitudes.filter(s => !["Licencia aprobada", "Licencia emitida", "Aprobado", "Licencia rechazada", "Rechazado"].includes(s.estado)).length}</div>
+                <h3>Solicitudes activas</h3>
+                <div className="count">{misSolicitudes.filter(s => !["Licencia aprobada", "Licencia emitida", "Aprobado", "Licencia rechazada", "Rechazado", "Rechazada"].includes(s.estado)).length}</div>
+                <small style={{ fontSize: "11.5px", color: "#94a3b8" }}>Tramites en proceso</small>
               </div>
             </div>
 
             <div className="dashboard-card-modern">
-              <div className="dashboard-card-icon-wrapper" style={{ background: "#fef3c7", color: "#d97706" }}>💳</div>
+              <div className="dashboard-card-icon-wrapper" style={{ background: "#fef3c7", color: "#d97706" }}>🔔</div>
               <div className="dashboard-card-info">
-                <h3>Pagos Pendientes</h3>
-                <div className="count">{misSolicitudes.filter(s => s.estadoPago !== "Confirmado").length}</div>
-              </div>
-            </div>
-
-            <div className="dashboard-card-modern">
-              <div className="dashboard-card-icon-wrapper" style={{ background: "#f0fdf4", color: "#166534" }}>📎</div>
-              <div className="dashboard-card-info">
-                <h3>Documentos subidos</h3>
-                <div className="count">{misSolicitudes.reduce((acc, s) => acc + (s.archivosPdf?.filter(pdf => pdf && pdf.archivoUrl).length || 0), 0)}</div>
-              </div>
-            </div>
-
-            <div className="dashboard-card-modern">
-              <div className="dashboard-card-icon-wrapper" style={{ background: "#fdf2f8", color: "#db2777" }}>🔔</div>
-              <div className="dashboard-card-info">
-                <h3>Alertas nuevas</h3>
+                <h3>Notificaciones</h3>
                 <div className="count">{notificaciones.filter(n => !n.leida).length}</div>
+                <small style={{ fontSize: "11.5px", color: "#94a3b8" }}>Mensajes nuevos</small>
+              </div>
+            </div>
+
+            <div className="dashboard-card-modern">
+              <div className="dashboard-card-icon-wrapper" style={{ background: (() => {
+                const licActiva = misSolicitudes.find(s => ["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado) && !licenciaVencida(s));
+                if (licActiva) return "#f0fdf4";
+                if (misSolicitudes.some(s => licenciaVencida(s))) return "#fef2f2";
+                return "#f1f5f9";
+              })(), color: (() => {
+                const licActiva = misSolicitudes.find(s => ["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado) && !licenciaVencida(s));
+                if (licActiva) return "#16a34a";
+                if (misSolicitudes.some(s => licenciaVencida(s))) return "#dc2626";
+                return "#94a3b8";
+              })() }}>🪪</div>
+              <div className="dashboard-card-info">
+                <h3>Licencia digital</h3>
+                <div className="count" style={{ fontSize: "20px" }}>
+                  {(() => {
+                    const licActiva = misSolicitudes.find(s => ["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado) && !licenciaVencida(s));
+                    if (licActiva) return "Vigente";
+                    if (misSolicitudes.some(s => licenciaVencida(s))) return "Vencida";
+                    return "No disponible";
+                  })()}
+                </div>
+                <small style={{ fontSize: "11.5px", color: "#94a3b8" }}>Estado de tu licencia</small>
               </div>
             </div>
           </div>
 
-          {misSolicitudes.length > 0 && (
-            <div style={{ marginTop: "32px" }}>
-              <h3 style={{ color: "#0f172a", marginBottom: "16px", fontWeight: "800", fontSize: "16px" }}>Estado de tus Expedientes</h3>
-              <div style={{ display: "grid", gap: "12px" }}>
-                {misSolicitudes.slice(0, 5).map((s) => {
-                  const esCompletado = ["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(s.estado);
-                  const esAccionRequerida = s.estadoPago !== "Confirmado" || ["Observado", "Observada", "Licencia rechazada", "Rechazado", "Rechazada"].includes(s.estado);
-                  const statusIndicator = esCompletado ? "🟢" : esAccionRequerida ? "🔴" : "🟡";
-                  const statusText = esCompletado ? "Completado" : esAccionRequerida ? "Requiere acción" : "En proceso";
-                  
-                  return (
-                    <div 
-                      key={s.id} 
-                      style={{ 
-                        display: "flex", 
-                        justifyContent: "space-between", 
-                        alignItems: "center", 
-                        padding: "16px 20px", 
-                        background: "#ffffff", 
-                        borderRadius: "12px", 
-                        border: "1px solid #e2e8f0",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.01)"
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <span style={{ fontSize: "18px" }}>{statusIndicator}</span>
-                        <div>
-                          <strong style={{ color: "#0f172a", fontSize: "14px", fontFamily: "monospace" }}>{s.id}</strong>
-                          <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: "12.5px" }}>
-                            {s.nombreNegocio} • <span style={{ fontWeight: "600" }}>{s.tipoTramite || "Licencia"}</span>
-                          </p>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <span className={`badge ${badgeClase(obtenerEstadoVisible(s))}`} style={{ fontSize: "11px" }}>
-                          {obtenerEstadoVisible(s)}
-                        </span>
-                        <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#94a3b8" }}>{statusText}</p>
+          {misSolicitudes.length > 0 && (() => {
+            const activas = misSolicitudes.filter(s => !["Licencia aprobada", "Licencia emitida", "Aprobado", "Licencia rechazada", "Rechazado", "Rechazada"].includes(s.estado));
+            const masReciente = activas[0] || misSolicitudes[0];
+            const pasoInfo = obtenerProximoPaso(masReciente);
+            const estadoVisible = obtenerEstadoVisible(masReciente);
+
+            return (
+              <div style={{ marginTop: "28px" }}>
+                <div style={{
+                  background: "linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "16px",
+                  padding: "24px",
+                  display: "grid",
+                  gap: "16px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ width: "40px", height: "40px", borderRadius: "12px", background: "#1f3b57", display: "grid", placeItems: "center", color: "white", fontSize: "18px" }}>📋</div>
+                      <div>
+                        <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "#64748b", letterSpacing: "0.05em" }}>Expediente mas reciente</span>
+                        <h3 style={{ margin: 0, fontFamily: "monospace", fontSize: "16px", color: "#0f172a" }}>{masReciente.id}</h3>
                       </div>
                     </div>
-                  );
-                })}
+                    <span className={`badge ${badgeClase(estadoVisible)}`} style={{ padding: "5px 12px", fontSize: "12px" }}>
+                      {estadoVisible}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "grid", gap: "10px", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+                    <div style={{ background: "white", borderRadius: "10px", padding: "14px", border: "1px solid #e2e8f0" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "#64748b", letterSpacing: "0.05em" }}>Negocio</span>
+                      <p style={{ margin: "4px 0 0", fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{masReciente.nombreNegocio || "Sin nombre"}</p>
+                    </div>
+                    <div style={{ background: "white", borderRadius: "10px", padding: "14px", border: "1px solid #e2e8f0" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "#64748b", letterSpacing: "0.05em" }}>Tipo de tramite</span>
+                      <p style={{ margin: "4px 0 0", fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{masReciente.tipoTramite || "Nueva licencia"}</p>
+                    </div>
+                    <div style={{ background: "white", borderRadius: "10px", padding: "14px", border: "1px solid #e2e8f0" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "#64748b", letterSpacing: "0.05em" }}>Fecha de registro</span>
+                      <p style={{ margin: "4px 0 0", fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>{masReciente.fecha || "Sin fecha"}</p>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: pasoInfo.clase === "success" ? "#f0fdf4" : pasoInfo.clase === "pending" ? "#fef2f2" : "#fffbeb",
+                    border: `1px solid ${pasoInfo.clase === "success" ? "#bbf7d0" : pasoInfo.clase === "pending" ? "#fecaca" : "#fde68a"}`,
+                    borderRadius: "12px",
+                    padding: "16px 18px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                      <span style={{ fontSize: "16px" }}>
+                        {pasoInfo.clase === "success" ? "✅" : pasoInfo.clase === "pending" ? "⚠️" : "⏳"}
+                      </span>
+                      <span style={{ fontSize: "12px", fontWeight: 800, textTransform: "uppercase", color: pasoInfo.color, letterSpacing: "0.04em" }}>
+                        Proximo paso: {pasoInfo.accion}
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: "13.5px", color: "#334155", lineHeight: 1.5 }}>{pasoInfo.texto}</p>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn-secundario"
+                      style={{ fontSize: "13px", padding: "10px 18px", display: "flex", alignItems: "center", gap: "6px" }}
+                      onClick={() => setSolicitudDetalle(masReciente)}
+                    >
+                      👁 Ver detalle
+                    </button>
+                    {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(masReciente.estado) && !licenciaVencida(masReciente) && (
+                      <button
+                        type="button"
+                        className="btn-ok"
+                        style={{ fontSize: "13px", padding: "10px 18px" }}
+                        onClick={() => descargarLicencia(masReciente)}
+                      >
+                        📥 Descargar licencia
+                      </button>
+                    )}
+                    {activas.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        style={{ fontSize: "13px", padding: "10px 18px" }}
+                        onClick={() => cambiarSeccion?.("mis-solicitudes")}
+                      >
+                        Ver todas ({activas.length})
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
+            );
+          })()}
+
+          {misSolicitudes.length === 0 && (
+            <div style={{ marginTop: "28px", textAlign: "center", padding: "32px 20px", background: "#f8fafc", borderRadius: "16px", border: "1px dashed #e2e8f0" }}>
+              <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "linear-gradient(135deg, #eff6ff, #dbeafe)", display: "grid", placeItems: "center", margin: "0 auto 14px", fontSize: "30px" }}>&#128196;</div>
+              <h3 style={{ color: "#0f172a", fontSize: "16px", margin: "0 0 6px" }}>Sin solicitudes activas</h3>
+              <p style={{ color: "#64748b", fontSize: "13.5px", margin: "0 0 18px", maxWidth: "360px", marginLeft: "auto", marginRight: "auto" }}>Registra tu primera solicitud de licencia de funcionamiento para comenzar el tramite.</p>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ fontSize: "14px", padding: "12px 28px" }}
+                onClick={() => cambiarSeccion?.("nueva-solicitud")}
+              >
+                + Nueva solicitud
+              </button>
             </div>
           )}
         </section>
@@ -1478,6 +1742,16 @@ function PanelNegocio({ seccion }) {
               <h2>Centro de notificaciones</h2>
               <p>Actualizaciones sobre tus solicitudes y comprobantes en la plataforma.</p>
             </div>
+            {notificaciones.some(n => !n.leida) && (
+              <button
+                type="button"
+                className="btn-outline"
+                style={{ fontSize: "12px", padding: "8px 16px", whiteSpace: "nowrap" }}
+                onClick={marcarTodasLeidas}
+              >
+                ✓ Marcar todas como leídas
+              </button>
+            )}
           </div>
 
           <div className="noti-tabs">
@@ -1512,51 +1786,57 @@ function PanelNegocio({ seccion }) {
               );
             }
             return (
-              <div style={{ display: "grid", gap: "12px" }}>
+              <div style={{ display: "grid", gap: "10px" }}>
                 {listado.map((n) => {
                   const icono = obtenerIconoNotificacion(n);
+                  const esNueva = !n.leida;
                   return (
                     <div
                       key={n.id}
                       onClick={() => abrirNotificacion(n)}
                       style={{
-                        padding: "16px 20px",
-                        border: `1px solid ${n.leida ? "#e2e8f0" : "#bfdbfe"}`,
-                        borderRadius: "12px",
-                        background: n.leida ? "#ffffff" : "#f0f9ff",
-                        cursor: n.leida ? "default" : "pointer",
+                        padding: "14px 18px",
+                        border: `1px solid ${esNueva ? "#bfdbfe" : "#e2e8f0"}`,
+                        borderLeft: esNueva ? "4px solid #2563eb" : "4px solid transparent",
+                        borderRadius: "10px",
+                        background: esNueva ? "#f0f9ff" : "#f8fafc",
+                        cursor: "pointer",
                         transition: "all 0.2s ease",
-                        boxShadow: n.leida ? "none" : "0 2px 8px rgba(37, 99, 235, 0.04)",
+                        opacity: esNueva ? 1 : 0.75,
                       }}
                     >
-                      <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
+                      <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
                         <span style={{ 
-                          fontSize: "20px", 
+                          fontSize: "18px", 
                           flexShrink: 0,
-                          width: "40px",
-                          height: "40px",
-                          background: n.leida ? "#f1f5f9" : "#dbeafe",
-                          borderRadius: "10px",
+                          width: "36px",
+                          height: "36px",
+                          background: esNueva ? "#dbeafe" : "#f1f5f9",
+                          borderRadius: "8px",
                           display: "grid",
                           placeItems: "center"
                         }}>{icono}</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
-                            <strong style={{ color: "#0f172a", fontSize: "14px" }}>{n.titulo}</strong>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                            <strong style={{ color: esNueva ? "#0f172a" : "#64748b", fontSize: "13.5px" }}>{n.titulo}</strong>
                             <span style={{
                               fontSize: "10px",
                               fontWeight: "800",
                               textTransform: "uppercase",
                               padding: "2px 8px",
                               borderRadius: "999px",
-                              background: n.leida ? "#f1f5f9" : "#dbeafe",
-                              color: n.leida ? "#475569" : "#1e40af",
+                              flexShrink: 0,
+                              background: esNueva ? "#dbeafe" : "#f1f5f9",
+                              color: esNueva ? "#1e40af" : "#94a3b8",
                             }}>
-                              {n.leida ? "Leída" : "Nueva"}
+                              {esNueva ? "Nueva" : "Leída"}
                             </span>
                           </div>
-                          <p style={{ margin: "4px 0 6px", fontSize: "13px", color: "#334155", lineHeight: 1.4 }}>{n.descripcion}</p>
-                          <small style={{ color: "#94a3b8" }}>{new Date(n.fecha_hora).toLocaleString("es-PE")}</small>
+                          <p style={{ margin: "3px 0 4px", fontSize: "13px", color: esNueva ? "#334155" : "#94a3b8", lineHeight: 1.4 }}>{n.descripcion}</p>
+                          <small style={{ color: "#94a3b8", fontSize: "11.5px" }}>
+                            {new Date(n.fecha_hora).toLocaleString("es-PE")}
+                            {n.fechaLectura && ` · Leída el ${new Date(n.fechaLectura).toLocaleString("es-PE")}`}
+                          </small>
                         </div>
                       </div>
                     </div>
@@ -2134,18 +2414,12 @@ function PanelNegocio({ seccion }) {
                         <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "18px" }}>
                           <span style={{ display: "inline-block", padding: "7px 12px", borderRadius: "999px", background: "#fef3c7", color: "#92400e", fontWeight: "700", fontSize: "13px", marginBottom: "12px" }}>Forma de pago</span>
                           <h3 style={{ margin: "0 0 8px", color: "#0f172a" }}>Selecciona como deseas pagar</h3>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", marginTop: "14px" }}>
+                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", marginTop: "14px" }}>
                             <div style={{ border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: "14px", padding: "18px" }}>
                               <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#128179;</div>
-                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "14px" }}>Pago TEST con Mercado Pago</h4>
-                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Abre Checkout Pro en ambiente de prueba.</p>
-                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoMercadoPago} disabled={procesandoPago} style={{ fontSize: "13px" }}>{procesandoPago ? "Generando..." : "Pagar con MP TEST"}</button>
-                            </div>
-                            <div style={{ border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: "14px", padding: "18px" }}>
-                              <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#129535;</div>
-                              <h4 style={{ margin: "0 0 6px", color: "#7c2d12", fontSize: "14px" }}>Pago demo municipal</h4>
-                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Registra comprobante demo para continuar.</p>
-                              <button type="button" className="btn-secundario btn-full" onClick={iniciarPagoDemo} disabled={procesandoPago} style={{ fontSize: "13px" }}>{procesandoPago ? "Registrando..." : "Confirmar pago demo"}</button>
+                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "14px" }}>Pago en línea con Flow</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Red segura de pago. Se te redirigirá para completar el pago.</p>
+                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoFlow} disabled={procesandoPago} style={{ fontSize: "13px" }}>{procesandoPago ? "Generando..." : "Pagar con Flow"}</button>
                             </div>
                             <div style={{ border: "1px solid #cbd5e1", background: "#f8fafc", borderRadius: "14px", padding: "18px" }}>
                               <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#127970;</div>
@@ -2338,6 +2612,13 @@ function PanelNegocio({ seccion }) {
                           onClick={() => descargarComprobante(comp)}
                         >
                           📥 Descargar
+                        </button>
+                        <button
+                          type="button"
+                          style={{ fontSize: "12px", padding: "6px 12px", borderRadius: "8px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", cursor: "pointer", fontWeight: "600" }}
+                          onClick={() => handleEliminarComprobante(comp)}
+                        >
+                          🗑
                         </button>
                       </div>
                     </div>
@@ -2872,7 +3153,9 @@ function PanelNegocio({ seccion }) {
       )}
 
       {/* MODAL DETALLE DE EXPEDIENTE */}
-      {solicitudDetalle && (
+      {solicitudDetalle && (() => {
+        const d = detalleEnriquecido || solicitudDetalle;
+        return (
         <div className="modal-backdrop-modern" onClick={() => setSolicitudDetalle(null)}>
           <div className="modal-content-modern" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-modern">
@@ -2889,14 +3172,33 @@ function PanelNegocio({ seccion }) {
               <div className="detail-section-card">
                 <h3 className="detail-section-title">🏢 Información General del Establecimiento</h3>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px 24px", fontSize: "13px" }}>
-                  <p style={{ margin: 0 }}><strong>RUC:</strong> {solicitudDetalle.ruc}</p>
-                  <p style={{ margin: 0 }}><strong>Nombre de Negocio:</strong> {solicitudDetalle.nombreNegocio}</p>
-                  <p style={{ margin: 0 }}><strong>Razón Social:</strong> {solicitudDetalle.razonSocial || "N/A"}</p>
-                  <p style={{ margin: 0 }}><strong>Giro Comercial:</strong> {solicitudDetalle.giro}</p>
-                  <p style={{ margin: 0 }}><strong>Dirección:</strong> {solicitudDetalle.direccion}</p>
-                  <p style={{ margin: 0 }}><strong>Ubigeo:</strong> {solicitudDetalle.distrito}, {solicitudDetalle.provincia}, {solicitudDetalle.departamento}</p>
-                  <p style={{ margin: 0 }}><strong>DNI Solicitante:</strong> {solicitudDetalle.dniSolicitante || "N/A"}</p>
-                  <p style={{ margin: 0 }}><strong>Nombres Solicitante:</strong> {solicitudDetalle.nombresSolicitante || "N/A"} {solicitudDetalle.apellidosSolicitante || ""}</p>
+                  <p style={{ margin: 0 }}><strong>RUC:</strong> {d.ruc}</p>
+                  <p style={{ margin: 0 }}><strong>Razón Social:</strong> {normalizarTexto(d.razonSocial) || "N/A"}</p>
+                  <p style={{ margin: 0 }}><strong>Nombre de Negocio:</strong> {normalizarTexto(d.nombreNegocio) || "N/A"}</p>
+                  <p style={{ margin: 0 }}><strong>Giro Comercial:</strong> {normalizarTexto(d.giro) || "N/A"}</p>
+                  <p style={{ margin: 0 }}><strong>Dirección:</strong> {normalizarTexto(d.direccion) || "N/A"}</p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Ubigeo:</strong>{" "}
+                    {[d.departamento, d.provincia, d.distrito]
+                      .filter(Boolean)
+                      .join(" - ") || "No registrado"}
+                  </p>
+                </div>
+                <hr style={{ border: "none", borderTop: "1px solid #e2e8f0", margin: "16px 0 12px" }} />
+                <h4 style={{ fontSize: "13px", fontWeight: "700", color: "#475569", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Datos del Solicitante</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px 24px", fontSize: "13px" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>DNI:</strong>{" "}
+                    {d.dniSolicitante || usuario?.dni || "No registrado"}
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Nombres Solicitante:</strong>{" "}
+                    {[d.nombresSolicitante, d.apellidosSolicitante].filter(Boolean).join(" ") || usuario?.nombre || "N/A"}
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Correo Electrónico:</strong>{" "}
+                    {d.correoUsuario || usuario?.correo || "N/A"}
+                  </p>
                 </div>
               </div>
 
@@ -2911,26 +3213,26 @@ function PanelNegocio({ seccion }) {
                       borderRadius: "999px", 
                       fontSize: "11px", 
                       fontWeight: "700",
-                      background: solicitudDetalle.estadoPago === "Confirmado" ? "#dcfce7" : "#fee2e2",
-                      color: solicitudDetalle.estadoPago === "Confirmado" ? "#166534" : "#991b1b"
+                      background: d.estadoPago === "Confirmado" ? "#dcfce7" : "#fee2e2",
+                      color: d.estadoPago === "Confirmado" ? "#166534" : "#991b1b"
                     }}>
-                      {solicitudDetalle.estadoPago === "Confirmado" ? "Confirmado" : solicitudDetalle.estadoPago || "Pendiente"}
+                      {d.estadoPago === "Confirmado" ? "Confirmado" : d.estadoPago || "Pendiente"}
                     </span>
                   </p>
-                  <p style={{ margin: 0 }}><strong>Monto Pagado:</strong> S/ {Number(solicitudDetalle.montoPagado || 3).toFixed(2)}</p>
-                  <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {solicitudDetalle.metodoPago || "No registrado"}</p>
-                  <p style={{ margin: 0 }}><strong>Código Operación:</strong> {solicitudDetalle.pagoId || "N/A"}</p>
+                  <p style={{ margin: 0 }}><strong>Monto Pagado:</strong> S/ {Number(d.montoPagado || 3).toFixed(2)}</p>
+                  <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {d.metodoPago || "No registrado"}</p>
+                  <p style={{ margin: 0 }}><strong>Código Operación:</strong> {d.pagoId || "N/A"}</p>
                 </div>
               </div>
 
               {/* Tarjeta 3: Documentos Adjuntados */}
               <div className="detail-section-card">
                 <h3 className="detail-section-title">📄 Documentos Adjuntos</h3>
-                {(!solicitudDetalle.archivosPdf || solicitudDetalle.archivosPdf.filter(pdf => pdf && pdf.archivoUrl).length === 0) ? (
+                {(!d.archivosPdf || d.archivosPdf.filter(pdf => pdf && pdf.archivoUrl).length === 0) ? (
                   <p style={{ margin: 0, fontSize: "13px", color: "#64748b", fontStyle: "italic" }}>No hay documentos disponibles</p>
                 ) : (
                   <div className="file-grid">
-                    {solicitudDetalle.archivosPdf.filter(pdf => pdf && pdf.archivoUrl).map((pdf, idx) => (
+                    {d.archivosPdf.filter(pdf => pdf && pdf.archivoUrl).map((pdf, idx) => (
                       <div className="file-card-modern" key={pdf.documentId || idx}>
                         <div className="file-card-icon">📄</div>
                         <div className="file-card-info">
@@ -2938,11 +3240,9 @@ function PanelNegocio({ seccion }) {
                           <p className="meta">{pdf.tipo === "application/pdf" ? "Archivo PDF" : "Documento"} • {pdf.tamaño ? `${(pdf.tamaño / 1024 / 1024).toFixed(2)} MB` : "Verificado"}</p>
                         </div>
                         <a 
-                          href={pdf.archivoUrl} 
+                          href="#"
                           onClick={(e) => { e.preventDefault(); abrirPdf(pdf.archivoUrl); }}
                           className="file-card-btn"
-                          target="_blank"
-                          rel="noreferrer"
                         >
                           Ver documento
                         </a>
@@ -2956,16 +3256,16 @@ function PanelNegocio({ seccion }) {
               <div className="detail-section-card">
                 <h3 className="detail-section-title">⏳ Historial y Estado del Trámite</h3>
                 <div style={{ padding: "10px 0" }}>
-                  <Timeline solicitud={solicitudDetalle} />
+                  <Timeline solicitud={d} />
                 </div>
               </div>
 
               {/* Observación / Rechazo / Motivo si aplica */}
-              {["Licencia rechazada", "Rechazado", "Observado", "Observada"].includes(solicitudDetalle.estado) && (
+              {["Licencia rechazada", "Rechazado", "Observado", "Observada"].includes(d.estado) && (
                 <div className="detail-section-card" style={{ background: "#fff5f5", border: "1px solid #fecaca" }}>
                   <h3 className="detail-section-title" style={{ color: "#991b1b" }}>⚠️ Observaciones de la Municipalidad</h3>
                   <p style={{ margin: 0, fontSize: "13.5px", color: "#991b1b", lineHeight: 1.5 }}>
-                    {solicitudDetalle.observacionFuncionario || solicitudDetalle.observacionInspector || "Revisión técnica pendiente de subsanación."}
+                    {d.observacionFuncionario || d.observacionInspector || "Revisión técnica pendiente de subsanación."}
                   </p>
                 </div>
               )}
@@ -2975,14 +3275,14 @@ function PanelNegocio({ seccion }) {
                 <button type="button" className="btn-outline" onClick={() => setSolicitudDetalle(null)}>
                   Cerrar Detalles
                 </button>
-                {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(solicitudDetalle.estado) && (
+                {["Licencia aprobada", "Licencia emitida", "Aprobado"].includes(d.estado) && (
                   <>
-                    {!licenciaVencida(solicitudDetalle) && (
-                      <button type="button" className="btn-ok" onClick={() => descargarLicencia(solicitudDetalle)}>
+                    {!licenciaVencida(d) && (
+                      <button type="button" className="btn-ok" onClick={() => descargarLicencia(d)}>
                         Descargar Licencia
                       </button>
                     )}
-                    <button type="button" className="btn-secundario" onClick={() => { setSolicitudDetalle(null); renovarLicencia(solicitudDetalle); }}>
+                    <button type="button" className="btn-secundario" onClick={() => { setSolicitudDetalle(null); renovarLicencia(d); }}>
                       Renovar Licencia
                     </button>
                   </>
@@ -2992,7 +3292,8 @@ function PanelNegocio({ seccion }) {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

@@ -151,13 +151,13 @@ function App() {
   const renderSeccion = () => {
     if (usuario.rol === "negocio") {
       switch (seccion) {
-        case "nueva-solicitud": return <PanelNegocio seccion="nueva-solicitud" />;
-        case "mis-solicitudes": return <PanelNegocio seccion="mis-solicitudes" />;
-        case "mis-comprobantes": return <PanelNegocio seccion="mis-comprobantes" />;
-        case "mis-pagos": return <PanelNegocio seccion="mis-comprobantes" />;
-        case "notificaciones": return <PanelNegocio seccion="notificaciones" />;
-        case "mi-cuenta": return <PanelNegocio seccion="mi-cuenta" />;
-        default: return <PanelNegocio seccion="inicio" />;
+        case "nueva-solicitud": return <PanelNegocio seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
+        case "mis-solicitudes": return <PanelNegocio seccion="mis-solicitudes" cambiarSeccion={cambiarSeccion} />;
+        case "mis-comprobantes": return <PanelNegocio seccion="mis-comprobantes" cambiarSeccion={cambiarSeccion} />;
+        case "mis-pagos": return <PanelNegocio seccion="mis-comprobantes" cambiarSeccion={cambiarSeccion} />;
+        case "notificaciones": return <PanelNegocio seccion="notificaciones" cambiarSeccion={cambiarSeccion} />;
+        case "mi-cuenta": return <PanelNegocio seccion="mi-cuenta" cambiarSeccion={cambiarSeccion} />;
+        default: return <PanelNegocio seccion="inicio" cambiarSeccion={cambiarSeccion} />;
       }
     }
     if (usuario.rol === "cajero") {

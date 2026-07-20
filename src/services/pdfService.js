@@ -1,6 +1,8 @@
 const CLOUDINARY_CLOUD_NAME = "drnrrgose";
 const CLOUDINARY_UPLOAD_PRESET = "municipal.pdf";
 
+const API_URL = import.meta.env.VITE_API_URL || "";
+
 export const subirArchivoACloudinary = async (file) => {
   const formData = new FormData();
 
@@ -54,10 +56,86 @@ export const subirArchivoACloudinary = async (file) => {
 
 export const convertirPdfABase64 = subirArchivoACloudinary;
 
-export const abrirPdf = (url) => {
+const normalizarTexto = (texto) => {
+  if (!texto) return "";
+  return texto
+    .replace(/[\u2018\u2019\u201A\u201B\u2039\u203A\u00AB\u00BB\u2032\u2035]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2036\u2037]/g, '"')
+    .replace(/[\s]+/g, " ")
+    .trim();
+};
+
+export { normalizarTexto };
+
+export const abrirPdf = async (url) => {
   if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
-    alert("El documento no está disponible.");
+    alert("El documento no está disponible actualmente.");
     return;
   }
-  window.open(url, "_blank");
+
+  const esFirebaseStorage = url.includes("firebasestorage.googleapis.com");
+  const esCloudinary = url.includes("cloudinary.com");
+
+  if (esFirebaseStorage) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, "_blank");
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+        return;
+      }
+    } catch (e) {
+      // fall through
+    }
+  }
+
+  if (esCloudinary) {
+    try {
+      const token = await (await import("../firebase")).getIdToken();
+      if (token) {
+        const proxyUrl = `${API_URL}/api/documento-proxy?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, "_blank");
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+          return;
+        }
+        if (res.status === 404) {
+          alert("El documento no fue encontrado.");
+          return;
+        }
+        if (res.status === 401) {
+          alert("No tiene autorización para visualizar este documento.");
+          return;
+        }
+      }
+    } catch (e) {
+      // fall through
+    }
+  }
+
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+      return;
+    }
+    if (res.status === 404) {
+      alert("El documento no fue encontrado.");
+      return;
+    }
+  } catch (e) {
+    // fall through
+  }
+
+  alert("No se pudo cargar el documento. Intente nuevamente.");
 };

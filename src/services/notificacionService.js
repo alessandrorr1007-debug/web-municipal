@@ -4,10 +4,13 @@ import {
   doc,
   setDoc,
   updateDoc,
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
 
 const COLLECTION = "notificaciones";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 export const crearNotificacion = async (uidUsuario, { titulo, descripcion, icono }, correoUsuario = "") => {
   if (!uidUsuario) return;
@@ -51,9 +54,41 @@ export const marcarComoLeida = async (idNotificacion) => {
   if (!idNotificacion) return;
   try {
     const docRef = doc(db, COLLECTION, idNotificacion);
-    await updateDoc(docRef, { leida: true });
+    await updateDoc(docRef, {
+      leida: true,
+      fechaLectura: new Date().toISOString(),
+    });
     console.log("[NOTIFICACION] Marcada como leída:", idNotificacion);
   } catch (error) {
     console.error("[NOTIFICACION] Error al marcar como leída:", error);
+  }
+};
+
+export const marcarTodasComoLeidas = async (uidUsuario) => {
+  if (!uidUsuario) return;
+  try {
+    const q = query(
+      collection(db, COLLECTION),
+      where("uid_usuario", "==", uidUsuario),
+      where("leida", "==", false)
+    );
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      console.log("[NOTIFICACION] No hay notificaciones pendientes.");
+      return;
+    }
+
+    const batch = snapshot.docs.map((documento) =>
+      updateDoc(doc(db, COLLECTION, documento.id), {
+        leida: true,
+        fechaLectura: new Date().toISOString(),
+      })
+    );
+
+    await Promise.all(batch);
+    console.log(`[NOTIFICACION] ${snapshot.size} notificaciones marcadas como leídas.`);
+  } catch (error) {
+    console.error("[NOTIFICACION] Error al marcar todas como leídas:", error);
   }
 };

@@ -15,7 +15,7 @@ import {
   addDoc, deleteDoc, updateDoc, Timestamp,
 } from "firebase/firestore";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 export const registrarUsuario = async (datos) => {
   const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$/;

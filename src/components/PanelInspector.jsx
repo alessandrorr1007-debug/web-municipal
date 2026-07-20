@@ -1,59 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   obtenerSolicitudes,
   actualizarSolicitud,
 } from "../services/solicitudService";
+import { crearNotificacion } from "../services/notificacionService";
 import { abrirPdf } from "../services/pdfService";
+import { useAuth } from "../context/AuthContext";
+import { formatearFechaLocal } from "../config/inspeccionConfig";
 
 function PanelInspector({ seccion }) {
+  const { usuario } = useAuth();
   const [solicitudes, setSolicitudes] = useState([]);
-  const [hoy, setHoy] = useState([]);
-  const [historial, setHistorial] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [enviandoId, setEnviandoId] = useState("");
   const [formularios, setFormularios] = useState({});
   const [paso, setPaso] = useState("hoy");
+  const [detalleSolicitud, setDetalleSolicitud] = useState(null);
 
-  const obtenerFechaHoy = () => {
-    return new Date().toLocaleDateString("es-PE");
-  };
-
-  const esInspeccionHoy = (s) => {
-    if (!s.fechaVisitaInspector) return false;
-    return s.fechaVisitaInspector === obtenerFechaHoy();
-  };
-
-  const esPendienteHoy = (s) => {
-    const estado = (s.estado || "").toLowerCase();
-    const fechaCorrecta = esInspeccionHoy(s);
-    const noProcesada =
-      s.estado !== "Resultado enviado al funcionario" &&
-      s.inspeccion !== "Aprobada" &&
-      s.inspeccion !== "Rechazada" &&
-      s.inspeccion !== "Reobservada";
-    const esPendiente =
-      estado.includes("inspeccion") ||
-      estado.includes("programada") ||
-      (s.inspeccion || "").toLowerCase().includes("pendiente");
-    return fechaCorrecta && noProcesada && esPendiente;
-  };
-
-  const esHistorial = (s) => {
-    return (
-      s.estado === "Resultado enviado al funcionario" ||
-      s.inspeccion === "Aprobada" ||
-      s.inspeccion === "Rechazada" ||
-      s.inspeccion === "Reobservada"
-    );
-  };
+  const obtenerFechaHoy = () => formatearFechaLocal(new Date());
 
   const cargarSolicitudes = async () => {
     try {
       setCargando(true);
       const data = await obtenerSolicitudes();
       setSolicitudes(data);
-      setHoy(data.filter(esPendienteHoy));
-      setHistorial(data.filter(esHistorial));
     } catch (error) {
       console.error(error);
       alert("No se pudieron cargar las inspecciones.");
@@ -65,6 +35,32 @@ function PanelInspector({ seccion }) {
   useEffect(() => {
     cargarSolicitudes();
   }, []);
+
+  const fechaHoy = obtenerFechaHoy();
+
+  const pendientesHoy = useMemo(() => {
+    return solicitudes.filter((s) => {
+      if (s.fechaVisitaInspector !== fechaHoy) return false;
+      const insp = (s.inspeccion || "").toLowerCase();
+      const estado = (s.estado || "").toLowerCase();
+      if (insp === "aprobada" || insp === "rechazada" || insp === "reobservada") return false;
+      if (estado === "aprobado" || estado === "rechazado" || estado === "resultado enviado al funcionario") return false;
+      return true;
+    });
+  }, [solicitudes, fechaHoy]);
+
+  const realizadasHoy = useMemo(() => {
+    return solicitudes.filter((s) => {
+      if (s.fechaVisitaInspector !== fechaHoy) return false;
+      const insp = (s.inspeccion || "").toLowerCase();
+      return (
+        insp === "aprobada" ||
+        insp === "rechazada" ||
+        insp === "reobservada" ||
+        s.fechaInspeccion
+      );
+    });
+  }, [solicitudes, fechaHoy]);
 
   const formatearFechaHora = () => {
     return new Date().toLocaleString("es-PE", {
@@ -155,7 +151,7 @@ function PanelInspector({ seccion }) {
       return;
     }
     if (!resultado) {
-      alert("Debes elegir un resultado: Aprobado, Observado o No atendido.");
+      alert("Debes elegir un resultado: Aprobado u Observado.");
       return;
     }
     if (evidencias.length === 0) {
@@ -176,18 +172,23 @@ function PanelInspector({ seccion }) {
           evidenciasInspector: evidencias,
           fechaInspeccion: formatearFechaHora(),
           resultadoInspeccion: "El inspector aprueba las condiciones del local.",
-          estado: "Inspección realizada",
-          notificaciones: [
-            ...(solicitud.notificaciones || []),
-            {
-              fecha: formatearFechaHora(),
-              titulo: "Inspección aprobada",
-              mensaje: `El inspector aprobó tu local. Pendiente de decisión final del funcionario.`,
-              leida: false,
-            },
-          ],
+          estado: "Resultado enviado al funcionario",
+          estadoNormalizado: "REVISION_FUNCIONARIO",
+          inspectorNombre: usuario?.nombre || "Inspector",
+          inspectorUid: usuario?.uid || "",
         });
-        alert("Resultado de aprobación enviado.");
+
+        await crearNotificacion(
+          solicitud.uidUsuario,
+          {
+            titulo: "Inspección aprobada",
+            descripcion: `El inspector aprobó las condiciones de su local (EXP-${solicitud.id}). Pendiente de decisión final del funcionario.`,
+            icono: "✅",
+          },
+          solicitud.correoUsuario
+        );
+
+        alert("Resultado de aprobación enviado al funcionario.");
       } else if (resultado === "Observado") {
         if (esReobservacion) {
           await actualizarSolicitud(solicitud.id, {
@@ -197,23 +198,31 @@ function PanelInspector({ seccion }) {
             evidenciasInspector: evidencias,
             fechaInspeccion: formatearFechaHora(),
             resultadoInspeccion: "El inspector rechaza de forma definitiva tras múltiples observaciones.",
-            estado: "Rechazado",
-            notificaciones: [
-              ...(solicitud.notificaciones || []),
-              {
-                fecha: formatearFechaHora(),
-                titulo: "Trámite rechazado",
-                mensaje: `Tu solicitud fue rechazada definitivamente tras la segunda inspección fallida.`,
-                leida: false,
-              },
-            ],
+            estado: "Resultado enviado al funcionario",
+            estadoNormalizado: "REVISION_FUNCIONARIO",
+            inspectorNombre: usuario?.nombre || "Inspector",
+            inspectorUid: usuario?.uid || "",
           });
+
+          await crearNotificacion(
+            solicitud.uidUsuario,
+            {
+              titulo: "Solicitud rechazada tras reobservación",
+              descripcion: `Su solicitud EXP-${solicitud.id} fue rechazada definitivamente tras la segunda inspección con observaciones.`,
+              icono: "❌",
+            },
+            solicitud.correoUsuario
+          );
+
           alert("Solicitud rechazada definitivamente por segunda reobservación.");
         } else {
-          const nuevaCantidad = 1;
+          const nuevaCantidad = (solicitud.cantidadReobservaciones || 0) + 1;
           const fechaReprogramacion = new Date();
           fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 3);
-          const nuevaFecha = fechaReprogramacion.toLocaleDateString("es-PE");
+          while (fechaReprogramacion.getDay() === 0 || fechaReprogramacion.getDay() === 6) {
+            fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 1);
+          }
+          const nuevaFecha = formatearFechaLocal(fechaReprogramacion);
 
           await actualizarSolicitud(solicitud.id, {
             inspeccion: "Reobservada",
@@ -221,10 +230,14 @@ function PanelInspector({ seccion }) {
             observacionInspector: observacion,
             evidenciasInspector: evidencias,
             fechaInspeccion: formatearFechaHora(),
-            resultadoInspeccion: "El inspector observa el local. Se reprograma visita en 3 días hábiles.",
-            estado: "Reprogramado",
+            resultadoInspeccion: "El inspector observa el local. Se reprograma visita.",
+            estado: "Inspección observada",
+            estadoNormalizado: "INSPECCION_OBSERVADA",
             fechaVisitaInspector: nuevaFecha,
+            horaVisitaInspector: "",
             cantidadReobservaciones: nuevaCantidad,
+            inspectorNombre: usuario?.nombre || "Inspector",
+            inspectorUid: usuario?.uid || "",
             historialReobservaciones: [
               ...(solicitud.historialReobservaciones || []),
               {
@@ -232,45 +245,23 @@ function PanelInspector({ seccion }) {
                 observacion,
                 recomendacion: "Reobservar",
                 evidencias: evidencias.length,
-              },
-            ],
-            notificaciones: [
-              ...(solicitud.notificaciones || []),
-              {
-                fecha: formatearFechaHora(),
-                titulo: "Inspección observada",
-                mensaje: `El inspector observó tu local. Se programó una nueva inspección para el ${nuevaFecha}.`,
-                leida: false,
+                inspector: usuario?.nombre || "Inspector",
               },
             ],
           });
+
+          await crearNotificacion(
+            solicitud.uidUsuario,
+            {
+              titulo: "Inspección observada",
+              descripcion: `El inspector observó su local (EXP-${solicitud.id}). Se programó una nueva inspección para el ${nuevaFecha}.`,
+              icono: "⚠️",
+            },
+            solicitud.correoUsuario
+          );
+
           alert(`Solicitud observada. Nueva inspección programada para: ${nuevaFecha}`);
         }
-      } else if (resultado === "No atendido") {
-        const fechaReprogramacion = new Date();
-        fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 3);
-        const nuevaFecha = fechaReprogramacion.toLocaleDateString("es-PE");
-
-        await actualizarSolicitud(solicitud.id, {
-          inspeccion: "Pendiente",
-          recomendacionInspector: "Reprogramar",
-          observacionInspector: observacion,
-          evidenciasInspector: evidencias,
-          fechaInspeccion: formatearFechaHora(),
-          resultadoInspeccion: "Visita no atendida. Se reprograma en 7 días.",
-          estado: "Reprogramado",
-          fechaVisitaInspector: nuevaFecha,
-          notificaciones: [
-            ...(solicitud.notificaciones || []),
-            {
-              fecha: formatearFechaHora(),
-              titulo: "Inspección no atendida",
-              mensaje: `El local no se encontraba disponible o no atendieron al inspector. Se reprogramó para el ${nuevaFecha}.`,
-              leida: false,
-            },
-          ],
-        });
-        alert(`Visita no atendida. Se reprogramó para: ${nuevaFecha}`);
       }
 
       limpiarFormulario(solicitud.id);
@@ -285,19 +276,27 @@ function PanelInspector({ seccion }) {
 
   const badgeClase = (estado = "") => {
     const t = estado.toLowerCase();
-    if (t.includes("aprobada") || t.includes("aprobar")) return "ok";
-    if (t.includes("rechazada") || t.includes("rechazar")) return "danger";
-    if (t.includes("reobserva")) return "warning";
+    if (t.includes("aprobada") || t.includes("aprobar") || t.includes("aprobado")) return "ok";
+    if (t.includes("rechazada") || t.includes("rechazar") || t.includes("rechazado")) return "danger";
+    if (t.includes("reobserva") || t.includes("observada") || t.includes("observado")) return "warning";
     if (t.includes("pendiente")) return "neutral";
     return "info";
   };
 
   const mostrarDocumentos = (s) => {
-    if (s.archivosPdf?.length > 0) {
+    const archivos = s.archivosPdf || [];
+    if (archivos.length > 0) {
       return (
         <div className="documentos-lista">
-          {s.archivosPdf.map((pdf, i) => (
-            <a key={i} href={pdf.archivoUrl} onClick={(e) => { e.preventDefault(); abrirPdf(pdf.archivoUrl); }} target="_blank" rel="noreferrer">
+          {archivos.map((pdf, i) => (
+            <a
+              key={i}
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                abrirPdf(pdf.archivoUrl || pdf.url || pdf);
+              }}
+            >
               PDF {i + 1}
             </a>
           ))}
@@ -305,7 +304,17 @@ function PanelInspector({ seccion }) {
       );
     }
     if (s.archivoUrl) {
-      return <a href={s.archivoUrl} onClick={(e) => { e.preventDefault(); abrirPdf(s.archivoUrl); }} target="_blank" rel="noreferrer">Ver PDF</a>;
+      return (
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            abrirPdf(s.archivoUrl);
+          }}
+        >
+          Ver PDF
+        </a>
+      );
     }
     return "Sin PDF";
   };
@@ -314,27 +323,42 @@ function PanelInspector({ seccion }) {
     <div className="panel panel-inspector">
       <div className="inspector-hero">
         <div>
-          <span className="eyebrow">Area de inspeccion municipal</span>
+          <span className="eyebrow">Área de inspección municipal</span>
           <h1>Panel Inspector</h1>
           <p>
-            Revisa las inspecciones programadas para HOY, sube evidencias y envía tu recomendación al funcionario.
+            Revisa las inspecciones programadas para HOY, sube evidencias y envía
+            tu recomendación al funcionario.
           </p>
         </div>
 
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <div className="hero-card">
-            <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Hoy</span>
-            <strong style={{ fontSize: "28px" }}>{hoy.length}</strong>
-            <small>inspecciones</small>
+            <span
+              style={{
+                fontSize: "12px",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Hoy
+            </span>
+            <strong style={{ fontSize: "28px" }}>{pendientesHoy.length}</strong>
+            <small>pendientes</small>
           </div>
 
-          <button type="button" className="btn-outline-light" onClick={cargarSolicitudes} disabled={cargando || !!enviandoId}>
+          <button
+            type="button"
+            className="btn-outline-light"
+            onClick={cargarSolicitudes}
+            disabled={cargando || !!enviandoId}
+          >
             {cargando ? "Actualizando..." : "Actualizar"}
           </button>
         </div>
       </div>
 
-      {hoy.length > 0 && (
+      {pendientesHoy.length > 0 && (
         <div
           style={{
             margin: "20px 34px 0",
@@ -350,9 +374,17 @@ function PanelInspector({ seccion }) {
           <span style={{ fontSize: "24px" }}>&#128276;</span>
           <div>
             <strong style={{ color: "#92400e", fontSize: "15px" }}>
-              Tienes {hoy.length} inspeccion{hoy.length > 1 ? "es" : ""} programada{hoy.length > 1 ? "s" : ""} para hoy
+              Tienes {pendientesHoy.length} inspeccion
+              {pendientesHoy.length > 1 ? "es" : ""} pendiente
+              {pendientesHoy.length > 1 ? "s" : ""} para hoy
             </strong>
-            <p style={{ margin: "2px 0 0", color: "#a16207", fontSize: "13px" }}>
+            <p
+              style={{
+                margin: "2px 0 0",
+                color: "#a16207",
+                fontSize: "13px",
+              }}
+            >
               Revisa cada expediente, sube evidencias y envía tu recomendación.
             </p>
           </div>
@@ -361,28 +393,36 @@ function PanelInspector({ seccion }) {
 
       <div className="stats-grid">
         <div className="stat-card">
-          <span>Hoy</span>
-          <strong>{hoy.length}</strong>
-          <small>Inspecciones programadas</small>
+          <span>Pendientes hoy</span>
+          <strong>{pendientesHoy.length}</strong>
+          <small>Por inspeccionar</small>
         </div>
         <div className="stat-card">
-          <span>Historial</span>
-          <strong>{historial.length}</strong>
+          <span>Realizadas hoy</span>
+          <strong>{realizadasHoy.length}</strong>
           <small>Resultados enviados</small>
         </div>
         <div className="stat-card">
-          <span>Total</span>
+          <span>Total solicitudes</span>
           <strong>{solicitudes.length}</strong>
-          <small>Solicitudes del sistema</small>
+          <small>En el sistema</small>
         </div>
       </div>
 
       <div className="tabs-panel">
-        <button type="button" className={paso === "hoy" ? "tab-active" : ""} onClick={() => setPaso("hoy")}>
-          Mis inspecciones de hoy
+        <button
+          type="button"
+          className={paso === "hoy" ? "tab-active" : ""}
+          onClick={() => setPaso("hoy")}
+        >
+          Pendientes de hoy ({pendientesHoy.length})
         </button>
-        <button type="button" className={paso === "historial" ? "tab-active" : ""} onClick={() => setPaso("historial")}>
-          Historial
+        <button
+          type="button"
+          className={paso === "realizadas" ? "tab-active" : ""}
+          onClick={() => setPaso("realizadas")}
+        >
+          Realizadas hoy ({realizadasHoy.length})
         </button>
       </div>
 
@@ -390,23 +430,30 @@ function PanelInspector({ seccion }) {
         <section className="section-card">
           <div className="section-header">
             <div>
-              <h2>Inspecciones del día</h2>
-              <p>Solo se muestran las inspecciones programadas para hoy ({obtenerFechaHoy()}).</p>
+              <h2>Inspecciones pendientes</h2>
+              <p>
+                Solo se muestran las inspecciones programadas para hoy (
+                {fechaHoy}).
+              </p>
             </div>
           </div>
 
-          {hoy.length === 0 ? (
+          {pendientesHoy.length === 0 ? (
             <div className="empty-state">
               <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128269;</div>
-              <h3>No tienes inspecciones programadas para hoy</h3>
-              <p>Las inspecciones programadas por el cajero o funcionario apareceran aqui el dia que les toque.</p>
+              <h3>No tienes inspecciones pendientes para hoy</h3>
+              <p>
+                Las inspecciones programadas por el funcionario aparecerán aquí
+                el día que les toque.
+              </p>
             </div>
           ) : (
             <div className="inspector-grid">
-              {hoy.map((solicitud) => {
+              {pendientesHoy.map((solicitud) => {
                 const formulario = formularios[solicitud.id] || {};
                 const estaEnviando = enviandoId === solicitud.id;
-                const esReobservacion = (solicitud.cantidadReobservaciones || 0) >= 1;
+                const esReobservacion =
+                  (solicitud.cantidadReobservaciones || 0) >= 1;
 
                 return (
                   <article className="inspection-card" key={solicitud.id}>
@@ -418,49 +465,107 @@ function PanelInspector({ seccion }) {
                       </div>
                       <div style={{ textAlign: "right" }}>
                         {esReobservacion && (
-                          <span className="badge warning" style={{ marginBottom: "4px" }}>
-                            2da oportunidad ({solicitud.cantidadReobservaciones} reobservacion{solicitud.cantidadReobservaciones > 1 ? "es" : ""})
+                          <span
+                            className="badge warning"
+                            style={{ marginBottom: "4px" }}
+                          >
+                            2da oportunidad (
+                            {solicitud.cantidadReobservaciones} reobservación
+                            {solicitud.cantidadReobservaciones > 1 ? "es" : ""})
                           </span>
                         )}
-                        <span className={`badge ${solicitud.canalRegistro === "presencial" ? "info" : "ok"}`}>
-                          {solicitud.canalRegistro === "presencial" ? "Presencial" : "Online"}
+                        <span
+                          className={`badge ${
+                            solicitud.canalRegistro === "presencial"
+                              ? "info"
+                              : "ok"
+                          }`}
+                        >
+                          {solicitud.canalRegistro === "presencial"
+                            ? "Presencial"
+                            : "Online"}
                         </span>
                       </div>
                     </div>
 
                     <div className="inspection-details">
-                      <p><strong>Responsable:</strong> {solicitud.nombreSolicitante || "N/A"}</p>
-                      <p><strong>Teléfono:</strong> {solicitud.telefonoSolicitante || "N/A"}</p>
-                      <p><strong>Fecha visita:</strong> {solicitud.fechaVisitaInspector || "N/A"}</p>
-                      <p><strong>Hora visita:</strong> {solicitud.horaVisitaInspector || "Sin hora"}</p>
-                      <p><strong>RUC:</strong> {solicitud.ruc}</p>
-                      <p><strong>Dirección:</strong> {solicitud.direccion}</p>
-                      <p><strong>Giro:</strong> {solicitud.giro}</p>
-                      <p><strong>Tipo:</strong> {solicitud.tipoTramite || "Nueva licencia"}</p>
-                      <p><strong>Programado por:</strong> {solicitud.nombreProgramador || "Sistema"}</p>
+                      <p>
+                        <strong>Responsable:</strong>{" "}
+                        {solicitud.nombreSolicitante || "N/A"}
+                      </p>
+                      <p>
+                        <strong>RUC:</strong> {solicitud.ruc}
+                      </p>
+                      <p>
+                        <strong>Dirección:</strong> {solicitud.direccion}
+                      </p>
+                      <p>
+                        <strong>Giro:</strong> {solicitud.giro}
+                      </p>
+                      <p>
+                        <strong>Tipo:</strong>{" "}
+                        {solicitud.tipoTramite || "Nueva licencia"}
+                      </p>
+                      <p>
+                        <strong>Hora visita:</strong>{" "}
+                        {solicitud.horaVisitaLabel ||
+                          solicitud.horaVisitaInspector ||
+                          "Sin hora definida"}
+                      </p>
+                      <p>
+                        <strong>Programado por:</strong>{" "}
+                        {solicitud.nombreProgramador || "Sistema"}
+                      </p>
                       <div>
                         <strong>Documentos:</strong>
                         {mostrarDocumentos(solicitud)}
                       </div>
 
-                      {esReobservacion && solicitud.historialReobservaciones?.length > 0 && (
-                        <div style={{ marginTop: "8px", padding: "10px", background: "#fef3c7", borderRadius: "10px", border: "1px solid #fde68a" }}>
-                          <strong style={{ color: "#92400e", fontSize: "13px" }}>Observaciones anteriores:</strong>
-                          {solicitud.historialReobservaciones.map((obs, i) => (
-                            <p key={i} style={{ margin: "4px 0 0", fontSize: "13px", color: "#a16207" }}>
-                              {obs.fecha}: {obs.observacion}
-                            </p>
-                          ))}
-                        </div>
-                      )}
+                      {esReobservacion &&
+                        solicitud.historialReobservaciones?.length > 0 && (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              padding: "10px",
+                              background: "#fef3c7",
+                              borderRadius: "10px",
+                              border: "1px solid #fde68a",
+                            }}
+                          >
+                            <strong
+                              style={{ color: "#92400e", fontSize: "13px" }}
+                            >
+                              Observaciones anteriores:
+                            </strong>
+                            {solicitud.historialReobservaciones.map((obs, i) => (
+                              <p
+                                key={i}
+                                style={{
+                                  margin: "4px 0 0",
+                                  fontSize: "13px",
+                                  color: "#a16207",
+                                }}
+                              >
+                                {obs.fecha}: {obs.observacion}
+                                {obs.inspector && ` (${obs.inspector})`}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                     </div>
 
                     <div className="inspection-form">
                       <label>
-                        Observacion del inspector *
+                        Observación del inspector *
                         <textarea
                           value={formulario.observacion || ""}
-                          onChange={(e) => actualizarCampo(solicitud.id, "observacion", e.target.value)}
+                          onChange={(e) =>
+                            actualizarCampo(
+                              solicitud.id,
+                              "observacion",
+                              e.target.value
+                            )
+                          }
                           placeholder="Describe las condiciones del local, cumplimiento de normativas..."
                           rows="4"
                           disabled={estaEnviando}
@@ -475,16 +580,27 @@ function PanelInspector({ seccion }) {
                         }}
                         onDragOver={(e) => e.preventDefault()}
                       >
-                        <div style={{ fontSize: "28px", marginBottom: "6px" }}>&#128444;</div>
+                        <div
+                          style={{
+                            fontSize: "28px",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          &#128444;
+                        </div>
                         <p>Evidencias fotográficas</p>
-                        <span>Máximo 2 fotos de 500 KB. Arrastra o selecciona.</span>
+                        <span>
+                          Máximo 2 fotos de 500 KB. Arrastra o selecciona.
+                        </span>
                         <label className="file-label">
                           Elegir fotos
                           <input
                             type="file"
                             accept="image/*"
                             multiple
-                            onChange={(e) => manejarEvidencias(solicitud.id, e.target.files)}
+                            onChange={(e) =>
+                              manejarEvidencias(solicitud.id, e.target.files)
+                            }
                             disabled={estaEnviando}
                             hidden
                           />
@@ -500,7 +616,9 @@ function PanelInspector({ seccion }) {
                               <button
                                 type="button"
                                 className="btn-quitar"
-                                onClick={() => quitarEvidencia(solicitud.id, i)}
+                                onClick={() =>
+                                  quitarEvidencia(solicitud.id, i)
+                                }
                                 disabled={estaEnviando}
                               >
                                 Quitar
@@ -514,26 +632,60 @@ function PanelInspector({ seccion }) {
                         Resultado *
                         <select
                           value={formulario.resultado || ""}
-                          onChange={(e) => actualizarCampo(solicitud.id, "resultado", e.target.value)}
+                          onChange={(e) =>
+                            actualizarCampo(
+                              solicitud.id,
+                              "resultado",
+                              e.target.value
+                            )
+                          }
                           disabled={estaEnviando}
                         >
-                           <option value="">Seleccionar resultado</option>
+                          <option value="">Seleccionar resultado</option>
                           <option value="Aprobado">Aprobado</option>
-                          <option value="Observado">Observado{esReobservacion ? " (RECHAZO DEFINITIVO)" : ""}</option>
-                          <option value="No atendido">No atendido</option>
+                          <option value="Observado">
+                            Observado
+                            {esReobservacion
+                              ? " (RECHAZO DEFINITIVO)"
+                              : ""}
+                          </option>
                         </select>
                       </label>
                     </div>
 
                     {esReobservacion && (
-                      <div style={{ padding: "10px", background: "#fee2e2", borderRadius: "10px", border: "1px solid #fca5a5", marginBottom: "12px" }}>
-                        <p style={{ margin: 0, fontSize: "13px", color: "#991b1b", fontWeight: "bold" }}>
-                          ⚠️ Esta es la 2da oportunidad. Si marcas "Observado" nuevamente, la solicitud será rechazada de forma automática y definitiva.
+                      <div
+                        style={{
+                          padding: "10px",
+                          background: "#fee2e2",
+                          borderRadius: "10px",
+                          border: "1px solid #fca5a5",
+                          marginBottom: "12px",
+                        }}
+                      >
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: "13px",
+                            color: "#991b1b",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          Esta es la 2da oportunidad. Si marcas "Observado"
+                          nuevamente, la solicitud será rechazada de forma
+                          automática y definitiva.
                         </p>
                       </div>
                     )}
 
                     <div className="inspection-actions">
+                      <button
+                        type="button"
+                        className="btn-info"
+                        onClick={() => setDetalleSolicitud(solicitud)}
+                      >
+                        Ver detalle
+                      </button>
                       <button
                         type="button"
                         className="btn-ok"
@@ -551,20 +703,20 @@ function PanelInspector({ seccion }) {
         </section>
       )}
 
-      {paso === "historial" && (
+      {paso === "realizadas" && (
         <section className="section-card">
           <div className="section-header">
             <div>
-              <h2>Historial de inspecciones</h2>
-              <p>Resultados que has registrado como inspector.</p>
+              <h2>Inspecciones realizadas hoy</h2>
+              <p>Resultados que has registrado como inspector hoy.</p>
             </div>
           </div>
 
-          {historial.length === 0 ? (
+          {realizadasHoy.length === 0 ? (
             <div className="empty-state">
               <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128203;</div>
-              <h3>Aún no hay inspecciones realizadas</h3>
-              <p>Cuando envíes una recomendación, aparecerá aquí.</p>
+              <h3>Aún no has registrado inspecciones hoy</h3>
+              <p>Cuando envíes un resultado, aparecerá aquí.</p>
             </div>
           ) : (
             <div className="tabla-container">
@@ -573,33 +725,55 @@ function PanelInspector({ seccion }) {
                   <tr>
                     <th>Expediente</th>
                     <th>Negocio</th>
-                    <th>Tramite</th>
-                    <th>Recomendacion</th>
-                    <th>Observacion</th>
+                    <th>Recomendación</th>
+                    <th>Observación</th>
                     <th>Evidencias</th>
-                    <th>Fecha</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {historial.map((s) => (
+                  {realizadasHoy.map((s) => (
                     <tr key={s.id}>
-                      <td><strong>{s.id}</strong><small>RUC: {s.ruc}</small></td>
-                      <td><strong>{s.nombreNegocio}</strong><small>{s.direccion}</small></td>
-                      <td>{s.tipoTramite || "Nueva licencia"}</td>
-                      <td><span className={`badge ${badgeClase(s.recomendacionInspector)}`}>{s.recomendacionInspector || "Sin recomendación"}</span></td>
-                      <td>{s.observacionInspector || "Sin observacion"}</td>
+                      <td>
+                        <strong>{s.id}</strong>
+                        <small>RUC: {s.ruc}</small>
+                      </td>
+                      <td>
+                        <strong>{s.nombreNegocio}</strong>
+                        <small>{s.direccion}</small>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${badgeClase(
+                            s.recomendacionInspector
+                          )}`}
+                        >
+                          {s.recomendacionInspector || "Sin recomendación"}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: "200px" }}>
+                        {s.observacionInspector || "Sin observación"}
+                      </td>
                       <td>
                         {s.evidenciasInspector?.length > 0 ? (
                           <div className="evidencias-tabla">
                             {s.evidenciasInspector.map((img, i) => (
-                              <a key={i} href={img.url} target="_blank" rel="noreferrer">Foto {i + 1}</a>
+                              <span key={i} className="badge info">
+                                Foto {i + 1}
+                              </span>
                             ))}
                           </div>
-                        ) : "Sin evidencias"}
+                        ) : (
+                          "Sin evidencias"
+                        )}
                       </td>
-                      <td>{s.fechaInspeccion || "Sin fecha"}</td>
-                      <td><span className={`badge ${badgeClase(s.inspeccion)}`}>{s.inspeccion || "Enviado"}</span></td>
+                      <td>
+                        <span
+                          className={`badge ${badgeClase(s.inspeccion)}`}
+                        >
+                          {s.inspeccion || "Enviado"}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -607,6 +781,122 @@ function PanelInspector({ seccion }) {
             </div>
           )}
         </section>
+      )}
+
+      {detalleSolicitud && (
+        <div className="admin-form-modal" style={{ zIndex: 1000 }}>
+          <div
+            className="admin-form-card"
+            style={{ maxWidth: "600px", maxHeight: "85vh", overflowY: "auto" }}
+          >
+            <div className="admin-form-header">
+              <h3>Detalle Expediente {detalleSolicitud.id}</h3>
+              <button
+                type="button"
+                onClick={() => setDetalleSolicitud(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: "16px 0" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                }}
+              >
+                <div>
+                  <h4
+                    style={{ margin: "0 0 6px", color: "#1f3b57", fontSize: "14px" }}
+                  >
+                    Establecimiento
+                  </h4>
+                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                    <strong>Nombre:</strong>{" "}
+                    {detalleSolicitud.nombreNegocio || "---"}
+                  </p>
+                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                    <strong>RUC:</strong> {detalleSolicitud.ruc || "---"}
+                  </p>
+                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                    <strong>Dirección:</strong>{" "}
+                    {detalleSolicitud.direccion || "---"}
+                  </p>
+                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                    <strong>Giro:</strong> {detalleSolicitud.giro || "---"}
+                  </p>
+                </div>
+                <div>
+                  <h4
+                    style={{ margin: "0 0 6px", color: "#1f3b57", fontSize: "14px" }}
+                  >
+                    Solicitante
+                  </h4>
+                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                    <strong>Nombre:</strong>{" "}
+                    {detalleSolicitud.nombreSolicitante || "---"}
+                  </p>
+                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                    <strong>Teléfono:</strong>{" "}
+                    {detalleSolicitud.telefonoSolicitante ||
+                      detalleSolicitud.telefono ||
+                      "---"}
+                  </p>
+                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                    <strong>Tipo trámite:</strong>{" "}
+                    {detalleSolicitud.tipoTramite || "Nueva licencia"}
+                  </p>
+                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                    <strong>Canal:</strong>{" "}
+                    {detalleSolicitud.canalRegistro === "presencial"
+                      ? "Presencial"
+                      : "Online"}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ marginTop: "12px" }}>
+                <h4
+                  style={{ margin: "0 0 6px", color: "#1f3b57", fontSize: "14px" }}
+                >
+                  Documentos
+                </h4>
+                {mostrarDocumentos(detalleSolicitud)}
+              </div>
+
+              <div style={{ marginTop: "12px" }}>
+                <h4
+                  style={{ margin: "0 0 6px", color: "#1f3b57", fontSize: "14px" }}
+                >
+                  Programación
+                </h4>
+                <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                  <strong>Fecha visita:</strong>{" "}
+                  {detalleSolicitud.fechaVisitaInspector || "---"}
+                </p>
+                <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                  <strong>Hora visita:</strong>{" "}
+                  {detalleSolicitud.horaVisitaLabel ||
+                    detalleSolicitud.horaVisitaInspector ||
+                    "---"}
+                </p>
+                <p style={{ margin: "2px 0", fontSize: "13px" }}>
+                  <strong>Programado por:</strong>{" "}
+                  {detalleSolicitud.nombreProgramador || "Sistema"}
+                </p>
+              </div>
+            </div>
+            <div className="admin-form-actions">
+              <button
+                type="button"
+                onClick={() => setDetalleSolicitud(null)}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

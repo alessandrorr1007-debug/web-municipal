@@ -4,6 +4,8 @@ import {
   doc,
   setDoc,
   getDocs,
+  getDoc,
+  updateDoc,
   query,
   where,
   orderBy,
@@ -150,9 +152,10 @@ export const obtenerComprobantesPorUsuario = async (uidUsuario) => {
     where("id_usuario", "==", uidUsuario)
   );
   const snapshot = await getDocs(q);
-  const comprobantes = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const comprobantes = snapshot.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((c) => !c.eliminado);
 
-  // Sort locally by fecha_emision/hora_emision to avoid index constraints
   return comprobantes.sort((a, b) => {
     const datetimeA = `${a.fecha_emision || ""} ${a.hora_emision || ""}`.trim();
     const datetimeB = `${b.fecha_emision || ""} ${b.hora_emision || ""}`.trim();
@@ -455,7 +458,7 @@ export const imprimirComprobante = async (comprobante) => {
 };
 
 export const enviarComprobantePorCorreo = async (comprobante) => {
-  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+  const apiUrl = import.meta.env.VITE_API_URL || "";
   const url = `${apiUrl}/api/comprobantes/enviar-correo`;
 
   const headers = await authHeaders();
@@ -477,4 +480,23 @@ export const enviarComprobantePorCorreo = async (comprobante) => {
   }
 
   return data;
+};
+
+export const eliminarComprobante = async (idComprobante) => {
+  if (!idComprobante) throw new Error("ID de comprobante requerido.");
+  const docRef = doc(db, COLLECTION, idComprobante);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) throw new Error("El comprobante no existe.");
+  await updateDoc(docRef, { eliminado: true });
+};
+
+export const existeComprobanteParaSolicitud = async (uidUsuario, idSolicitud) => {
+  if (!uidUsuario || !idSolicitud) return false;
+  const q = query(
+    collection(db, COLLECTION),
+    where("id_usuario", "==", uidUsuario),
+    where("id_solicitud", "==", idSolicitud)
+  );
+  const snapshot = await getDocs(q);
+  return !snapshot.empty;
 };

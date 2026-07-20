@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import axios from "axios";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import { fileURLToPath } from "url";
@@ -9,14 +10,9 @@ import fs from "fs";
 import { smsProvider } from "./smsProvider.js";
 import { emailProvider } from "./emailProvider.js";
 import { initializeApp } from "firebase/app";
-import { initializeFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { initializeFirestore, doc, getDoc, getDocs, setDoc, updateDoc, collection, serverTimestamp } from "firebase/firestore";
 
 
-import {
-  MercadoPagoConfig,
-  Payment,
-  Preference,
-} from "mercadopago";
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -88,12 +84,36 @@ const verificarToken = async (req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 const TOKEN_DECOLECTA =
-  process.env.DECOLECTA_TOKEN || process.env.VITE_DECOLECTA_TOKEN;
+  process.env.DECOLECTA_TOKEN;
 
-const MP_ACCESS_TOKEN =
-  process.env.MERCADO_PAGO_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN;
+const FLOW_API_KEY = process.env.FLOW_API_KEY || "";
+const FLOW_SECRET_KEY = process.env.FLOW_SECRET_KEY || "";
+const FLOW_BASE_URL =
+  process.env.FLOW_ENV === "production"
+    ? "https://www.flow.cl/api"
+    : "https://sandbox.flow.cl/api";
 
 const MONTO_TRAMITE = 3;
+
+console.log("═══════════════════════════════════════════════");
+console.log("  FLOW PAYMENT GATEWAY — DIAGNÓSTICO");
+console.log("═══════════════════════════════════════════════");
+console.log("[FLOW] FLOW_ENV:", process.env.FLOW_ENV || "(no definido)");
+console.log("[FLOW] Base URL:", FLOW_BASE_URL);
+console.log("");
+console.log("[FLOW] FLOW_API_KEY:");
+console.log("  - Cargada:", !!FLOW_API_KEY);
+console.log("  - Longitud:", FLOW_API_KEY.length);
+console.log("  - Primeros 6:", FLOW_API_KEY.substring(0, 6));
+console.log("  - Últimos 4:", FLOW_API_KEY.substring(FLOW_API_KEY.length - 4));
+console.log("  - Formato UUID:", /^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$/.test(FLOW_API_KEY) ? "VÁLIDO" : "INVÁLIDO");
+console.log("");
+console.log("[FLOW] FLOW_SECRET_KEY:");
+console.log("  - Cargada:", !!FLOW_SECRET_KEY);
+console.log("  - Longitud:", FLOW_SECRET_KEY.length);
+console.log("  - Últimos 4:", FLOW_SECRET_KEY.substring(FLOW_SECRET_KEY.length - 4));
+console.log("  - Solo hex:", /^[0-9a-fA-F]+$/.test(FLOW_SECRET_KEY) ? "SÍ" : "NO");
+console.log("═══════════════════════════════════════════════");
 
 const SMTP_EMAIL = process.env.SMTP_EMAIL || "";
 const SMTP_PASSWORD = process.env.SMTP_PASSWORD || "";
@@ -103,13 +123,6 @@ console.log("PORT:", PORT);
 console.log("SMTP EMAIL:", SMTP_EMAIL ? "Configurado" : "No configurado");
 console.log("DIST path:", distPath);
 console.log("DIST exists:", fs.existsSync(distPath));
-
-const mpClient = new MercadoPagoConfig({
-  accessToken: MP_ACCESS_TOKEN || "",
-});
-
-const payment = new Payment(mpClient);
-const preference = new Preference(mpClient);
 
 const transporter = SMTP_EMAIL && SMTP_PASSWORD
   ? nodemailer.createTransport({
@@ -136,7 +149,7 @@ if (transporter) {
 ========================= */
 
 const generarIdExpediente = () => {
-  return "EXP-" + Date.now().toString().slice(-6);
+  return "EXP-" + Date.now().toString().slice(-8);
 };
 
 const promiseWithTimeout = (promise, ms, timeoutMessage) => {
@@ -177,6 +190,10 @@ app.post("/api/solicitudes", verificarToken, async (req, res) => {
       nombreSolicitante: solicitud.nombreSolicitante || "",
       telefonoSolicitante: solicitud.telefonoSolicitante || "",
 
+      dniSolicitante: solicitud.dniSolicitante || "",
+      nombresSolicitante: solicitud.nombresSolicitante || "",
+      apellidosSolicitante: solicitud.apellidosSolicitante || "",
+
       canalRegistro: solicitud.canalRegistro || "online",
 
       tipoTramite: solicitud.tipoTramite || "Nueva licencia",
@@ -188,6 +205,10 @@ app.post("/api/solicitudes", verificarToken, async (req, res) => {
       giro: solicitud.giro || "",
       estadoSunat: solicitud.estadoSunat || "",
       condicionSunat: solicitud.condicionSunat || "",
+
+      departamento: solicitud.departamento || "",
+      provincia: solicitud.provincia || "",
+      distrito: solicitud.distrito || "",
 
       archivosPdf,
 
@@ -298,6 +319,60 @@ app.get("/api/health", (req, res) => {
     decolecta: TOKEN_DECOLECTA ? "configurado" : "no configurado",
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get("/api/documento-proxy", verificarToken, async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).json({ error: "Parámetro 'url' requerido." });
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return res.status(400).json({ error: "URL inválida." });
+    }
+
+    const allowedHosts = ["res.cloudinary.com", "firebasestorage.googleapis.com"];
+    if (!allowedHosts.includes(parsedUrl.hostname)) {
+      return res.status(403).json({ error: "Dominio no permitido." });
+    }
+
+    const response = await axios.get(url, {
+      responseType: "stream",
+      timeout: 15000,
+      headers: { Accept: "*/*" },
+    });
+
+    const contentType = response.headers["content-type"] || "application/octet-stream";
+    const contentLength = response.headers["content-length"];
+
+    res.setHeader("Content-Type", contentType);
+    if (contentLength) {
+      res.setHeader("Content-Length", contentLength);
+    }
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    response.data.pipe(res);
+  } catch (error) {
+    console.error("=== ERROR EN PROXY DE DOCUMENTO ===");
+    console.error("URL:", req.query.url);
+    console.error("Status:", error.response?.status);
+    console.error("Message:", error.message);
+
+    if (error.response?.status === 404) {
+      return res.status(404).json({ error: "El documento no fue encontrado en el servidor remoto." });
+    }
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      return res.status(401).json({ error: "El documento no está disponible actualmente." });
+    }
+
+    res.status(502).json({ error: "No se pudo obtener el documento. Intente más tarde." });
+  }
 });
 
 app.get("/api/consultar-dni/:dni", async (req, res) => {
@@ -418,16 +493,27 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
       return res.status(404).json({ error: "El RUC ingresado no se encuentra registrado en SUNAT." });
     }
 
+    const normalizeText = (text) => {
+      if (!text) return "";
+      return text
+        .replace(/['']/g, "'")
+        .replace(/['']/g, "'")
+        .replace(/\s+/g, " ")
+        .replace(/,\s*,/g, ",")
+        .replace(/^\s*,\s*|\s*,\s*$/g, "")
+        .trim();
+    };
+
     const rucNum = data.numero_documento;
-    const razonSocial = data.razon_social;
-    const nombreComercial = data.nombre_comercial || "";
+    const razonSocial = normalizeText(data.razon_social);
+    const nombreComercial = normalizeText(data.nombre_comercial);
     const estado = (data.estado || "").toUpperCase().trim();
     const condicion = (data.condicion || "").toUpperCase().trim();
-    const direccion = data.direccion || "";
-    const departamento = data.departamento || "";
-    const provincia = data.provincia || "";
-    const distrito = data.distrito || "";
-    const giroComercial = data.actividad_economica || "Actividad económica no especificada";
+    const direccion = normalizeText(data.direccion);
+    const departamento = normalizeText(data.departamento);
+    const provincia = normalizeText(data.provincia);
+    const distrito = normalizeText(data.distrito);
+    const giroComercial = normalizeText(data.actividad_economica) || "Actividad económica no especificada";
 
     let esValido = true;
     let motivoRechazo = "";
@@ -486,109 +572,199 @@ app.get("/api/consultar-ruc/:ruc", async (req, res) => {
   }
 });
 
-app.get("/api/ruc/:numero", async (req, res) => {
-  try {
-    const { numero } = req.params;
+/* =========================
+   FLOW PAYMENT GATEWAY
+========================= */
 
-    if (!TOKEN_DECOLECTA) {
-      return res.status(500).json({
-        error: "Falta DECOLECTA_TOKEN en .env",
-      });
+const flowSign = (params) => {
+  const sortedKeys = Object.keys(params).sort();
+  const toSign = sortedKeys.map((k) => `${k}${params[k]}`).join("");
+  console.log("[FLOW] toSign:", toSign.substring(0, 80) + "...");
+  return crypto.createHmac("sha256", FLOW_SECRET_KEY).update(toSign).digest("hex");
+};
+
+const flowBuildBody = (params) => {
+  const sortedKeys = Object.keys(params).sort();
+  return sortedKeys.map((k) => `${k}=${params[k]}`).join("&");
+};
+
+app.post("/api/pagos/flow/crear-orden", verificarToken, async (req, res) => {
+  try {
+    if (!FLOW_API_KEY || !FLOW_SECRET_KEY) {
+      return res.status(500).json({ error: "Flow no está configurado. Faltan credenciales." });
     }
 
-    const response = await axios.get(
-      `https://api.decolecta.com/v1/sunat/ruc/full?numero=${numero}`,
+    const { commerceOrder, subject, amount, email, urlConfirmation, urlReturn } = req.body;
+
+    if (!commerceOrder || !amount || !email) {
+      return res.status(400).json({ error: "Faltan parámetros requeridos: commerceOrder, amount, email." });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "El correo electrónico no tiene un formato válido." });
+    }
+
+    const params = {
+      apiKey: FLOW_API_KEY,
+      commerceOrder: String(commerceOrder),
+      subject: subject || "Derecho de trámite - Licencia Municipal",
+      currency: "PEN",
+      amount: Number(amount),
+      email,
+      urlConfirmation: urlConfirmation || `${MUNICIPALIDAD_CONFIG.url}/api/pagos/flow/callback`,
+      urlReturn: urlReturn || `${MUNICIPALIDAD_CONFIG.url}/pago-exitoso`,
+    };
+
+    console.log("[FLOW] === CREANDO ORDEN ===");
+    console.log("[FLOW] apiKey length:", FLOW_API_KEY.length);
+    console.log("[FLOW] apiKey prefix:", FLOW_API_KEY.substring(0, 6) + "...");
+    console.log("[FLOW] secretKey loaded:", !!FLOW_SECRET_KEY, "(length:", FLOW_SECRET_KEY.length + ")");
+    console.log("[FLOW] params:", JSON.stringify({ ...params, apiKey: "(hidden)" }, null, 2));
+
+    const s = flowSign(params);
+    const data = flowBuildBody(params);
+
+    console.log("[FLOW] signature:", s);
+    console.log("[FLOW] body preview:", data.substring(0, 100) + "...");
+
+    const response = await axios.post(
+      `${FLOW_BASE_URL}/payment/create`,
+      `${data}&s=${s}`,
       {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${TOKEN_DECOLECTA}`,
-        },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 15000,
       }
     );
 
+    const { url, token } = response.data;
+    if (!url || !token) {
+      return res.status(500).json({ error: "Flow no devolvió url o token." });
+    }
+
+    console.log("[FLOW] Orden creada OK:", { commerceOrder, token: token.substring(0, 10) + "..." });
+
+    res.json({ url, token, paymentUrl: `${url}?token=${token}` });
+  } catch (error) {
+    console.error("[FLOW] Error creando orden:");
+    console.error("[FLOW] Status:", error.response?.status);
+    console.error("[FLOW] Data:", JSON.stringify(error.response?.data));
+    console.error("[FLOW] Message:", error.message);
+    const rawDetalle = error.response?.data || error.message;
+    const detalle = typeof rawDetalle === "object" ? JSON.stringify(rawDetalle) : String(rawDetalle);
+    res.status(500).json({
+      error: "No se pudo crear la orden de pago con Flow",
+      detalle,
+    });
+  }
+});
+
+app.get("/api/pagos/flow/status/:token", verificarToken, async (req, res) => {
+  try {
+    if (!FLOW_API_KEY || !FLOW_SECRET_KEY) {
+      return res.status(500).json({ error: "Flow no está configurado." });
+    }
+
+    const { token } = req.params;
+    const params = { apiKey: FLOW_API_KEY, token };
+    const s = flowSign(params);
+
+    const response = await axios.get(`${FLOW_BASE_URL}/payment/getStatus`, {
+      params: { ...params, s },
+      timeout: 10000,
+    });
+
     res.json(response.data);
   } catch (error) {
-    console.error(error.response?.data || error.message);
-
-    res.status(500).json({
-      error: "Error consultando SUNAT",
-      detalle: error.response?.data || error.message,
-    });
+    console.error("[FLOW] Error consultando estado:", error.response?.data || error.message);
+    res.status(500).json({ error: "No se pudo consultar el estado del pago." });
   }
 });
 
-app.post("/api/pagos/crear-preferencia", verificarToken, async (req, res) => {
+app.post("/api/pagos/flow/callback", express.urlencoded({ extended: false }), async (req, res) => {
   try {
-    const { ruc, razonSocial } = req.body;
+    console.log("[FLOW CALLBACK] Body recibido:", req.body);
 
-    const result = await preference.create({
-      body: {
-        items: [
-          {
-            id: "LICENCIA-MUNICIPAL",
-            title: `Licencia Municipal - ${razonSocial || "Negocio"}`,
-            quantity: 1,
-            currency_id: "PEN",
-            unit_price: MONTO_TRAMITE,
-          },
-        ],
+    const token = req.body.token;
+    if (!token) {
+      return res.status(400).send("Token requerido");
+    }
 
-        payer: {
-          email: "test_user_650000@testuser.com",
-        },
+    if (!FLOW_API_KEY || !FLOW_SECRET_KEY) {
+      console.error("[FLOW CALLBACK] Flow no configurado");
+      return res.status(500).send("Flow no configurado");
+    }
 
-        external_reference: `RUC-${ruc || "SIN-RUC"}-${Date.now()}`,
-
-        back_urls: {
-          success: "https://web-municipal-1.onrender.com",
-          failure: "https://web-municipal-1.onrender.com",
-          pending: "https://web-municipal-1.onrender.com",
-        },
-
-        auto_return: "approved",
-      },
+    const params = { apiKey: FLOW_API_KEY, token };
+    const s = flowSign(params);
+    const response = await axios.get(`${FLOW_BASE_URL}/payment/getStatus`, {
+      params: { ...params, s },
+      timeout: 10000,
     });
 
-    res.json({
-      id: result.id,
-      init_point: result.init_point,
-      sandbox_init_point: result.sandbox_init_point,
-    });
+    const paymentData = response.data;
+    console.log("[FLOW CALLBACK] Estado del pago:", JSON.stringify(paymentData));
+
+    if (paymentData.status === 1) {
+      console.log("[FLOW CALLBACK] Pago APROBADO para orden:", paymentData.commerceOrder);
+
+      const solicitudRef = doc(db, "solicitudes", paymentData.commerceOrder);
+      const solicitudSnap = await getDoc(solicitudRef);
+
+      if (solicitudSnap.exists()) {
+        const solicitudData = solicitudSnap.data();
+        const uidUsuario = solicitudData.uidUsuario || "";
+        const correoUsuario = solicitudData.correoUsuario || "";
+
+        await updateDoc(solicitudRef, {
+            estadoPago: "Confirmado",
+            pago: "Confirmado",
+            metodoPago: "Flow",
+            comprobantePago: "Pago confirmado vía Flow",
+            montoPagado: paymentData.amount || MONTO_TRAMITE,
+            pagoId: String(paymentData.flowOrder || token),
+            pagoEstadoDetalle: "approved",
+            pagoFecha: paymentData.paymentData?.date || new Date().toISOString(),
+            pagoMedio: paymentData.paymentData?.media || "Flow",
+            flowToken: token,
+            flowCommerceOrder: paymentData.commerceOrder,
+            actualizadoEn: serverTimestamp(),
+          });
+
+        if (uidUsuario) {
+          const idNotificacion = `flow-${paymentData.commerceOrder}-${Date.now()}`;
+          await setDoc(doc(db, "notificaciones", idNotificacion), {
+            id_notificacion: idNotificacion,
+            uid_usuario: uidUsuario,
+            titulo: "Pago confirmado",
+            descripcion: `Tu pago de S/${MONTO_TRAMITE.toFixed(2)} para la solicitud EXP-${paymentData.commerceOrder} ha sido confirmado vía Flow.`,
+            icono: "💳",
+            fecha_hora: new Date().toISOString(),
+            leida: false,
+          });
+
+          if (correoUsuario && transporter) {
+            transporter.sendMail({
+              from: `"${MUNICIPALIDAD_CONFIG.nombre}" <${SMTP_EMAIL}>`,
+              to: correoUsuario,
+              subject: "Pago confirmado - Solicitud municipal",
+              html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#1e293b;">
+                <h2 style="color:#0f766e;">Pago confirmado</h2>
+                <p>Tu pago de <strong>S/${MONTO_TRAMITE.toFixed(2)}</strong> para la solicitud <strong>EXP-${paymentData.commerceOrder}</strong> ha sido procesado exitosamente a través de Flow.</p>
+                <p>Puedes continuar con tu trámite desde tu panel de usuario.</p>
+                <p style="color:#64748b;font-size:12px;margin-top:20px;">${MUNICIPALIDAD_CONFIG.nombre}</p>
+              </div>`,
+            }).catch((e) => console.error("[FLOW] Error enviando correo:", e.message));
+          }
+        }
+      }
+    } else {
+      console.log("[FLOW CALLBACK] Pago NO aprobado. Status:", paymentData.status);
+    }
+
+    res.status(200).send("OK");
   } catch (error) {
-    console.error("ERROR CREANDO PREFERENCIA:");
-    console.error(error);
-
-    res.status(500).json({
-      error: "No se pudo crear la preferencia de pago",
-      detalle: error.message,
-    });
-  }
-});
-
-app.get("/api/pagos/verificar/:paymentId", verificarToken, async (req, res) => {
-  try {
-    const { paymentId } = req.params;
-
-    const result = await payment.get({
-      id: paymentId,
-    });
-
-    res.json({
-      id: result.id,
-      status: result.status,
-      status_detail: result.status_detail,
-      transaction_amount: result.transaction_amount,
-      payment_method_id: result.payment_method_id,
-      date_approved: result.date_approved,
-    });
-  } catch (error) {
-    console.error("ERROR VERIFICANDO PAGO:");
-    console.error(error);
-
-    res.status(500).json({
-      error: "No se pudo verificar el pago",
-      detalle: error.message,
-    });
+    console.error("[FLOW CALLBACK] Error:", error.message);
+    res.status(200).send("OK");
   }
 });
 
@@ -867,28 +1043,6 @@ app.post("/api/enviar-codigo", async (req, res) => {
     console.error("=== ERROR ENVIANDO CORREO ===");
     console.error("Mensaje:", error.message);
     res.status(500).json({ error: "No se pudo enviar el correo de verificación", detalle: error.message });
-  }
-});
-
-app.post("/api/cambiar-contrasena", async (req, res) => {
-  console.log("=== ENDPOINT /api/cambiar-contrasena ===");
-  console.log("Este endpoint ha sido deprecado. Use sendPasswordResetEmail desde el frontend.");
-
-  try {
-    const { correo } = req.body;
-
-    if (!correo) {
-      return res.status(400).json({ error: "El correo es requerido." });
-    }
-
-    res.json({ mensaje: "Se ha enviado un enlace de restablecimiento a tu correo electrónico." });
-  } catch (error) {
-    console.error("=== ERROR ENVIANDO RESTABLECIMIENTO ===");
-    console.error("Mensaje:", error.message);
-    res.status(500).json({
-      error: "No se pudo procesar la solicitud.",
-      detalle: error.message,
-    });
   }
 });
 

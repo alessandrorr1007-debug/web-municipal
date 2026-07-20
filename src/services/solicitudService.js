@@ -13,12 +13,12 @@ import {
 
 import { db, authHeaders } from "../firebase";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 const COLLECTION_NAME = "solicitudes";
 
 const generarIdExpediente = () => {
-  return "EXP-" + Date.now().toString().slice(-6);
+  return "EXP-" + Date.now().toString().slice(-8);
 };
 
 export const guardarSolicitud = async (solicitud) => {
@@ -198,6 +198,54 @@ export const actualizarSolicitud = async (id, cambios) => {
   }
 
   return true;
+};
+
+export const obtenerInspeccionesPorFecha = async (fechaStr) => {
+  const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+  return snapshot.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((s) => {
+      if (!s.fechaVisitaInspector) return false;
+      if (s.fechaVisitaInspector !== fechaStr) return false;
+      const insp = (s.inspeccion || "").toLowerCase();
+      const estado = (s.estado || "").toLowerCase();
+      if (insp === "aprobada" || insp === "rechazada" || insp === "reobservada") return false;
+      if (estado === "aprobado" || estado === "rechazado" || estado === "resultado enviado al funcionario") return false;
+      return true;
+    });
+};
+
+export const contarInspeccionesEnFecha = async (fechaStr) => {
+  const inspecciones = await obtenerInspeccionesPorFecha(fechaStr);
+  return inspecciones.length;
+};
+
+export const obtenerSolicitudesPendientesDecision = async () => {
+  const data = await obtenerSolicitudes();
+  return data.filter((s) => {
+    const estado = (s.estado || "").toLowerCase();
+    return (
+      estado === "inspección realizada" ||
+      estado === "resultado enviado al funcionario" ||
+      s.recomendacionInspector === "Aprobar" ||
+      s.recomendacionInspector === "Rechazar"
+    );
+  });
+};
+
+export const obtenerSolicitudesPorInspector = async (inspectorUid) => {
+  const data = await obtenerSolicitudes();
+  return data.filter((s) => s.inspectorAsignadoUid === inspectorUid || !inspectorUid);
+};
+
+export const obtenerSolicitudesHoy = async () => {
+  const hoy = new Date();
+  const dia = String(hoy.getDate()).padStart(2, "0");
+  const mes = String(hoy.getMonth() + 1).padStart(2, "0");
+  const anio = hoy.getFullYear();
+  const fechaHoy = `${dia}/${mes}/${anio}`;
+  const data = await obtenerSolicitudes();
+  return data.filter((s) => s.fechaVisitaInspector === fechaHoy);
 };
 
 export const obtenerSolicitudPorId = async (id) => {
