@@ -22,9 +22,6 @@ import { crearNotificacion, marcarComoLeida, marcarTodasComoLeidas } from "../se
 import { determinarActividad, ACTIVIDADES_CONFIG } from "../config/documentosConfig";
 import { useAuth } from "../context/AuthContext";
 import {
-  enviarOtpTelefono,
-  verificarOtpTelefono,
-  confirmarVerificacionTelefono,
   actualizarPreferenciasNotificaciones,
   enviarOtpCorreoActual,
   verificarOtpCorreoActual,
@@ -53,13 +50,6 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
     try { return JSON.stringify(err); } catch { return String(err); }
   };
 
-  // SMS Notification Verification states
-  const [cargandoSms, setCargandoSms] = useState(false);
-  const [pasoVerificarTelefono, setPasoVerificarTelefono] = useState(false);
-  const [codigoSms, setCodigoSms] = useState("");
-  const [errorSms, setErrorSms] = useState("");
-  const [successSms, setSuccessSms] = useState("");
-  const [tiempoRestanteSms, setTiempoRestanteSms] = useState(0);
   const [modalComprobante, setModalComprobante] = useState(null);
   const [comprobantePdfUrl, setComprobantePdfUrl] = useState("");
   const [notificaciones, setNotificaciones] = useState([]);
@@ -87,19 +77,7 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
     return () => unsubscribe();
   }, [usuario]);
 
-  const [telefonoInput, setTelefonoInput] = useState(usuario?.telefono || "");
-  const [editandoTelefono, setEditandoTelefono] = useState(!usuario?.telefono_verificado);
-  const [intentosCount, setIntentosCount] = useState(0);
-  const [reenviosCount, setReenviosCount] = useState(0);
 
-  useEffect(() => {
-    if (usuario) {
-      if (usuario.telefono) {
-        setTelefonoInput(usuario.telefono);
-      }
-      setEditandoTelefono(!usuario.telefono_verificado);
-    }
-  }, [usuario]);
 
   useEffect(() => {
     let activeUrl = "";
@@ -246,112 +224,11 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
     }
   };
 
-  useEffect(() => {
-    if (tiempoRestanteSms <= 0) return;
-    const timer = setTimeout(() => {
-      setTiempoRestanteSms((t) => t - 1);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [tiempoRestanteSms]);
-
-  const manejarEnviarOtpSms = async () => {
-    const cleanedPhone = telefonoInput.replace(/\s+/g, "");
-    const match = cleanedPhone.match(/^(?:\+51)?(9\d{8})$/);
-    if (!match) {
-      setErrorSms("Número telefónico inválido. Debe ser de Perú (+51 o 9XXXXXXXX).");
-      return;
-    }
-    const telefonoVerdadero = match[1];
-
-    setErrorSms("");
-    setSuccessSms("");
-    setCargandoSms(true);
-
-    try {
-      const q = query(collection(db, "usuarios"), where("telefono", "==", telefonoVerdadero));
-      const snap = await getDocs(q);
-      const isRegisteredOther = snap.docs.some(docSnap => docSnap.id !== usuario.uid);
-      if (isRegisteredOther) {
-        setErrorSms("Este número telefónico ya está registrado en otra cuenta.");
-        setCargandoSms(false);
-        return;
-      }
-
-      if (reenviosCount >= 3) {
-        setErrorSms("Límite de reenvíos alcanzado (Máx 3).");
-        setCargandoSms(false);
-        return;
-      }
-
-      await enviarOtpTelefono(telefonoVerdadero);
-      setReenviosCount(prev => prev + 1);
-      setPasoVerificarTelefono(true);
-      setTiempoRestanteSms(60);
-      setIntentosCount(0);
-      setSuccessSms("Se ha enviado un código de verificación de 6 dígitos a tu teléfono.");
-    } catch (err) {
-      setErrorSms(err.message || "No se pudo enviar el código SMS.");
-    } finally {
-      setCargandoSms(false);
-    }
-  };
-
-  const manejarVerificarOtpSms = async (e) => {
-    e.preventDefault();
-    if (!codigoSms || codigoSms.length !== 6) {
-      setErrorSms("Ingresa el código de 6 dígitos.");
-      return;
-    }
-
-    const cleanedPhone = telefonoInput.replace(/\s+/g, "");
-    const match = cleanedPhone.match(/^(?:\+51)?(9\d{8})$/);
-    if (!match) {
-      setErrorSms("Número telefónico inválido.");
-      return;
-    }
-    const telefonoVerdadero = match[1];
-
-    setErrorSms("");
-    setSuccessSms("");
-    setCargandoSms(true);
-
-    const nextIntentos = intentosCount + 1;
-    setIntentosCount(nextIntentos);
-    if (nextIntentos > 5) {
-      setErrorSms("Has alcanzado el límite máximo de 5 intentos. Solicite un nuevo código.");
-      setCargandoSms(false);
-      return;
-    }
-
-    try {
-      await verificarOtpTelefono(telefonoVerdadero, codigoSms);
-      
-      const userRef = doc(db, "usuarios", usuario.uid);
-      await updateDoc(userRef, {
-        telefono: telefonoVerdadero,
-        telefono_verificado: true,
-        fecha_verificacion: new Date().toISOString(),
-        sms_habilitado: true,
-      });
-
-      setSuccessSms("Tu número telefónico ha sido verificado correctamente.");
-      setPasoVerificarTelefono(false);
-      setEditandoTelefono(false);
-      setCodigoSms("");
-      setReenviosCount(0);
-      setIntentosCount(0);
-    } catch (err) {
-      setErrorSms(err.message || "El código ingresado es incorrecto.");
-    } finally {
-      setCargandoSms(false);
-    }
-  };
-
   const manejarCambiarPreferencias = async (tipo, valor) => {
     try {
       const nuevoRecibirCorreos = tipo === "email" ? valor : (usuario.recibir_correos !== false);
-      const nuevoSmsHabilitado = tipo === "sms" ? valor : (usuario.sms_habilitado && usuario.telefono_verificado);
-      await actualizarPreferenciasNotificaciones(usuario.uid, nuevoRecibirCorreos, nuevoSmsHabilitado);
+      await actualizarPreferenciasNotificaciones(usuario.uid, nuevoRecibirCorreos);
+      usuario.recibir_correos = nuevoRecibirCorreos;
     } catch (err) {
       alert("Error al guardar la preferencia: " + err.message);
     }
@@ -2818,11 +2695,6 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                 <span style={{ color: "#64748b", fontSize: "12px", display: "block" }}>Teléfono</span>
                 <strong style={{ color: "#0f172a", fontSize: "14px" }}>{usuario.telefono || "No registrado"}</strong>
               </div>
-              {usuario.telefono_verificado ? (
-                <span style={{ background: "#f0fdf4", color: "#166534", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600" }}>✓ Verificado</span>
-              ) : (
-                <span style={{ background: "#fffbeb", color: "#92400e", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600" }}>⚠ No verificado</span>
-              )}
             </div>
 
             {/* Configuración de notificaciones */}
@@ -2836,123 +2708,6 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                     <span style={{ fontSize: "12px", color: "#64748b" }}>{usuario.correo}</span>
                   </div>
                   <span style={{ background: "#f0fdf4", color: "#166534", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600" }}>✓ Verificado</span>
-                </div>
-                
-                <div style={{ borderBottom: "1px solid #e2e8f0", paddingBottom: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>Número telefónico</span>
-                      {editandoTelefono ? (
-                        <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-                          <input
-                            type="text"
-                            placeholder="912345678"
-                            value={telefonoInput}
-                            onChange={(e) => setTelefonoInput(e.target.value.replace(/[^\d+]/g, ""))}
-                            disabled={pasoVerificarTelefono || cargandoSms}
-                            style={{
-                              padding: "6px 10px",
-                              fontSize: "13.5px",
-                              border: "1px solid #cbd5e1",
-                              borderRadius: "8px",
-                              width: "150px"
-                            }}
-                          />
-                          {!pasoVerificarTelefono && (
-                            <button
-                              type="button"
-                              onClick={manejarEnviarOtpSms}
-                              disabled={cargandoSms || !telefonoInput}
-                              style={{
-                                padding: "6px 12px",
-                                fontSize: "12.5px",
-                                background: "#2563eb",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "8px",
-                                cursor: "pointer",
-                                fontWeight: "600"
-                              }}
-                            >
-                              {cargandoSms ? "Enviando..." : "Enviar código"}
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: "14px", color: "#0f172a", fontWeight: "600", marginTop: "2px", display: "inline-block" }}>
-                          {usuario.telefono || "No registrado"}
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      {usuario.telefono_verificado ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span style={{ background: "#f0fdf4", color: "#166534", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600" }}>✓ Verificado</span>
-                          {!editandoTelefono && (
-                            <button
-                              type="button"
-                              onClick={() => { setEditandoTelefono(true); setPasoVerificarTelefono(false); }}
-                              style={{ background: "none", border: "none", color: "#2563eb", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}
-                            >
-                              Cambiar
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span style={{ background: "#fffbeb", color: "#92400e", padding: "4px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: "600" }}>⚠ No verificado</span>
-                          {editandoTelefono && usuario.telefono && (
-                            <button
-                              type="button"
-                              onClick={() => setEditandoTelefono(false)}
-                              style={{ background: "none", border: "none", color: "#64748b", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}
-                            >
-                              Cancelar
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Formulario de Código OTP */}
-                  {pasoVerificarTelefono && (
-                    <form onSubmit={manejarVerificarOtpSms} style={{ marginTop: "12px", padding: "12px", background: "white", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
-                      <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>
-                        Ingrese el código recibido por SMS (OTP de 6 dígitos)
-                      </label>
-                      <div style={{ display: "flex", gap: "10px" }}>
-                        <input
-                          type="text"
-                          maxLength="6"
-                          placeholder="Ej: 123456"
-                          value={codigoSms}
-                          onChange={(e) => setCodigoSms(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                          style={{ width: "120px", padding: "8px", textAlign: "center", fontSize: "16px", letterSpacing: "2px", fontWeight: "bold", border: "1px solid #cbd5e1", borderRadius: "6px" }}
-                          required
-                        />
-                        <button type="submit" disabled={cargandoSms} style={{ padding: "8px 16px", background: "#16a34a", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}>
-                          {cargandoSms ? "Verificando..." : "Verificar"}
-                        </button>
-                      </div>
-                      <div style={{ marginTop: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <button 
-                          type="button" 
-                          onClick={manejarEnviarOtpSms} 
-                          disabled={tiempoRestanteSms > 0 || cargandoSms || reenviosCount >= 3} 
-                          style={{ background: "none", border: "none", color: (tiempoRestanteSms > 0 || reenviosCount >= 3) ? "#94a3b8" : "#2563eb", fontSize: "12px", cursor: (tiempoRestanteSms > 0 || reenviosCount >= 3) ? "default" : "pointer", fontWeight: "600" }}
-                        >
-                          {reenviosCount >= 3 ? "Límite de reenvíos alcanzado" : "Reenviar código"}
-                        </button>
-                        {tiempoRestanteSms > 0 && (
-                          <span style={{ fontSize: "12px", color: "#64748b" }}>Espera {tiempoRestanteSms}s</span>
-                        )}
-                      </div>
-                    </form>
-                  )}
-                  
-                  {errorSms && <div style={{ color: "#b91c1c", fontSize: "12px", marginTop: "8px", background: "#fef2f2", padding: "8px 12px", borderRadius: "6px", border: "1px solid #fecaca" }}>&#9888; {errorSms}</div>}
-                  {successSms && <div style={{ color: "#15803d", fontSize: "12px", marginTop: "8px", background: "#f0fdf4", padding: "8px 12px", borderRadius: "6px", border: "1px solid #bbf7d0" }}>&#10004; {successSms}</div>}
                 </div>
 
                 {/* Selección de Preferencias */}
@@ -2969,24 +2724,6 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                       />
                       Recibir correos electrónicos
                     </label>
-
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: usuario.telefono_verificado ? "pointer" : "not-allowed", fontSize: "14px", color: usuario.telefono_verificado ? "#334155" : "#94a3b8" }}>
-                        <input 
-                          type="checkbox" 
-                          checked={usuario.sms_habilitado && usuario.telefono_verificado} 
-                          disabled={!usuario.telefono_verificado}
-                          onChange={(e) => manejarCambiarPreferencias("sms", e.target.checked)} 
-                          style={{ width: "16px", height: "16px", accentColor: "#1f3b57", cursor: usuario.telefono_verificado ? "pointer" : "not-allowed" }}
-                        />
-                        Recibir SMS
-                      </label>
-                      {!usuario.telefono_verificado && (
-                        <p style={{ margin: "4px 0 0 24px", fontSize: "12px", color: "#b45309", fontWeight: "500" }}>
-                          Debes verificar tu número telefónico para recibir mensajes SMS.
-                        </p>
-                      )}
-                    </div>
                   </div>
                 </div>
 

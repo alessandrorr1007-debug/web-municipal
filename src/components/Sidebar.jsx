@@ -2,6 +2,7 @@
 const iconos = {
   inicio: "&#127968;",
   "nueva-solicitud": "&#128221;",
+  "registro-presencial": "&#128221;",
   "mis-solicitudes": "&#128196;",
   solicitudes: "&#128196;",
   "inspecciones-hoy": "&#128269;",
@@ -21,6 +22,7 @@ const iconos = {
 const titulos = {
   inicio: "Inicio",
   "nueva-solicitud": "Nueva Solicitud",
+  "registro-presencial": "Registrar Solicitud Presencial",
   "mis-solicitudes": "Mis Solicitudes",
   solicitudes: "Solicitudes",
   "inspecciones-hoy": "Inspecciones Hoy",

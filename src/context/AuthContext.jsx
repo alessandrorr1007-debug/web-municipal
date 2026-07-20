@@ -49,10 +49,7 @@ export const AuthProvider = ({ children }) => {
               telefono: data.telefono || "",
               dni: data.dni || "",
               activo: data.activo !== false,
-              telefono_verificado: data.telefono_verificado || false,
-              sms_habilitado: data.sms_habilitado || false,
               recibir_correos: data.recibir_correos !== false,
-              fecha_verificacion: data.fecha_verificacion || null,
             });
 
             unsubscribeUserDoc = onSnapshot(ref, (docSnap) => {
@@ -76,10 +73,7 @@ export const AuthProvider = ({ children }) => {
                   telefono: updatedData.telefono || "",
                   dni: updatedData.dni || "",
                   activo: updatedData.activo !== false,
-                  telefono_verificado: updatedData.telefono_verificado || false,
-                  sms_habilitado: updatedData.sms_habilitado || false,
                   recibir_correos: updatedData.recibir_correos !== false,
-                  fecha_verificacion: updatedData.fecha_verificacion || null,
                 });
               }
             });

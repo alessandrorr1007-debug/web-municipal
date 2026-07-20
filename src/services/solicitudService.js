@@ -265,3 +265,19 @@ export const obtenerSolicitudPorId = async (id) => {
     ...snapshot.data(),
   };
 };
+
+export const obtenerInspectores = async () => {
+  try {
+    const q = query(collection(db, "usuarios"), where("rol", "==", "inspector"));
+    const snapshot = await getDocs(q);
+    const inspectores = snapshot.docs.map((documento) => ({
+      uid: documento.id,
+      id: documento.id,
+      ...documento.data(),
+    }));
+    return inspectores;
+  } catch (error) {
+    console.error("Error al obtener inspectores de la BD:", error);
+    return [];
+  }
+};

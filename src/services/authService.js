@@ -53,8 +53,6 @@ export const registrarUsuario = async (datos) => {
     apellido_paterno: datos.apellido_paterno || "",
     apellido_materno: datos.apellido_materno || "",
     nombre_completo: datos.nombre_completo || datos.nombre || "",
-    telefono_verificado: false,
-    sms_habilitado: false,
     recibir_correos: true,
     activo: true,
   };
@@ -238,62 +236,10 @@ export const cambiarContrasena = async (correo) => {
   return { mensaje: "Se ha enviado un enlace para restablecer tu contraseña a tu correo electrónico." };
 };
 
-export const enviarOtpTelefono = async (telefono) => {
-  const url = `${API_URL}/api/sms/enviar-otp`;
-  const headers = await authHeaders();
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ telefono }),
-  });
-
-  const contentType = response.headers.get("content-type");
-  if (!contentType || !contentType.includes("application/json")) {
-    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
-  }
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "No se pudo enviar el código SMS.");
-  }
-  return data;
-};
-
-export const verificarOtpTelefono = async (telefono, codigo) => {
-  const url = `${API_URL}/api/sms/verificar-otp`;
-  const headers = await authHeaders();
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ telefono, codigo }),
-  });
-
-  const contentType = response.headers.get("content-type");
-  if (!contentType || !contentType.includes("application/json")) {
-    throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
-  }
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "Código incorrecto.");
-  }
-  return data;
-};
-
-export const confirmarVerificacionTelefono = async (uid, telefono) => {
-  const ref = doc(db, "usuarios", uid);
-  await updateDoc(ref, {
-    telefono_verificado: true,
-    fecha_verificacion: Timestamp.now(),
-    sms_habilitado: true,
-  });
-};
-
-export const actualizarPreferenciasNotificaciones = async (uid, recibir_correos, sms_habilitado) => {
+export const actualizarPreferenciasNotificaciones = async (uid, recibir_correos) => {
   const ref = doc(db, "usuarios", uid);
   await updateDoc(ref, {
     recibir_correos,
-    sms_habilitado,
   });
 };
 

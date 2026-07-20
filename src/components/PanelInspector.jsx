@@ -164,14 +164,14 @@ function PanelInspector({ seccion }) {
     try {
       setEnviandoId(solicitud.id);
 
-      if (resultado === "Aprobado") {
+      if (resultado === "Aprobado" || resultado === "Cumple todos los requisitos") {
         await actualizarSolicitud(solicitud.id, {
           inspeccion: "Aprobada",
           recomendacionInspector: "Aprobar",
           observacionInspector: observacion,
           evidenciasInspector: evidencias,
           fechaInspeccion: formatearFechaHora(),
-          resultadoInspeccion: "El inspector aprueba las condiciones del local.",
+          resultadoInspeccion: "Cumple todos los requisitos.",
           estado: "Resultado enviado al funcionario",
           estadoNormalizado: "REVISION_FUNCIONARIO",
           inspectorNombre: usuario?.nombre || "Inspector",
@@ -189,79 +189,31 @@ function PanelInspector({ seccion }) {
         );
 
         alert("Resultado de aprobación enviado al funcionario.");
-      } else if (resultado === "Observado") {
-        if (esReobservacion) {
-          await actualizarSolicitud(solicitud.id, {
-            inspeccion: "Rechazada",
-            recomendacionInspector: "Rechazar",
-            observacionInspector: observacion,
-            evidenciasInspector: evidencias,
-            fechaInspeccion: formatearFechaHora(),
-            resultadoInspeccion: "El inspector rechaza de forma definitiva tras múltiples observaciones.",
-            estado: "Resultado enviado al funcionario",
-            estadoNormalizado: "REVISION_FUNCIONARIO",
-            inspectorNombre: usuario?.nombre || "Inspector",
-            inspectorUid: usuario?.uid || "",
-          });
+      } else {
+        await actualizarSolicitud(solicitud.id, {
+          inspeccion: "No aprobada por inspección",
+          recomendacionInspector: "Rechazar",
+          observacionInspector: observacion,
+          evidenciasInspector: evidencias,
+          fechaInspeccion: formatearFechaHora(),
+          resultadoInspeccion: resultado,
+          estado: "No aprobada por inspección",
+          estadoNormalizado: "REVISION_FUNCIONARIO",
+          inspectorNombre: usuario?.nombre || "Inspector",
+          inspectorUid: usuario?.uid || "",
+        });
 
-          await crearNotificacion(
-            solicitud.uidUsuario,
-            {
-              titulo: "Solicitud rechazada tras reobservación",
-              descripcion: `Su solicitud EXP-${solicitud.id} fue rechazada definitivamente tras la segunda inspección con observaciones.`,
-              icono: "❌",
-            },
-            solicitud.correoUsuario
-          );
+        await crearNotificacion(
+          solicitud.uidUsuario,
+          {
+            titulo: "Inspección no aprobada",
+            descripcion: "La inspección no fue aprobada. Puede volver a solicitar una nueva inspección después del periodo establecido.",
+            icono: "❌",
+          },
+          solicitud.correoUsuario
+        );
 
-          alert("Solicitud rechazada definitivamente por segunda reobservación.");
-        } else {
-          const nuevaCantidad = (solicitud.cantidadReobservaciones || 0) + 1;
-          const fechaReprogramacion = new Date();
-          fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 3);
-          while (fechaReprogramacion.getDay() === 0 || fechaReprogramacion.getDay() === 6) {
-            fechaReprogramacion.setDate(fechaReprogramacion.getDate() + 1);
-          }
-          const nuevaFecha = formatearFechaLocal(fechaReprogramacion);
-
-          await actualizarSolicitud(solicitud.id, {
-            inspeccion: "Reobservada",
-            recomendacionInspector: "Reobservar",
-            observacionInspector: observacion,
-            evidenciasInspector: evidencias,
-            fechaInspeccion: formatearFechaHora(),
-            resultadoInspeccion: "El inspector observa el local. Se reprograma visita.",
-            estado: "Inspección observada",
-            estadoNormalizado: "INSPECCION_OBSERVADA",
-            fechaVisitaInspector: nuevaFecha,
-            horaVisitaInspector: "",
-            cantidadReobservaciones: nuevaCantidad,
-            inspectorNombre: usuario?.nombre || "Inspector",
-            inspectorUid: usuario?.uid || "",
-            historialReobservaciones: [
-              ...(solicitud.historialReobservaciones || []),
-              {
-                fecha: formatearFechaHora(),
-                observacion,
-                recomendacion: "Reobservar",
-                evidencias: evidencias.length,
-                inspector: usuario?.nombre || "Inspector",
-              },
-            ],
-          });
-
-          await crearNotificacion(
-            solicitud.uidUsuario,
-            {
-              titulo: "Inspección observada",
-              descripcion: `El inspector observó su local (EXP-${solicitud.id}). Se programó una nueva inspección para el ${nuevaFecha}.`,
-              icono: "⚠️",
-            },
-            solicitud.correoUsuario
-          );
-
-          alert(`Solicitud observada. Nueva inspección programada para: ${nuevaFecha}`);
-        }
+        alert("Resultado de inspección enviado al funcionario.");
       }
 
       limpiarFormulario(solicitud.id);
@@ -641,14 +593,11 @@ function PanelInspector({ seccion }) {
                           }
                           disabled={estaEnviando}
                         >
-                          <option value="">Seleccionar resultado</option>
-                          <option value="Aprobado">Aprobado</option>
-                          <option value="Observado">
-                            Observado
-                            {esReobservacion
-                              ? " (RECHAZO DEFINITIVO)"
-                              : ""}
-                          </option>
+                          <option value="">-- Seleccionar resultado --</option>
+                          <option value="Cumple todos los requisitos">Cumple todos los requisitos (Aprobar)</option>
+                          <option value="Cumple parcialmente">Cumple parcialmente (Observar)</option>
+                          <option value="No cumple requisitos">No cumple requisitos (No aprobada)</option>
+                          <option value="Inspección incompleta">Inspección incompleta</option>
                         </select>
                       </label>
                     </div>

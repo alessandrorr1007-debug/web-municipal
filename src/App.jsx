@@ -144,7 +144,7 @@ function App() {
   const seccionesPorRol = {
     negocio: ["inicio", "nueva-solicitud", "mis-solicitudes", "mis-pagos", "notificaciones", "mi-cuenta"],
     cajero: ["inicio", "nueva-solicitud", "historial"],
-    funcionario: ["inicio", "solicitudes", "notificaciones", "estadisticas", "reportes"],
+    funcionario: ["inicio", "solicitudes", "registro-presencial", "notificaciones", "estadisticas", "reportes"],
     inspector: ["inicio", "inspecciones-hoy", "historial", "estadisticas"],
     administrador: ["inicio", "gestion-usuarios", "gestion-roles", "auditoria", "config-sistema"],
   };
@@ -188,6 +188,7 @@ function App() {
     if (usuario.rol === "funcionario") {
       switch (seccion) {
         case "solicitudes": return <PanelFuncionario seccion="solicitudes" />;
+        case "registro-presencial": return <PanelFuncionario seccion="registro-presencial" />;
         case "notificaciones": return <PanelFuncionario seccion="notificaciones" />;
         case "reportes": return <PanelFuncionario seccion="reportes" />;
         case "estadisticas": return <PanelFuncionario seccion="estadisticas" />;
