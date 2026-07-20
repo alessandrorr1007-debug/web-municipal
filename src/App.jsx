@@ -146,7 +146,7 @@ function App() {
     cajero: ["inicio", "nueva-solicitud", "historial"],
     funcionario: ["inicio", "solicitudes", "registro-presencial", "notificaciones", "estadisticas", "reportes"],
     inspector: ["inicio", "inspecciones-hoy", "historial", "estadisticas"],
-    administrador: ["inicio", "gestion-usuarios", "gestion-roles", "auditoria", "config-sistema"],
+    administrador: ["inicio", "gestion-usuarios", "gestion-roles", "config-sistema", "reportes", "auditoria"],
   };
 
   const rolEtiqueta = {
@@ -209,6 +209,7 @@ function App() {
         case "gestion-roles": return <PanelAdmin seccion="gestion-roles" />;
         case "auditoria": return <PanelAdmin seccion="auditoria" />;
         case "config-sistema": return <PanelAdmin seccion="config-sistema" />;
+        case "reportes": return <PanelAdmin seccion="reportes" />;
         default: return <PanelAdmin seccion="inicio" />;
       }
     }
