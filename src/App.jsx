@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import "./style.css";
-import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
 
 import LandingPage from "./components/LandingPage";
@@ -11,6 +11,8 @@ import PanelCajero from "./components/PanelCajero";
 import PanelFuncionario from "./components/PanelFuncionario";
 import PanelInspector from "./components/PanelInspector";
 import PanelAdmin from "./components/PanelAdmin";
+import PagoExitoso from "./components/PagoExitoso";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 import { useAuth } from "./context/AuthContext";
 import { cerrarSesion } from "./services/authService";
@@ -25,6 +27,7 @@ function App() {
   });
   const [sidebarAbierto, setSidebarAbierto] = useState(window.innerWidth > 1024);
   const [esMovil, setEsMovil] = useState(window.innerWidth <= 1024);
+  const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(0);
 
   useEffect(() => {
     if (usuario) {
@@ -45,7 +48,6 @@ function App() {
       }
     }
   }, [usuario, vista]);
-  const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(0);
 
   useEffect(() => {
     if (!usuario) {
@@ -95,21 +97,20 @@ function App() {
     setSeccion("inicio");
   };
 
-  const rolEtiqueta = {
-    negocio: "Solicitante",
-    cajero: "Cajero",
-    funcionario: "Funcionario",
-    inspector: "Inspector",
-    administrador: "Administrador",
-  };
+  console.log("[App] pathname:", window.location.pathname, "cargando:", cargando, "usuario:", !!usuario);
 
-  const rolColor = {
-    negocio: "#2563eb",
-    cajero: "#d97706",
-    funcionario: "#0f766e",
-    inspector: "#7c3aed",
-    administrador: "#dc2626",
-  };
+  if (window.location.pathname.replace(/\/$/, "") === "/pago-exitoso" || window.location.pathname.startsWith("/pago-exitoso")) {
+    console.log("[App] Detectada ruta /pago-exitoso, renderizando PagoExitoso");
+    return (
+      <ErrorBoundary>
+        <PagoExitoso onRedirect={(s) => {
+          window.history.replaceState({}, document.title, "/");
+          setSeccion(s);
+          localStorage.setItem("web_municipal_seccion", s);
+        }} />
+      </ErrorBoundary>
+    );
+  }
 
   if (cargando) {
     return (
@@ -146,6 +147,22 @@ function App() {
     funcionario: ["inicio", "solicitudes", "notificaciones", "estadisticas", "reportes"],
     inspector: ["inicio", "inspecciones-hoy", "historial", "estadisticas"],
     administrador: ["inicio", "gestion-usuarios", "gestion-roles", "auditoria", "config-sistema"],
+  };
+
+  const rolEtiqueta = {
+    negocio: "Solicitante",
+    cajero: "Cajero",
+    funcionario: "Funcionario",
+    inspector: "Inspector",
+    administrador: "Administrador",
+  };
+
+  const rolColor = {
+    negocio: "#2563eb",
+    cajero: "#d97706",
+    funcionario: "#0f766e",
+    inspector: "#7c3aed",
+    administrador: "#dc2626",
   };
 
   const renderSeccion = () => {

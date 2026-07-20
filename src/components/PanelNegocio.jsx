@@ -786,6 +786,8 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
       const msg = error.message || "";
       if (msg.includes("no encontrado") || msg.includes("404")) {
         setErrorDni("DNI no encontrado. Verifique el número ingresado.");
+      } else if (msg.includes("Failed to fetch") || msg.includes("conectar")) {
+        setErrorDni("No se pudo conectar con el servidor backend. Asegúrese de que el backend esté ejecutándose (npm start o node backend/server.js).");
       } else {
         setErrorDni(msg || "Error al consultar el DNI. Intente nuevamente.");
       }

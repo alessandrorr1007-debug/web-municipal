@@ -5,7 +5,13 @@ export const consultarDni = async (dni) => {
     throw new Error("El DNI debe tener exactamente 8 dígitos.");
   }
 
-  const response = await fetch(`${API_URL}/api/consultar-dni/${dni}`);
+  let response;
+  try {
+    response = await fetch(`${API_URL}/api/consultar-dni/${dni}`);
+  } catch (netErr) {
+    console.error("Error de red al consultar DNI:", netErr);
+    throw new Error("No se pudo conectar con el servidor backend. Asegúrese de que el servidor backend esté ejecutándose (npm run start o node backend/server.js).");
+  }
 
   const contentType = response.headers.get("content-type");
   if (!contentType || !contentType.includes("application/json")) {
@@ -24,5 +30,6 @@ export const consultarDni = async (dni) => {
     nombres: data.nombres,
     apellido_paterno: data.apellidoPaterno,
     apellido_materno: data.apellidoMaterno,
+    fecha_nacimiento: data.fechaNacimiento || "",
   };
 };

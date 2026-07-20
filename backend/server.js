@@ -15,16 +15,17 @@ import { initializeFirestore, doc, getDoc, getDocs, setDoc, updateDoc, collectio
 
 
 const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+dotenv.config({ path: join(__dirname, ".env") });
 
 const MUNICIPALIDAD_CONFIG = {
   nombre: "WEB-MUNICIPAL",
   correo: "webmunicipal01@gmail.com",
-  url: "https://web-municipal-1.onrender.com",
+  url: process.env.FRONTEND_URL || "https://web-municipal-1.onrender.com",
   sistemaNombre: "Sistema de Licencias v1.0"
 };
-const __dirname = dirname(__filename);
 
-dotenv.config({ path: join(__dirname, ".env") });
 const distPath = join(__dirname, "..", "dist");
 
 const app = express();
@@ -79,6 +80,14 @@ const verificarToken = async (req, res, next) => {
     console.error("[AUTH] Error verificando token:", error.response?.data?.error?.message || error.message);
     return res.status(401).json({ error: "Token inválido o expirado." });
   }
+};
+
+const verificarTokenOpcional = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+  return verificarToken(req, res, next);
 };
 
 const PORT = process.env.PORT || 3000;
@@ -674,7 +683,7 @@ app.post("/api/pagos/flow/crear-orden", verificarToken, async (req, res) => {
   }
 });
 
-app.get("/api/pagos/flow/status/:token", verificarToken, async (req, res) => {
+app.get("/api/pagos/flow/status/:token", verificarTokenOpcional, async (req, res) => {
   try {
     if (!FLOW_API_KEY || !FLOW_SECRET_KEY) {
       return res.status(500).json({ error: "Flow no está configurado." });
@@ -1291,7 +1300,19 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
 }
 
-app.use((req, res) => {
+app.use("/pago-exitoso", express.urlencoded({ extended: false }), (req, res) => {
+  const token = req.body?.token || req.query?.token;
+  if (req.method === "POST" && token) {
+    return res.redirect(303, `/pago-exitoso?token=${encodeURIComponent(token)}`);
+  }
+  const indexPath = join(distPath, "index.html");
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  return res.status(404).json({ error: "Frontend no encontrado" });
+});
+
+app.get("{*splat}", (req, res) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "Ruta de API no encontrada." });
   }

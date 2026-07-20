@@ -1,9 +1,15 @@
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 export const consultarRuc = async (ruc) => {
-  const response = await fetch(
-    `${API_URL}/api/consultar-ruc/${ruc}`
-  );
+  let response;
+  try {
+    response = await fetch(
+      `${API_URL}/api/consultar-ruc/${ruc}`
+    );
+  } catch (netErr) {
+    console.error("Error de red al consultar RUC:", netErr);
+    throw new Error("No se pudo conectar con el servidor backend. Asegúrese de que el servidor backend esté ejecutándose (npm run start o node backend/server.js).");
+  }
 
   const contentType = response.headers.get("content-type");
   if (!contentType || !contentType.includes("application/json")) {

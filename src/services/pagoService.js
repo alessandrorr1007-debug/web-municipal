@@ -49,7 +49,13 @@ export const crearOrdenFlow = async ({ solicitudId, amount, email, buyerName, su
 };
 
 export const verificarPagoFlow = async (token) => {
-  const headers = await authHeaders();
+  let headers = { "Content-Type": "application/json" };
+  try {
+    const aHeaders = await authHeaders();
+    headers = { ...headers, ...aHeaders };
+  } catch (err) {
+    console.warn("[pagoService] Auth status cargando/no disponible al verificar pago:", err?.message || err);
+  }
   const response = await fetch(`${API_URL}/api/pagos/flow/status/${token}`, {
     headers,
   });
