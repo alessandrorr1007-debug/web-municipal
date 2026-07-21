@@ -471,25 +471,27 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       if (!s) return false;
 
       // 1. Filtro por Rango de Fechas de Pago (solo si se especifican fechas)
-      if (seccion === "historial" && (fechaDesde || fechaHasta)) {
-        if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
-          return false;
-        }
+      if (seccion === "historial") {
+        if (fechaDesde || fechaHasta) {
+          if (fechaDesde && fechaDesde < "2026-07-14") return false;
+          if (fechaHasta && fechaHasta < "2026-07-14") return false;
+          if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) return false;
 
-        const fechaPagoObj = obtenerFechaPagoObj(s);
-        if (!fechaPagoObj) return false;
-        fechaPagoObj.setHours(0, 0, 0, 0);
+          const fechaPagoObj = obtenerFechaPagoObj(s);
+          if (!fechaPagoObj) return false;
+          fechaPagoObj.setHours(0, 0, 0, 0);
 
-        if (fechaDesde) {
-          const [y1, m1, d1] = fechaDesde.split("-").map(Number);
-          const fDesde = new Date(y1, m1 - 1, d1, 0, 0, 0, 0);
-          if (fechaPagoObj < fDesde) return false;
-        }
+          if (fechaDesde) {
+            const [y1, m1, d1] = fechaDesde.split("-").map(Number);
+            const fDesde = new Date(y1, m1 - 1, d1, 0, 0, 0, 0);
+            if (fechaPagoObj < fDesde) return false;
+          }
 
-        if (fechaHasta) {
-          const [y2, m2, d2] = fechaHasta.split("-").map(Number);
-          const fHasta = new Date(y2, m2 - 1, d2, 0, 0, 0, 0);
-          if (fechaPagoObj > fHasta) return false;
+          if (fechaHasta) {
+            const [y2, m2, d2] = fechaHasta.split("-").map(Number);
+            const fHasta = new Date(y2, m2 - 1, d2, 0, 0, 0, 0);
+            if (fechaPagoObj > fHasta) return false;
+          }
         }
       }
 
@@ -1568,9 +1570,17 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </label>
                   <input
                     type="date"
+                    min="2026-07-14"
                     value={fechaDesde}
                     onChange={(e) => {
-                      setFechaDesde(e.target.value);
+                      const val = e.target.value;
+                      if (val && val < "2026-07-14") {
+                        alert("⚠️ No existen registros anteriores al 14/07/2026.");
+                        setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
+                        setFechaDesde("2026-07-14");
+                        return;
+                      }
+                      setFechaDesde(val);
                       setErrorFechaRange("");
                     }}
                     style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
@@ -1583,9 +1593,17 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </label>
                   <input
                     type="date"
+                    min="2026-07-14"
                     value={fechaHasta}
                     onChange={(e) => {
-                      setFechaHasta(e.target.value);
+                      const val = e.target.value;
+                      if (val && val < "2026-07-14") {
+                        alert("⚠️ No existen registros anteriores al 14/07/2026.");
+                        setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
+                        setFechaHasta("2026-07-14");
+                        return;
+                      }
+                      setFechaHasta(val);
                       setErrorFechaRange("");
                     }}
                     style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
@@ -1595,6 +1613,16 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 <button
                   type="button"
                   onClick={() => {
+                    if (fechaDesde && fechaDesde < "2026-07-14") {
+                      alert("⚠️ No existen registros anteriores al 14/07/2026.");
+                      setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
+                      return;
+                    }
+                    if (fechaHasta && fechaHasta < "2026-07-14") {
+                      alert("⚠️ No existen registros anteriores al 14/07/2026.");
+                      setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
+                      return;
+                    }
                     if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
                       alert("⚠️ La fecha inicial no puede ser mayor que la fecha final.");
                       setErrorFechaRange("La fecha inicial no puede ser mayor que la fecha final.");
