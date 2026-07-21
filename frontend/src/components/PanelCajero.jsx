@@ -1591,14 +1591,14 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         return;
                       }
                       if (val && val > hoyStr) {
-                        alert("⚠️ No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
-                        setErrorFechaRange("No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
+                        alert("⚠️ No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
+                        setErrorFechaRange("No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
                         setFechaDesde(hoyStr);
                         return;
                       }
                       if (val && fechaHasta && val > fechaHasta) {
-                        alert("⚠️ La fecha inicial no puede ser mayor que la fecha final.");
-                        setErrorFechaRange("La fecha inicial no puede ser mayor que la fecha final.");
+                        alert("⚠️ La fecha desde no puede ser mayor que la fecha hasta.");
+                        setErrorFechaRange("La fecha desde no puede ser mayor que la fecha hasta.");
                       } else {
                         setErrorFechaRange("");
                       }
@@ -1614,7 +1614,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </label>
                   <input
                     type="date"
-                    min={fechaDesde || "2026-07-14"}
+                    min="2026-07-14"
                     max={obtenerFechaHoyStr()}
                     value={fechaHasta}
                     onChange={(e) => {
@@ -1627,18 +1627,17 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         return;
                       }
                       if (val && val > hoyStr) {
-                        alert("⚠️ No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
-                        setErrorFechaRange("No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
+                        alert("⚠️ No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
+                        setErrorFechaRange("No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
                         setFechaHasta(hoyStr);
                         return;
                       }
                       if (val && fechaDesde && val < fechaDesde) {
-                        alert("⚠️ La fecha final no puede ser menor que la fecha inicial.");
-                        setErrorFechaRange("La fecha final no puede ser menor que la fecha inicial.");
-                        setFechaHasta(fechaDesde);
-                        return;
+                        alert("⚠️ La fecha hasta no puede ser menor que la fecha desde.");
+                        setErrorFechaRange("La fecha hasta no puede ser menor que la fecha desde.");
+                      } else {
+                        setErrorFechaRange("");
                       }
-                      setErrorFechaRange("");
                       setFechaHasta(val);
                     }}
                     style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
@@ -1660,13 +1659,13 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       return;
                     }
                     if ((fechaDesde && fechaDesde > hoyStr) || (fechaHasta && fechaHasta > hoyStr)) {
-                      alert("⚠️ No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
-                      setErrorFechaRange("No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
+                      alert("⚠️ No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
+                      setErrorFechaRange("No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
                       return;
                     }
                     if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
-                      alert("⚠️ La fecha inicial no puede ser mayor que la fecha final.");
-                      setErrorFechaRange("La fecha inicial no puede ser mayor que la fecha final.");
+                      alert("⚠️ La fecha desde no puede ser mayor que la fecha hasta.");
+                      setErrorFechaRange("La fecha desde no puede ser mayor que la fecha hasta.");
                       return;
                     }
                     setErrorFechaRange("");
