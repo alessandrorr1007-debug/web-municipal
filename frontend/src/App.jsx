@@ -3,7 +3,6 @@ import "./style.css";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
 
-import LandingPage from "./components/LandingPage";
 import Login from "./components/Login";
 import Sidebar from "./components/Sidebar";
 import PanelCajero from "./components/PanelCajero";
@@ -18,7 +17,7 @@ import { cerrarSesion } from "./services/authService";
 function App() {
   const { usuario, cargando } = useAuth();
   const [vista, setVista] = useState(() => {
-    return localStorage.getItem("web_municipal_vista") || "landing";
+    return localStorage.getItem("web_municipal_vista") || "login";
   });
   const [seccion, setSeccion] = useState(() => {
     return localStorage.getItem("web_municipal_seccion") || "inicio";
@@ -29,9 +28,9 @@ function App() {
 
   useEffect(() => {
     if (usuario) {
-      if (["landing", "login", "registro"].includes(vista)) {
+      if (["login", "registro"].includes(vista)) {
         const storedVista = localStorage.getItem("web_municipal_vista");
-        const nextVista = (storedVista && storedVista !== "landing" && storedVista !== "login" && storedVista !== "registro")
+        const nextVista = (storedVista && storedVista !== "login" && storedVista !== "registro")
           ? storedVista
           : "dashboard";
         setVista(nextVista);
@@ -40,9 +39,9 @@ function App() {
         localStorage.setItem("web_municipal_vista", vista);
       }
     } else {
-      if (!["landing", "login", "registro"].includes(vista)) {
-        setVista("landing");
-        localStorage.setItem("web_municipal_vista", "landing");
+      if (!["login", "registro"].includes(vista)) {
+        setVista("login");
+        localStorage.setItem("web_municipal_vista", "login");
       }
     }
   }, [usuario, vista]);
@@ -91,7 +90,7 @@ function App() {
     await cerrarSesion();
     localStorage.removeItem("web_municipal_vista");
     localStorage.removeItem("web_municipal_seccion");
-    setVista("landing");
+    setVista("login");
     setSeccion("inicio");
   };
 
@@ -118,22 +117,8 @@ function App() {
     );
   }
 
-  if ((vista === "login" || vista === "registro") && !usuario) {
-    return (
-      <Login
-        onVolver={() => { setVista("landing"); localStorage.setItem("web_municipal_vista", "landing"); }}
-        modoInicial={vista === "registro" ? "registro" : "login"}
-      />
-    );
-  }
-
-  if (!usuario || vista === "landing") {
-    return (
-      <LandingPage
-        onLogin={() => { setVista("login"); localStorage.setItem("web_municipal_vista", "login"); }}
-        onRegister={() => { setVista("registro"); localStorage.setItem("web_municipal_vista", "registro"); }}
-      />
-    );
+  if (!usuario) {
+    return <Login />;
   }
 
   const rolNorm = normalizarRol(usuario.rol, usuario.correo);
