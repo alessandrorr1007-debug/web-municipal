@@ -1512,7 +1512,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         <section className="section-card">
           <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <h2>{seccion === "historial" ? "🧾 Historial de Pagos y Recaudación" : "🔍 Consulta y Estado de Trámites"}</h2>
+              <h2>{seccion === "historial" ? "🧾 Historial de Pagos" : "🔍 Consulta y Estado de Trámites"}</h2>
               <p>Busca expedientes por Código (EXP-XXXX), DNI del ciudadano, RUC o Nombre del establecimiento.</p>
             </div>
           </div>

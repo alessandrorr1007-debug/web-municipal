@@ -130,7 +130,7 @@ function Reportes() {
             <option value="general">General de Solicitudes</option>
             <option value="licencias">Licencias Emitidas</option>
             <option value="inspecciones">Inspecciones Técnicas</option>
-            <option value="pagos">Recaudación y Pagos</option>
+            <option value="pagos">Historial de Pagos</option>
           </select>
         </div>
 
