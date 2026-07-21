@@ -128,12 +128,13 @@ export const buscarSiguienteDisponibilidad = (solicitudesActuales) => {
     const fechaStrDDMMYYYY = formatearFechaLocal(fechaEvaluada);
 
     for (const inspector of INSPECTORES_DEFAULT) {
-      const inspUid = inspector.uid;
+      const inspUid = (inspector.uid || inspector.id || "").toLowerCase();
+      const inspNombre = (inspector.nombre || "").toLowerCase();
 
       const conteoDiario = listaSolicitudes.filter((s) => {
         if (!s) return false;
-        const u = s.inspectorUid || s.inspectorAsignadoUid || "";
-        if (u !== inspUid) return false;
+        const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "").toLowerCase();
+        if (!u.includes(inspUid) && !u.includes(inspNombre)) return false;
         const f = s.fechaVisitaInspector || s.fechaInspeccion || "";
         if (f !== fechaStrDDMMYYYY) return false;
         return !ESTADOS_CERRADOS.includes(s.estado);
@@ -144,8 +145,8 @@ export const buscarSiguienteDisponibilidad = (solicitudesActuales) => {
       for (const slot of TIME_SLOTS) {
         const ocupado = listaSolicitudes.some((s) => {
           if (!s) return false;
-          const u = s.inspectorUid || s.inspectorAsignadoUid || "";
-          if (u !== inspUid) return false;
+          const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "").toLowerCase();
+          if (!u.includes(inspUid) && !u.includes(inspNombre)) return false;
           const f = s.fechaVisitaInspector || s.fechaInspeccion || "";
           if (f !== fechaStrDDMMYYYY) return false;
           const h = s.horaVisitaInspector || s.horaVisitaLabel || s.slotInspeccion || "";

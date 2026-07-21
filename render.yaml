@@ -1,12 +1,6 @@
 services:
-  - type: static
-    name: web-municipal-frontend
-    env: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
-
   - type: web
-    name: web-municipal-backend
+    name: web-municipal
     env: node
-    buildCommand: cd backend && npm install
-    startCommand: node backend/server.js
+    buildCommand: npm run build
+    startCommand: npm start

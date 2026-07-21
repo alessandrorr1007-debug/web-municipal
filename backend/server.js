@@ -1541,7 +1541,7 @@ app.use("/pago-exitoso", express.urlencoded({ extended: false }), (req, res) => 
   return res.status(404).json({ error: "Frontend no encontrado" });
 });
 
-app.get("{*splat}", (req, res) => {
+app.get("*", (req, res) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "Ruta de API no encontrada." });
   }
