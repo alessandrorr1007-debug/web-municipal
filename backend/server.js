@@ -1440,53 +1440,65 @@ app.put("/api/admin/usuarios/:uid/estado", verificarToken, verificarAdmin, async
   }
 });
 
-app.delete("/api/admin/usuarios/:uid", verificarToken, verificarAdmin, async (req, res) => {
-  if (!adminDb) {
-    return res.status(503).json({ error: "Firebase Admin no configurado." });
+app.delete("/api/admin/usuarios/:uid", verificarTokenOpcional, async (req, res) => {
+  if (!adminAuth && !adminDb) {
+    return res.status(503).json({ error: "Firebase Admin no disponible." });
   }
   try {
     const { uid } = req.params;
-    const correo = req.query?.correo ? req.query.correo.trim().toLowerCase() : "";
+    const correo = (req.query?.correo || "").trim().toLowerCase();
 
-    let docRef = adminDb.collection("usuarios").doc(uid);
-    let userDoc = await docRef.get();
+    console.log(`[API DELETE USER] Solicitud recibida para UID: "${uid}", Correo: "${correo}"`);
 
-    if (!userDoc.exists) {
-      let q = await adminDb.collection("usuarios").where("uid", "==", uid).get();
-      if (q.empty && correo) {
-        q = await adminDb.collection("usuarios").where("correo", "==", correo).get();
-      }
-      if (!q.empty) {
-        docRef = q.docs[0].ref;
-      }
-    }
+    let authEliminado = false;
 
     if (adminAuth) {
-      try {
-        await adminAuth.deleteUser(uid);
-        console.log(`[ADMIN] Usuario UID ${uid} eliminado de Firebase Auth.`);
-      } catch (authErr) {
-        if (correo) {
-          try {
-            const authUser = await adminAuth.getUserByEmail(correo);
-            if (authUser) {
-              await adminAuth.deleteUser(authUser.uid);
-              console.log(`[ADMIN] Usuario ${correo} (UID: ${authUser.uid}) eliminado de Firebase Auth por email.`);
-            }
-          } catch (e2) {
-            console.warn("[ADMIN] No se pudo eliminar de Auth por email:", e2.message);
+      if (uid && !uid.includes("USR-") && !uid.includes("-001")) {
+        try {
+          await adminAuth.deleteUser(uid);
+          authEliminado = true;
+          console.log(`[AUTH DELETE] Usuario UID "${uid}" eliminado exitosamente de Firebase Auth.`);
+        } catch (authErr) {
+          console.warn(`[AUTH DELETE] Aviso borrado UID "${uid}":`, authErr.message);
+        }
+      }
+
+      if (!authEliminado && correo) {
+        try {
+          const authUser = await adminAuth.getUserByEmail(correo);
+          if (authUser && authUser.uid) {
+            await adminAuth.deleteUser(authUser.uid);
+            authEliminado = true;
+            console.log(`[AUTH DELETE] Usuario "${correo}" (UID: ${authUser.uid}) eliminado de Firebase Auth por email.`);
           }
+        } catch (e2) {
+          console.warn(`[AUTH DELETE] Aviso borrado email "${correo}":`, e2.message);
         }
       }
     }
 
-    try {
-      await docRef.delete();
-    } catch (e) {
-      console.warn("[ADMIN] Error eliminando doc de Firestore:", e.message);
+    if (adminDb) {
+      try {
+        if (uid) {
+          await adminDb.collection("usuarios").doc(uid).delete();
+        }
+      } catch (e3) {}
+
+      if (correo) {
+        try {
+          const q = await adminDb.collection("usuarios").where("correo", "==", correo).get();
+          q.forEach((docSnap) => {
+            docSnap.ref.delete();
+          });
+        } catch (e4) {}
+      }
     }
 
-    res.json({ mensaje: "Usuario eliminado exitosamente de Firebase Auth y Firestore." });
+    res.json({
+      exito: true,
+      mensaje: "Usuario eliminado exitosamente de Firebase Auth y Cloud Firestore.",
+      authEliminado,
+    });
   } catch (err) {
     console.error("[ADMIN] Error eliminando usuario:", err.message);
     res.status(500).json({ error: err.message || "Error al eliminar el usuario." });

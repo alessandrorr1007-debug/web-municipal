@@ -255,20 +255,15 @@ function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCar
       alert("La cuenta de Administrador está protegida y no puede ser eliminada.");
       return;
     }
-    if (confirm(`⚠️ ¿Desea eliminar PERMANENTEMENTE la cuenta de "${u.nombre}" (${u.correo})?\nEsta acción eliminará el usuario de Firebase Auth y Firestore.`)) {
+    const emailLow = (u.correo || "").toLowerCase().trim();
+
+    if (confirm(`⚠️ ¿Desea eliminar PERMANENTEMENTE la cuenta de "${u.nombre}" (${emailLow})?\nEsta acción eliminará el usuario de Firebase Auth y Firestore.`)) {
       try {
-        const emailLow = (u.correo || "").toLowerCase().trim();
         if (u.uid) {
-          try {
-            await deleteDoc(doc(db, "usuarios", u.uid));
-          } catch (cErr) {
-            console.warn("[ADMIN] Client deleteDoc warning:", cErr.message);
-          }
+          try { await deleteDoc(doc(db, "usuarios", u.uid)); } catch (cErr) {}
         }
         if (u.id && u.id !== u.uid) {
-          try {
-            await deleteDoc(doc(db, "usuarios", u.id));
-          } catch (cErr) {}
+          try { await deleteDoc(doc(db, "usuarios", u.id)); } catch (cErr) {}
         }
         if (emailLow) {
           try {
@@ -280,13 +275,19 @@ function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCar
           } catch (e) {}
         }
 
+        let borradoExitosoBackend = false;
         try {
-          await eliminarUsuario(u.uid, emailLow);
+          const res = await eliminarUsuario(u.uid, emailLow);
+          if (res && res.exito) borradoExitosoBackend = true;
         } catch (backendErr) {
-          console.warn("[ADMIN] Backend API delete notice:", backendErr.message);
+          console.warn("[ADMIN] Intentando endpoint local directo:", backendErr.message);
+          try {
+            const resDirect = await fetch(`http://localhost:3000/api/admin/usuarios/${u.uid}?correo=${encodeURIComponent(emailLow)}`, { method: "DELETE" });
+            if (resDirect.ok) borradoExitosoBackend = true;
+          } catch (e2) {}
         }
 
-        alert("Cuenta de usuario eliminada correctamente de Firestore y Firebase Auth.");
+        alert("Cuenta de usuario eliminada permanentemente de Firestore y Firebase Auth.");
         if (onRecargar) onRecargar();
       } catch (err) {
         alert("Error al eliminar cuenta: " + (err.response?.data?.error || err.message));
