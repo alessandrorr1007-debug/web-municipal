@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
 import { useAuth, normalizarRol } from "../context/AuthContext";
 import { db } from "../firebase";
-import { collection, onSnapshot, getDocs, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, getDocs } from "firebase/firestore";
 import { obtenerUsuariosInternos } from "../services/adminService";
 import GestionUsuarios from "./GestionUsuarios";
-import ConfigSistema from "./ConfigSistema";
 
 const desduplicarPorEmail = (lista) => {
   const mapa = new Map();
@@ -153,20 +152,14 @@ function PanelAdmin({ seccion }) {
     }
   };
 
-  if (seccion === "gestion-usuarios") {
-    return (
-      <GestionUsuarios
-        usuarios={usuarios}
-        onRecargar={recargarForzado}
-        cargando={cargando}
-        errorCarga={errorCarga}
-      />
-    );
-  }
-
-  if (seccion === "config-sistema") {
-    return <ConfigSistema />;
-  }
+  return (
+    <GestionUsuarios
+      usuarios={usuarios}
+      onRecargar={recargarForzado}
+      cargando={cargando}
+      errorCarga={errorCarga}
+    />
+  );
 
   const inspectoresActivos = usuarios.filter((u) => u.rol === "inspector" && u.estado === "activo").length;
   const cajerosActivos = usuarios.filter((u) => u.rol === "cajero" && u.estado === "activo").length;

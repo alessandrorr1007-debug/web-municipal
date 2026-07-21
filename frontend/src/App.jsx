@@ -126,7 +126,7 @@ function App() {
   const seccionesPorRol = {
     cajero: ["nueva-solicitud", "consulta-expedientes", "historial"],
     inspector: ["inicio", "inspecciones", "historial", "estadisticas"],
-    administrador: ["gestion-usuarios", "config-sistema"],
+    administrador: ["gestion-usuarios"],
   };
 
   const rolEtiqueta = {
