@@ -560,15 +560,33 @@ function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCar
                 <select
                   value={form.rol}
                   onChange={(e) => setForm({ ...form, rol: e.target.value })}
+                  disabled={Boolean(editando && editando.rol === "administrador")}
                   required
-                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "600" }}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    background: editando && editando.rol === "administrador" ? "#f1f5f9" : "white",
+                    cursor: editando && editando.rol === "administrador" ? "not-allowed" : "pointer",
+                  }}
                 >
+                  {editando && editando.rol === "administrador" && (
+                    <option value="administrador">Administrador (Protegido)</option>
+                  )}
                   {rolesPermitidos.map((r) => (
                     <option key={r.value} value={r.value}>
                       {r.label}
                     </option>
                   ))}
                 </select>
+                {editando && editando.rol === "administrador" && (
+                  <p style={{ margin: "6px 0 0", fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
+                    🔒 El rol de la cuenta de Administrador está protegido y no se puede modificar.
+                  </p>
+                )}
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
