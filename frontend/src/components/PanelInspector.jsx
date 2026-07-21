@@ -120,11 +120,7 @@ function PanelInspector({ seccion }) {
   const esHistorial = seccion === "historial" || seccion === "historial-inspecciones";
 
   const solicitudesFiltradas = useMemo(() => {
-    const listaBase = esHistorial
-      ? inspeccionesFinalizadas
-      : paso === "inspecciones-hoy"
-      ? inspeccionesHoy
-      : asignadasInspeccion;
+    const listaBase = esHistorial ? inspeccionesFinalizadas : inspeccionesHoy;
 
     return listaBase.filter((s) => {
       // 1. Filtro por Estado
@@ -152,7 +148,7 @@ function PanelInspector({ seccion }) {
 
       return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
     });
-  }, [solicitudes, filtroEstado, busqueda, esHistorial, paso, asignadasInspeccion, inspeccionesHoy, inspeccionesFinalizadas]);
+  }, [solicitudes, filtroEstado, busqueda, esHistorial, inspeccionesHoy, inspeccionesFinalizadas]);
 
   // ABRIR MODAL DE ATENCIÓN DE INSPECCIÓN
   const abrirModalAtencion = (solicitud, tabInicial = "evaluacion") => {
@@ -335,21 +331,21 @@ function PanelInspector({ seccion }) {
       <div className="inspector-hero" style={{ background: esHistorial ? "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)" : "linear-gradient(135deg, #7c3aed 0%, #312e81 100%)" }}>
         <div>
           <span className="eyebrow">Municipalidad de Trujillo — Módulo de Inspección Técnica</span>
-          <h1>{esHistorial ? "📈 Historial de Inspecciones Atendidas" : "🔍 Inspecciones Asignadas y Programadas"}</h1>
+          <h1>{esHistorial ? "📈 Historial de Inspecciones Atendidas" : "📅 Inspecciones Programadas para Hoy"}</h1>
           <p>
             {esHistorial
               ? "Registro auditado de expedientes e inspecciones evaluadas con dictamen técnico emitido y evidencias adjuntas."
-              : "Expedientes asignados para la programación de visitas técnicas en terreno y evaluación técnica documental."}
+              : "Visitas de inspección técnica agendadas para ser atendidas en terreno el día de hoy."}
           </p>
         </div>
 
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <div className="hero-card">
             <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              {esHistorial ? "Atendidas" : "Pendientes"}
+              {esHistorial ? "Atendidas" : "Hoy"}
             </span>
             <strong style={{ fontSize: "24px" }}>
-              {esHistorial ? inspeccionesFinalizadas.length : asignadasInspeccion.length}
+              {esHistorial ? inspeccionesFinalizadas.length : inspeccionesHoy.length}
             </strong>
             <small>expedientes</small>
           </div>
@@ -360,12 +356,8 @@ function PanelInspector({ seccion }) {
         </div>
       </div>
 
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px", marginBottom: "20px" }}>
-        <div className="stat-card" style={{ background: !esHistorial && paso === "inspecciones" ? "#f3e8ff" : "white" }}>
-          <span>Expedientes Asignados</span>
-          <strong style={{ color: "#7c3aed" }}>{asignadasInspeccion.length}</strong>
-        </div>
-        <div className="stat-card" style={{ background: !esHistorial && paso === "inspecciones-hoy" ? "#fef3c7" : "white" }}>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "20px" }}>
+        <div className="stat-card" style={{ background: !esHistorial ? "#fef3c7" : "white" }}>
           <span>Inspecciones Para Hoy</span>
           <strong style={{ color: "#d97706" }}>{inspeccionesHoy.length}</strong>
           <small>Programadas para hoy</small>
@@ -382,39 +374,18 @@ function PanelInspector({ seccion }) {
         </div>
       </div>
 
-      {!esHistorial && (
-        <div className="tabs-panel">
-          <button
-            type="button"
-            className={paso === "inspecciones" ? "tab-active" : ""}
-            onClick={() => setPaso("inspecciones")}
-          >
-            🔍 Expedientes Asignados ({asignadasInspeccion.length})
-          </button>
-          <button
-            type="button"
-            className={paso === "inspecciones-hoy" ? "tab-active" : ""}
-            onClick={() => setPaso("inspecciones-hoy")}
-          >
-            📅 Inspecciones para Hoy ({inspeccionesHoy.length})
-          </button>
-        </div>
-      )}
-
       <section className="section-card">
         <div className="section-header">
           <div>
             <h2>
               {esHistorial
                 ? "Registro Histórico de Inspecciones Evaluadas"
-                : paso === "inspecciones-hoy"
-                ? "Visitas de Inspección Programadas para Hoy"
-                : "Gestión de Expedientes Asignados a Inspección"}
+                : "Visitas de Inspección Programadas para Hoy"}
             </h2>
             <p>
               {esHistorial
                 ? "Consulta el dictamen final, observaciones registradas, fotografías adjuntas y la trazabilidad de cada inspección atendida."
-                : "Visualiza datos de la empresa, programa la fecha/hora de visita o registra la evaluación técnica."}
+                : "Revisa los datos del establecimiento comercial, ubicación, teléfono de contacto y registra la evaluación técnica."}
             </p>
           </div>
         </div>
