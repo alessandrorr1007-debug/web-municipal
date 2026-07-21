@@ -339,7 +339,7 @@ function PanelInspector({ seccion }) {
           <p>
             {esHistorial
               ? "Registro auditado de expedientes e inspecciones evaluadas con dictamen técnico emitido y evidencias adjuntas."
-              : "Expedientes recibidos post-pago, programación de visitas técnicas en terreno y evaluación técnica documental."}
+              : "Expedientes asignados para la programación de visitas técnicas en terreno y evaluación técnica documental."}
           </p>
         </div>
 
@@ -364,7 +364,6 @@ function PanelInspector({ seccion }) {
         <div className="stat-card" style={{ background: !esHistorial && paso === "inspecciones" ? "#f3e8ff" : "white" }}>
           <span>Expedientes Asignados</span>
           <strong style={{ color: "#7c3aed" }}>{asignadasInspeccion.length}</strong>
-          <small>Recibidos post-pago</small>
         </div>
         <div className="stat-card" style={{ background: !esHistorial && paso === "inspecciones-hoy" ? "#fef3c7" : "white" }}>
           <span>Inspecciones Para Hoy</span>
