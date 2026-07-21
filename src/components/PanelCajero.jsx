@@ -71,9 +71,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
   // ESTADOS DE VALIDACIÓN REAL RENIEC Y SUNAT
   const [dniValidado, setDniValidado] = useState(false);
-  const [rucValidado, setRucValidado] = useState(false);
-  const [estadoSunat, setEstadoSunat] = useState("");
-  const [condicionSunat, setCondicionSunat] = useState("");
+  // ESTADOS DE UBICACIÓN Y JURISDICCIÓN SUNAT
+  const [distritoSunat, setDistritoSunat] = useState("");
+  const [provinciaSunat, setProvinciaSunat] = useState("");
+  const [departamentoSunat, setDepartamentoSunat] = useState("");
+  const [actividadEconomicaSunat, setActividadEconomicaSunat] = useState("");
+  const [esJurisdiccionTrujillo, setEsJurisdiccionTrujillo] = useState(true);
 
   // CONSULTAR RENIEC (DNI) EN PRESENCIAL
   const manejarConsultarDniPresencial = async () => {
@@ -104,7 +107,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     }
   };
 
-  // CONSULTAR SUNAT (RUC) EN PRESENCIAL
+  // CONSULTAR SUNAT (RUC) EN PRESENCIAL CON VALIDACIÓN DE JURISDICCIÓN DE TRUJILLO
   const manejarConsultarRucPresencial = async () => {
     if (!rucForm || rucForm.length !== 11) {
       alert("⚠️ Ingrese un RUC válido de 11 dígitos.");
@@ -113,32 +116,63 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     setConsultandoRuc(true);
     try {
       const res = await consultarRuc(rucForm);
-      const rSoc = res.razonSocial || res.nombreComercial || "EMPRESA REGISTRADA S.A.C.";
-      const nCom = res.nombreComercial || res.razonSocial || rSoc;
+      const rSoc = res.razonSocial || res.nombreNegocio || res.nombreComercial || "EMPRESA REGISTRADA S.A.C.";
+      const nCom = res.nombreComercial || res.razonSocial || res.nombreNegocio || rSoc;
       const dir = res.direccion || res.direccionFiscal || "AV. ESPAÑA NRO. 123 - TRUJILLO";
       const est = res.estado || "ACTIVO";
       const cond = res.condicion || "HABIDO";
 
+      const dist = res.distrito || "Trujillo";
+      const prov = res.provincia || "Trujillo";
+      const dep = res.departamento || "La Libertad";
+      const act = res.giroComercial || res.actividadEconomica || res.actividad || "VENTA AL POR MENOR EN COMERCIOS NO ESPECIALIZADOS";
+
+      // Validar si pertenece a la jurisdicción de la Provincia de Trujillo, La Libertad
+      const provNorm = (prov || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const depNorm = (dep || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const dirNorm = (dir || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const distNorm = (dist || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+      const distritosTrujillo = [
+        "trujillo", "victor larco", "moche", "el porvenir", "la esperanza",
+        "florencia de mora", "huanchaco", "salaverry", "laredo", "simbal", "poroto"
+      ];
+
+      const esEnTrujillo =
+        provNorm.includes("trujillo") ||
+        (depNorm.includes("libertad") && distritosTrujillo.some((d) => distNorm.includes(d) || dirNorm.includes(d))) ||
+        (depNorm.includes("libertad") && provNorm.includes("trujillo"));
+
       // Inferir giro comercial según actividad económica obtenida de SUNAT
       let giroInferido = res.giro || "general";
-      const act = String(res.actividadEconomica || res.actividad || "").toLowerCase();
-      if (act.includes("restaurante") || act.includes("comida") || act.includes("gastronom")) giroInferido = "restaurante";
-      else if (act.includes("farmacia") || act.includes("botic") || act.includes("medic")) giroInferido = "farmacia";
-      else if (act.includes("oficina") || act.includes("consultor") || act.includes("servicios")) giroInferido = "oficina";
-      else if (act.includes("tienda") || act.includes("bodega") || act.includes("comerc")) giroInferido = "comercial";
-      else if (act.includes("hotel") || act.includes("hospedaje")) giroInferido = "hotel";
+      const actTexto = act.toLowerCase();
+      if (actTexto.includes("restaurante") || actTexto.includes("comida") || actTexto.includes("gastronom")) giroInferido = "restaurante";
+      else if (actTexto.includes("farmacia") || actTexto.includes("botic") || actTexto.includes("medic")) giroInferido = "farmacia";
+      else if (actTexto.includes("oficina") || actTexto.includes("consultor") || actTexto.includes("servicios")) giroInferido = "oficina";
+      else if (actTexto.includes("tienda") || actTexto.includes("bodega") || actTexto.includes("comerc")) giroInferido = "comercial";
+      else if (actTexto.includes("hotel") || actTexto.includes("hospedaje")) giroInferido = "hotel";
 
       setRazonSocialForm(rSoc);
       setNombreNegocioForm(nCom);
       setDireccionForm(dir);
       setEstadoSunat(est);
       setCondicionSunat(cond);
+      setDistritoSunat(dist);
+      setProvinciaSunat(prov);
+      setDepartamentoSunat(dep);
+      setActividadEconomicaSunat(act);
       setGiroForm(giroInferido);
+      setEsJurisdiccionTrujillo(esEnTrujillo);
       setRucValidado(true);
+
+      if (!esEnTrujillo) {
+        alert("⚠️ Este establecimiento no pertenece a la jurisdicción de la Municipalidad Provincial de Trujillo. Solo es posible registrar solicitudes para establecimientos ubicados en la provincia de Trujillo.");
+      }
     } catch (err) {
       console.error(err);
       alert("Error al consultar SUNAT: " + err.message);
       setRucValidado(false);
+      setEsJurisdiccionTrujillo(false);
     } finally {
       setConsultandoRuc(false);
     }
@@ -488,6 +522,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     }
     if (!rucValidado) {
       alert("⚠️ Debe consultar y validar el RUC del establecimiento mediante SUNAT antes de continuar.");
+      return;
+    }
+    if (!esJurisdiccionTrujillo) {
+      alert("Este establecimiento no pertenece a la jurisdicción de la Municipalidad Provincial de Trujillo. Solo es posible registrar solicitudes para establecimientos ubicados en la provincia de Trujillo.");
       return;
     }
     if (!dniForm || dniForm.length !== 8) {
@@ -901,7 +939,23 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 {/* PASO 3: SUNAT */}
                 {pasoActual === 3 && (
                   <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-                    <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>🏢 Ingrese el RUC del Establecimiento Comercial</h4>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                      <h4 style={{ margin: 0, color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>🏢 Ingrese el RUC del Establecimiento Comercial</h4>
+                      {rucValidado && (
+                        <span style={{
+                          background: esJurisdiccionTrujillo ? "#dcfce7" : "#fee2e2",
+                          color: esJurisdiccionTrujillo ? "#15803d" : "#dc2626",
+                          padding: "6px 14px",
+                          borderRadius: "20px",
+                          fontSize: "12.5px",
+                          fontWeight: "800",
+                          border: `1.5px solid ${esJurisdiccionTrujillo ? "#bbf7d0" : "#fca5a5"}`
+                        }}>
+                          {esJurisdiccionTrujillo ? "🟢 Establecimiento dentro de la jurisdicción" : "🔴 Establecimiento fuera de la jurisdicción"}
+                        </span>
+                      )}
+                    </div>
+
                     <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
                       <input
                         type="text"
@@ -916,6 +970,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           setDireccionForm("");
                           setEstadoSunat("");
                           setCondicionSunat("");
+                          setDistritoSunat("");
+                          setProvinciaSunat("");
+                          setDepartamentoSunat("");
+                          setActividadEconomicaSunat("");
+                          setEsJurisdiccionTrujillo(true);
                         }}
                         style={{ flex: 1, padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "15px", fontWeight: "700" }}
                       />
@@ -923,26 +982,80 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         type="button"
                         onClick={manejarConsultarRucPresencial}
                         disabled={consultandoRuc}
-                        style={{ padding: "12px 20px", background: rucValidado ? "#16a34a" : "#2563eb", color: "white", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "bold", cursor: "pointer" }}
+                        style={{ padding: "12px 20px", background: rucValidado && esJurisdiccionTrujillo ? "#16a34a" : "#2563eb", color: "white", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "bold", cursor: "pointer" }}
                       >
                         {consultandoRuc ? "Buscando en SUNAT..." : rucValidado ? "✓ Validado" : "Consultar SUNAT"}
                       </button>
                     </div>
 
+                    {/* ALERTA DE BLOQUEO POR FUERA DE JURISDICCIÓN */}
+                    {rucValidado && !esJurisdiccionTrujillo && (
+                      <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", color: "#991b1b", padding: "16px 20px", borderRadius: "14px", marginBottom: "16px" }}>
+                        <strong style={{ fontSize: "14.5px", display: "block", marginBottom: "4px" }}>
+                          ⚠️ Establecimiento fuera de la Jurisdicción Municipal
+                        </strong>
+                        <p style={{ margin: 0, fontSize: "13.5px", lineHeight: "1.5" }}>
+                          Este establecimiento no pertenece a la jurisdicción de la Municipalidad Provincial de Trujillo. Solo es posible registrar solicitudes para establecimientos ubicados en la provincia de Trujillo.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* TARJETA PROFESIONAL DE INFORMACIÓN SUNAT */}
                     {rucValidado && (
-                      <div style={{ background: "#f0fdf4", border: "1.5px solid #bbf7d0", padding: "20px", borderRadius: "14px", marginTop: "16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#166534", fontSize: "15px", fontWeight: "bold", marginBottom: "12px" }}>
-                          <span>🏢</span> Establecimiento Comercial Verificado en SUNAT
+                      <div style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0", padding: "20px", borderRadius: "14px", marginTop: "16px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", borderBottom: "1px solid #cbd5e1", paddingBottom: "10px" }}>
+                          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "15px", fontWeight: "700" }}>
+                            🏢 Información del Contribuyente (SUNAT)
+                          </h4>
+                          <div style={{ display: "flex", gap: "8px" }}>
+                            <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                              ✓ {estadoSunat || "ACTIVO"}
+                            </span>
+                            <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                              ✓ {condicionSunat || "HABIDO"}
+                            </span>
+                          </div>
                         </div>
-                        <div style={{ background: "white", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1", display: "grid", gap: "8px" }}>
-                          <p style={{ margin: 0, fontSize: "14.5px", color: "#0f172a" }}><strong>Nombre Comercial:</strong> {nombreNegocioForm}</p>
-                          <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Razón Social:</strong> {razonSocialForm}</p>
-                          <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>RUC:</strong> {rucForm}</p>
-                          <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Dirección Fiscal:</strong> {direccionForm}</p>
-                          <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Actividad Económica:</strong> {reqsDocInfo.giroLabel}</p>
-                          <div style={{ display: "flex", gap: "10px", marginTop: "6px" }}>
-                            <span style={{ background: "#dcfce7", color: "#15803d", padding: "4px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>✓ {estadoSunat || "ACTIVO"}</span>
-                            <span style={{ background: "#dcfce7", color: "#15803d", padding: "4px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>✓ {condicionSunat || "HABIDO"}</span>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+                          <p style={{ margin: 0, fontSize: "13.5px", color: "#334155" }}>
+                            <strong>Nombre Comercial:</strong> <span style={{ color: "#0f172a", fontWeight: "600" }}>{nombreNegocioForm}</span>
+                          </p>
+                          <p style={{ margin: 0, fontSize: "13.5px", color: "#334155" }}>
+                            <strong>Razón Social:</strong> <span style={{ color: "#0f172a", fontWeight: "600" }}>{razonSocialForm}</span>
+                          </p>
+                          <p style={{ margin: 0, fontSize: "13.5px", color: "#334155" }}>
+                            <strong>RUC:</strong> <span style={{ color: "#0f172a", fontWeight: "600" }}>{rucForm}</span>
+                          </p>
+                          <p style={{ margin: 0, fontSize: "13.5px", color: "#334155" }}>
+                            <strong>Actividad Económica:</strong> <span style={{ color: "#0f172a", fontWeight: "600" }}>{actividadEconomicaSunat || reqsDocInfo.giroLabel}</span>
+                          </p>
+                          <p style={{ margin: 0, fontSize: "13.5px", color: "#334155" }}>
+                            <strong>Estado del Contribuyente:</strong> <span style={{ color: "#15803d", fontWeight: "700" }}>{estadoSunat || "ACTIVO"}</span>
+                          </p>
+                          <p style={{ margin: 0, fontSize: "13.5px", color: "#334155" }}>
+                            <strong>Condición del Contribuyente:</strong> <span style={{ color: "#15803d", fontWeight: "700" }}>{condicionSunat || "HABIDO"}</span>
+                          </p>
+                        </div>
+
+                        {/* SECCIÓN ESPECÍFICA: UBICACIÓN DEL ESTABLECIMIENTO */}
+                        <div style={{ background: "white", padding: "16px 20px", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
+                          <h5 style={{ margin: "0 0 10px", color: "#1e293b", fontSize: "14px", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px" }}>
+                            📍 Ubicación del Establecimiento
+                          </h5>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                            <p style={{ margin: 0, fontSize: "13px", color: "#334155", gridColumn: "span 2" }}>
+                              <strong>📍 Dirección Fiscal:</strong> {direccionForm}
+                            </p>
+                            <p style={{ margin: 0, fontSize: "13px", color: "#334155" }}>
+                              <strong>📍 Distrito:</strong> {distritoSunat}
+                            </p>
+                            <p style={{ margin: 0, fontSize: "13px", color: "#334155" }}>
+                              <strong>📍 Provincia:</strong> {provinciaSunat}
+                            </p>
+                            <p style={{ margin: 0, fontSize: "13px", color: "#334155" }}>
+                              <strong>📍 Departamento:</strong> {departamentoSunat}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -1175,9 +1288,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           alert("⚠️ Ingrese un teléfono celular peruano válido (9 dígitos iniciado en 9) y un correo electrónico.");
                           return;
                         }
-                        if (pasoActual === 3 && !paso3Completado) {
-                          alert("⚠️ Debe validar el RUC en SUNAT para continuar.");
-                          return;
+                        if (pasoActual === 3) {
+                          if (!rucValidado) {
+                            alert("⚠️ Debe consultar y validar el RUC en SUNAT para continuar.");
+                            return;
+                          }
+                          if (!esJurisdiccionTrujillo) {
+                            alert("Este establecimiento no pertenece a la jurisdicción de la Municipalidad Provincial de Trujillo. Solo es posible registrar solicitudes para establecimientos ubicados en la provincia de Trujillo.");
+                            return;
+                          }
                         }
                         if (pasoActual === 4 && !paso4Completado) {
                           alert("⚠️ Debe adjuntar el archivo PDF del Plano del Local.");
