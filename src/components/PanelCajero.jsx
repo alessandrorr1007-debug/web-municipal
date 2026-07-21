@@ -620,17 +620,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             {/* PASO 1: DATOS DEL SOLICITANTE CON VALIDACIÓN RENIEC */}
             <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>👤 1. Datos del Solicitante (Validación RENIEC)</h4>
-                {dniValidado && (
-                  <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                    ✓ Validado por RENIEC (Bloqueado)
-                  </span>
-                )}
+                <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>👤 1. Datos del Solicitante (Consulta RENIEC Obligatoria)</h4>
+                <span style={{ background: dniValidado ? "#dcfce7" : "#fef3c7", color: dniValidado ? "#15803d" : "#b45309", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                  {dniValidado ? "✓ RENIEC Validado (Campos Bloqueados)" : "🔒 Consulta RENIEC Requerida"}
+                </span>
               </div>
               
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>DNI del Titular *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>DNI del Titular (Editable) *</label>
                   <div style={{ display: "flex", gap: "6px" }}>
                     <input
                       type="text"
@@ -672,27 +670,27 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Nombres (Solo Lectura) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Nombres (Oficial RENIEC - Solo Lectura) *</label>
                   <input
                     type="text"
-                    placeholder={dniValidado ? "Nombres autocompletados por RENIEC" : "🔒 Ingrese DNI y presione Consultar RENIEC"}
+                    placeholder="🔒 Se autocompleta consultando RENIEC"
                     value={nombresForm}
-                    readOnly={dniValidado}
-                    onChange={(e) => setNombresForm(e.target.value)}
+                    readOnly
                     required
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: dniValidado ? "#f1f5f9" : "white", cursor: dniValidado ? "not-allowed" : "text", fontWeight: dniValidado ? "bold" : "normal" }}
+                    onKeyDown={(e) => e.preventDefault()}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Apellidos (Solo Lectura) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Apellidos (Oficial RENIEC - Solo Lectura) *</label>
                   <input
                     type="text"
-                    placeholder={dniValidado ? "Apellidos autocompletados por RENIEC" : "🔒 Ingrese DNI y presione Consultar RENIEC"}
+                    placeholder="🔒 Se autocompleta consultando RENIEC"
                     value={apellidosForm}
-                    readOnly={dniValidado}
-                    onChange={(e) => setApellidosForm(e.target.value)}
+                    readOnly
                     required
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: dniValidado ? "#f1f5f9" : "white", cursor: dniValidado ? "not-allowed" : "text", fontWeight: dniValidado ? "bold" : "normal" }}
+                    onKeyDown={(e) => e.preventDefault()}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                   />
                 </div>
               </div>
@@ -713,17 +711,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             {/* PASO 2: DATOS DEL NEGOCIO CON VALIDACIÓN SUNAT */}
             <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>🏢 2. Establecimiento Comercial (Validación SUNAT)</h4>
-                {rucValidado && (
-                  <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                    ✓ SUNAT: {estadoSunat || "ACTIVO"} — {condicionSunat || "HABIDO"}
-                  </span>
-                )}
+                <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>🏢 2. Establecimiento Comercial (Consulta SUNAT Obligatoria)</h4>
+                <span style={{ background: rucValidado ? "#dcfce7" : "#fef3c7", color: rucValidado ? "#15803d" : "#b45309", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                  {rucValidado ? `✓ SUNAT Validado (${estadoSunat || "ACTIVO"} - ${condicionSunat || "HABIDO"})` : "🔒 Consulta SUNAT Requerida"}
+                </span>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>RUC del Local (11 dígitos) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>RUC del Local (Editable - 11 dígitos) *</label>
                   <div style={{ display: "flex", gap: "6px" }}>
                     <input
                       type="text"
@@ -754,12 +750,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 </div>
 
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Actividad Económica (Bloqueada por SUNAT) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Actividad Económica (Oficial SUNAT - Solo Lectura) *</label>
                   <select
                     value={giroForm}
-                    disabled={rucValidado}
-                    onChange={(e) => setGiroForm(e.target.value)}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: rucValidado ? "#f1f5f9" : "white", cursor: rucValidado ? "not-allowed" : "pointer" }}
+                    disabled
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: "#f1f5f9", cursor: "not-allowed", color: "#1e293b" }}
                   >
                     {GROS_DISPONIBLES.map((g) => (
                       <option key={g.value} value={g.value}>{g.label}</option>
@@ -770,41 +765,64 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Nombre Comercial (Solo Lectura) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Nombre Comercial (Oficial SUNAT - Solo Lectura) *</label>
                   <input
                     type="text"
-                    placeholder={rucValidado ? "Autocompletado por SUNAT" : "🔒 Ingrese RUC y presione Consultar SUNAT"}
+                    placeholder="🔒 Se autocompleta consultando SUNAT"
                     value={nombreNegocioForm}
-                    readOnly={rucValidado}
-                    onChange={(e) => setNombreNegocioForm(e.target.value)}
+                    readOnly
                     required
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: rucValidado ? "#f1f5f9" : "white", cursor: rucValidado ? "not-allowed" : "text", fontWeight: rucValidado ? "bold" : "normal" }}
+                    onKeyDown={(e) => e.preventDefault()}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Razón Social (Solo Lectura)</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Razón Social (Oficial SUNAT - Solo Lectura)</label>
                   <input
                     type="text"
-                    placeholder={rucValidado ? "Autocompletado por SUNAT" : "🔒 Ingrese RUC y presione Consultar SUNAT"}
+                    placeholder="🔒 Se autocompleta consultando SUNAT"
                     value={razonSocialForm}
-                    readOnly={rucValidado}
-                    onChange={(e) => setRazonSocialForm(e.target.value)}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: rucValidado ? "#f1f5f9" : "white", cursor: rucValidado ? "not-allowed" : "text", fontWeight: rucValidado ? "bold" : "normal" }}
+                    readOnly
+                    onKeyDown={(e) => e.preventDefault()}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                   />
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Dirección Fiscal del Establecimiento (Solo Lectura) *</label>
+              <div style={{ marginBottom: "10px" }}>
+                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Dirección Fiscal del Establecimiento (Oficial SUNAT - Solo Lectura) *</label>
                 <input
                   type="text"
-                  placeholder={rucValidado ? "Autocompletado por SUNAT" : "🔒 Ingrese RUC y presione Consultar SUNAT"}
+                  placeholder="🔒 Se autocompleta consultando SUNAT"
                   value={direccionForm}
-                  readOnly={rucValidado}
-                  onChange={(e) => setDireccionForm(e.target.value)}
+                  readOnly
                   required
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: rucValidado ? "#f1f5f9" : "white", cursor: rucValidado ? "not-allowed" : "text", fontWeight: rucValidado ? "bold" : "normal" }}
+                  onKeyDown={(e) => e.preventDefault()}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                 />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Estado del Contribuyente (SUNAT)</label>
+                  <input
+                    type="text"
+                    readOnly
+                    placeholder="🔒 Se autocompleta consultando SUNAT"
+                    value={estadoSunat ? `✓ ${estadoSunat}` : ""}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#15803d" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Condición del Contribuyente (SUNAT)</label>
+                  <input
+                    type="text"
+                    readOnly
+                    placeholder="🔒 Se autocompleta consultando SUNAT"
+                    value={condicionSunat ? `✓ ${condicionSunat}` : ""}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#15803d" }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -1384,17 +1402,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               {/* PASO 1: DATOS DEL SOLICITANTE CON VALIDACIÓN RENIEC */}
               <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                  <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>👤 1. Datos del Solicitante (Validación RENIEC)</h4>
-                  {dniValidado && (
-                    <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                      ✓ Validado por RENIEC (Bloqueado)
-                    </span>
-                  )}
+                  <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>👤 1. Datos del Solicitante (Consulta RENIEC Obligatoria)</h4>
+                  <span style={{ background: dniValidado ? "#dcfce7" : "#fef3c7", color: dniValidado ? "#15803d" : "#b45309", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                    {dniValidado ? "✓ RENIEC Validado (Campos Bloqueados)" : "🔒 Consulta RENIEC Requerida"}
+                  </span>
                 </div>
                 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>DNI del Titular *</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>DNI del Titular (Editable) *</label>
                     <div style={{ display: "flex", gap: "6px" }}>
                       <input
                         type="text"
@@ -1436,27 +1452,27 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Nombres (Solo Lectura) *</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Nombres (Oficial RENIEC - Solo Lectura) *</label>
                     <input
                       type="text"
-                      placeholder={dniValidado ? "Nombres autocompletados por RENIEC" : "🔒 Ingrese DNI y presione Consultar RENIEC"}
+                      placeholder="🔒 Se autocompleta consultando RENIEC"
                       value={nombresForm}
-                      readOnly={dniValidado}
-                      onChange={(e) => setNombresForm(e.target.value)}
+                      readOnly
                       required
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: dniValidado ? "#f1f5f9" : "white", cursor: dniValidado ? "not-allowed" : "text", fontWeight: dniValidado ? "bold" : "normal" }}
+                      onKeyDown={(e) => e.preventDefault()}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Apellidos (Solo Lectura) *</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Apellidos (Oficial RENIEC - Solo Lectura) *</label>
                     <input
                       type="text"
-                      placeholder={dniValidado ? "Apellidos autocompletados por RENIEC" : "🔒 Ingrese DNI y presione Consultar RENIEC"}
+                      placeholder="🔒 Se autocompleta consultando RENIEC"
                       value={apellidosForm}
-                      readOnly={dniValidado}
-                      onChange={(e) => setApellidosForm(e.target.value)}
+                      readOnly
                       required
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: dniValidado ? "#f1f5f9" : "white", cursor: dniValidado ? "not-allowed" : "text", fontWeight: dniValidado ? "bold" : "normal" }}
+                      onKeyDown={(e) => e.preventDefault()}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                     />
                   </div>
                 </div>
@@ -1477,17 +1493,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               {/* PASO 2: DATOS DEL NEGOCIO CON VALIDACIÓN SUNAT */}
               <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                  <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>🏢 2. Establecimiento Comercial (Validación SUNAT)</h4>
-                  {rucValidado && (
-                    <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                      ✓ SUNAT: {estadoSunat || "ACTIVO"} — {condicionSunat || "HABIDO"}
-                    </span>
-                  )}
+                  <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>🏢 2. Establecimiento Comercial (Consulta SUNAT Obligatoria)</h4>
+                  <span style={{ background: rucValidado ? "#dcfce7" : "#fef3c7", color: rucValidado ? "#15803d" : "#b45309", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                    {rucValidado ? `✓ SUNAT Validado (${estadoSunat || "ACTIVO"} - ${condicionSunat || "HABIDO"})` : "🔒 Consulta SUNAT Requerida"}
+                  </span>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>RUC del Local (11 dígitos) *</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>RUC del Local (Editable - 11 dígitos) *</label>
                     <div style={{ display: "flex", gap: "6px" }}>
                       <input
                         type="text"
@@ -1518,12 +1532,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Actividad Económica (Bloqueada por SUNAT) *</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Actividad Económica (Oficial SUNAT - Solo Lectura) *</label>
                     <select
                       value={giroForm}
-                      disabled={rucValidado}
-                      onChange={(e) => setGiroForm(e.target.value)}
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: rucValidado ? "#f1f5f9" : "white", cursor: rucValidado ? "not-allowed" : "pointer" }}
+                      disabled
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: "#f1f5f9", cursor: "not-allowed", color: "#1e293b" }}
                     >
                       {GROS_DISPONIBLES.map((g) => (
                         <option key={g.value} value={g.value}>{g.label}</option>
@@ -1534,41 +1547,64 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Nombre Comercial (Solo Lectura) *</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Nombre Comercial (Oficial SUNAT - Solo Lectura) *</label>
                     <input
                       type="text"
-                      placeholder={rucValidado ? "Autocompletado por SUNAT" : "🔒 Ingrese RUC y presione Consultar SUNAT"}
+                      placeholder="🔒 Se autocompleta consultando SUNAT"
                       value={nombreNegocioForm}
-                      readOnly={rucValidado}
-                      onChange={(e) => setNombreNegocioForm(e.target.value)}
+                      readOnly
                       required
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: rucValidado ? "#f1f5f9" : "white", cursor: rucValidado ? "not-allowed" : "text", fontWeight: rucValidado ? "bold" : "normal" }}
+                      onKeyDown={(e) => e.preventDefault()}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Razón Social (Solo Lectura)</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Razón Social (Oficial SUNAT - Solo Lectura)</label>
                     <input
                       type="text"
-                      placeholder={rucValidado ? "Autocompletado por SUNAT" : "🔒 Ingrese RUC y presione Consultar SUNAT"}
+                      placeholder="🔒 Se autocompleta consultando SUNAT"
                       value={razonSocialForm}
-                      readOnly={rucValidado}
-                      onChange={(e) => setRazonSocialForm(e.target.value)}
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: rucValidado ? "#f1f5f9" : "white", cursor: rucValidado ? "not-allowed" : "text", fontWeight: rucValidado ? "bold" : "normal" }}
+                      readOnly
+                      onKeyDown={(e) => e.preventDefault()}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Dirección Fiscal del Establecimiento (Solo Lectura) *</label>
+                <div style={{ marginBottom: "10px" }}>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Dirección Fiscal del Establecimiento (Oficial SUNAT - Solo Lectura) *</label>
                   <input
                     type="text"
-                    placeholder={rucValidado ? "Autocompletado por SUNAT" : "🔒 Ingrese RUC y presione Consultar SUNAT"}
+                    placeholder="🔒 Se autocompleta consultando SUNAT"
                     value={direccionForm}
-                    readOnly={rucValidado}
-                    onChange={(e) => setDireccionForm(e.target.value)}
+                    readOnly
                     required
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: rucValidado ? "#f1f5f9" : "white", cursor: rucValidado ? "not-allowed" : "text", fontWeight: rucValidado ? "bold" : "normal" }}
+                    onKeyDown={(e) => e.preventDefault()}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                   />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Estado del Contribuyente (SUNAT)</label>
+                    <input
+                      type="text"
+                      readOnly
+                      placeholder="🔒 Se autocompleta consultando SUNAT"
+                      value={estadoSunat ? `✓ ${estadoSunat}` : ""}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#15803d" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Condición del Contribuyente (SUNAT)</label>
+                    <input
+                      type="text"
+                      readOnly
+                      placeholder="🔒 Se autocompleta consultando SUNAT"
+                      value={condicionSunat ? `✓ ${condicionSunat}` : ""}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#15803d" }}
+                    />
+                  </div>
                 </div>
               </div>
 
