@@ -159,6 +159,17 @@ function PanelInspector({ seccion }) {
 
   const esHistorial = seccion === "historial" || seccion === "historial-inspecciones";
 
+  const inspeccionesHoy = useMemo(() => {
+    const hoyNorm = normalizarFechaString(formatearFechaLocal(new Date()));
+    return solicitudes.filter((s) => {
+      if (!esExpedienteDeEsteInspector(s)) return false;
+      const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
+      if (e.includes("aprobado") || e.includes("rechazado")) return false;
+      const fechaSolNorm = normalizarFechaString(s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "");
+      return fechaSolNorm === hoyNorm;
+    });
+  }, [solicitudes, esExpedienteDeEsteInspector]);
+
   const solicitudesFiltradas = useMemo(() => {
     if (!esHistorial) {
       return inspeccionesPendientes;
@@ -181,7 +192,7 @@ function PanelInspector({ seccion }) {
 
       return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
     });
-  }, [solicitudes, busqueda, filtroEstado, esHistorial, inspeccionesHoy, inspeccionesFinalizadas]);
+  }, [solicitudes, busqueda, filtroEstado, esHistorial, inspeccionesPendientes, inspeccionesFinalizadas]);
 
   // ABRIR MODAL DE ATENCIÓN DE INSPECCIÓN
   const abrirModalAtencion = (solicitud, tabInicial = "evaluacion") => {
