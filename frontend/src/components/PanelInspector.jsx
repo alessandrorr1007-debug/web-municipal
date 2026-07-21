@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   obtenerSolicitudes,
   actualizarSolicitud,
+  suscribirSolicitudes,
 } from "../services/solicitudService";
 import { crearNotificacion } from "../services/notificacionService";
 import { abrirPdf } from "../services/pdfService";
@@ -32,7 +33,7 @@ function PanelInspector({ seccion }) {
   const [evidencias, setEvidencias] = useState([]);
   const [fechaVisita, setFechaVisita] = useState("");
   const [horaVisita, setHoraVisita] = useState("10:00");
-  const [filtroFechaVisita, setFiltroFechaVisita] = useState("todas");
+  const [filtroFechaVisita, setFiltroFechaVisita] = useState("hoy");
   const [procesando, setProcesando] = useState(false);
 
   const cargarSolicitudes = async () => {
@@ -49,7 +50,12 @@ function PanelInspector({ seccion }) {
   };
 
   useEffect(() => {
-    cargarSolicitudes();
+    setCargando(true);
+    const unsubscribe = suscribirSolicitudes((data) => {
+      setSolicitudes(data);
+      setCargando(false);
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {

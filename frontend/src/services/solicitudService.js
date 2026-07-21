@@ -9,6 +9,7 @@ import {
   query,
   orderBy,
   where,
+  onSnapshot,
 } from "firebase/firestore";
 
 import { db, authHeaders } from "../firebase";
@@ -128,6 +129,28 @@ export const obtenerSolicitudes = async () => {
     const bTime = b.creadoEn?.seconds || b.creadoEn?.toMillis?.() || 0;
     return bTime - aTime;
   });
+};
+
+export const suscribirSolicitudes = (callback) => {
+  const coleccionRef = collection(db, COLLECTION_NAME);
+  return onSnapshot(
+    coleccionRef,
+    (snapshot) => {
+      const solicitudes = snapshot.docs.map((documento) => ({
+        id: documento.id,
+        ...documento.data(),
+      }));
+      const ordenadas = solicitudes.sort((a, b) => {
+        const aTime = a.creadoEn?.seconds || a.creadoEn?.toMillis?.() || 0;
+        const bTime = b.creadoEn?.seconds || b.creadoEn?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
+      callback(ordenadas);
+    },
+    (err) => {
+      console.error("[FIRESTORE REALTIME] Error en suscripción a solicitudes:", err);
+    }
+  );
 };
 
 const crearNotificacionEnDb = async (uidUsuario, { titulo, descripcion, icono, html }, correoUsuario = "") => {
