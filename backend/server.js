@@ -1451,12 +1451,29 @@ app.delete("/api/admin/usuarios/:uid", verificarToken, verificarAdmin, async (re
     if (adminAuth) {
       try {
         await adminAuth.deleteUser(uid);
+        console.log(`[ADMIN] Usuario UID ${uid} eliminado de Firebase Auth.`);
       } catch (authErr) {
-        console.warn("[ADMIN] No se pudo eliminar de Auth (o ya no existía):", authErr.message);
+        if (correo) {
+          try {
+            const authUser = await adminAuth.getUserByEmail(correo);
+            if (authUser) {
+              await adminAuth.deleteUser(authUser.uid);
+              console.log(`[ADMIN] Usuario ${correo} (UID: ${authUser.uid}) eliminado de Firebase Auth por email.`);
+            }
+          } catch (e2) {
+            console.warn("[ADMIN] No se pudo eliminar de Auth por email:", e2.message);
+          }
+        }
       }
     }
-    await docRef.delete();
-    res.json({ mensaje: "Usuario eliminado exitosamente." });
+
+    try {
+      await docRef.delete();
+    } catch (e) {
+      console.warn("[ADMIN] Error eliminando doc de Firestore:", e.message);
+    }
+
+    res.json({ mensaje: "Usuario eliminado exitosamente de Firebase Auth y Firestore." });
   } catch (err) {
     console.error("[ADMIN] Error eliminando usuario:", err.message);
     res.status(500).json({ error: err.message || "Error al eliminar el usuario." });
