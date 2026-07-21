@@ -814,7 +814,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               <table style="width: 210px; font-size: 13px; text-align: right;">
                 <tr><td style="color: #475569;">OP. GRAVADA:</td><td style="font-weight: bold;">S/ 2.54</td></tr>
                 <tr><td style="color: #475569;">I.G.V. (18%):</td><td style="font-weight: bold;">S/ 0.46</td></tr>
-                <tr><td style="color: #475569;">DESCUENTO:</td><td style="font-weight: bold;">S/ 0.00</td></tr>
                 <tr style="font-size: 15px; border-top: 1.5px solid #0f172a;">
                   <td style="padding-top: 6px; font-weight: 900; color: #0f172a;">TOTAL A PAGAR:</td>
                   <td style="padding-top: 6px; font-weight: 900; color: #16a34a;">S/ 3.00</td>
@@ -1012,13 +1011,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   <div style={{ fontSize: "12px", color: "#334155" }}>
                     <p style={{ margin: "2px 0" }}><strong>MÉTODO DE PAGO:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.metodoPago || "TARJETA").toUpperCase()}</p>
                     <p style={{ margin: "2px 0" }}><strong>CAJERA:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.cajeraResponsable || "CAJERA MUNICIPAL").toUpperCase()}</p>
-                    <p style={{ margin: "2px 0", color: "#1e40af" }}><strong>INSPECTOR ASIGNADO:</strong> {resultadoRegistroExitoso.inspectorNombre} ({resultadoRegistroExitoso.fechaInspeccion})</p>
                   </div>
                   <table style={{ width: "210px", fontSize: "13.5px" }}>
                     <tbody>
                       <tr><td style={{ color: "#475569" }}>OP. GRAVADA:</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 2.54</td></tr>
                       <tr><td style={{ color: "#475569" }}>I.G.V. (18%):</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 0.46</td></tr>
-                      <tr><td style={{ color: "#475569" }}>DESCUENTO:</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 0.00</td></tr>
                       <tr style={{ fontSize: "16px", borderTop: "1.5px solid #0f172a" }}>
                         <td style={{ paddingTop: "6px", fontWeight: "900", color: "#0f172a" }}>TOTAL A PAGAR:</td>
                         <td style={{ paddingTop: "6px", textAlign: "right", fontWeight: "900", color: "#16a34a" }}>S/ 3.00</td>
