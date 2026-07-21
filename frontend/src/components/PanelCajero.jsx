@@ -71,7 +71,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState("todos"); // "todos", "pendiente", "pagado", "enviado", "anulado"
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+  const [errorFechaRange, setErrorFechaRange] = useState("");
   const [solicitudCobro, setSolicitudCobro] = useState(null);
   const [solicitudVerDetalle, setSolicitudVerDetalle] = useState(null);
   const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("Efectivo en Caja Municipal");
@@ -442,27 +444,56 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
   };
 
-  // BUSQUEDA Y FILTRADO AVANZADO POR CÓDIGO, DNI, RUC, NOMBRE Y FILTRO DE ESTADO
+  const obtenerFechaPagoObj = useCallback((s) => {
+    const str = s.fechaPago || s.fechaPagoPresencial || s.fechaCobro || s.fechaEmision || s.fechaRegistro || s.fechaVisitaInspector || s.fecha || "";
+    if (!str) return null;
+    if (typeof str === "object" && str.seconds) {
+      return new Date(str.seconds * 1000);
+    }
+    if (typeof str === "string") {
+      if (str.includes("-")) {
+        const [y, m, d] = str.split("-").map(Number);
+        return new Date(y, m - 1, d);
+      }
+      if (str.includes("/")) {
+        const [d, m, y] = str.split("/").map(Number);
+        return new Date(y, m - 1, d);
+      }
+    }
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? null : d;
+  }, []);
+
+  // BUSQUEDA Y FILTRADO POR CÓDIGO, DNI, RUC, NOMBRE Y RANGO DE FECHAS DE PAGO
   const solicitudesFiltradas = useMemo(() => {
     const lista = Array.isArray(solicitudes) ? solicitudes : [];
     return lista.filter((s) => {
       if (!s) return false;
 
-      // 1. Filtro por Estado Select
-      const estPago = String(s.estadoPago || "").toLowerCase();
-      const estGen = String(s.estado || "").toLowerCase();
+      // 1. Filtro por Rango de Fechas de Pago (solo si se especifican fechas)
+      if (seccion === "historial" && (fechaDesde || fechaHasta)) {
+        if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+          return false;
+        }
 
-      if (filtroEstado === "pendiente") {
-        if (estPago === "confirmado" || estGen.includes("pagado") || estGen.includes("anulado")) return false;
-      } else if (filtroEstado === "pagado") {
-        if (estPago !== "confirmado" && !estGen.includes("pagado")) return false;
-      } else if (filtroEstado === "enviado") {
-        if (!estGen.includes("inspeccion") && !estGen.includes("enviado") && !estGen.includes("aprobado")) return false;
-      } else if (filtroEstado === "anulado") {
-        if (!estGen.includes("anulado") && !estGen.includes("rechazado")) return false;
+        const fechaPagoObj = obtenerFechaPagoObj(s);
+        if (!fechaPagoObj) return false;
+        fechaPagoObj.setHours(0, 0, 0, 0);
+
+        if (fechaDesde) {
+          const [y1, m1, d1] = fechaDesde.split("-").map(Number);
+          const fDesde = new Date(y1, m1 - 1, d1, 0, 0, 0, 0);
+          if (fechaPagoObj < fDesde) return false;
+        }
+
+        if (fechaHasta) {
+          const [y2, m2, d2] = fechaHasta.split("-").map(Number);
+          const fHasta = new Date(y2, m2 - 1, d2, 0, 0, 0, 0);
+          if (fechaPagoObj > fHasta) return false;
+        }
       }
 
-      // 2. Filtro por Búsqueda (Código, DNI, RUC, Nombres, Razón Social)
+      // 2. Filtro por Búsqueda de Texto (Código, DNI, RUC, Nombres, Razón Social)
       if (!busqueda || !busqueda.trim()) return true;
       const q = busqueda.toLowerCase().trim();
       const dni = String(s.dniSolicitante || s.dni || "").toLowerCase();
@@ -474,7 +505,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
       return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q) || razonSocial.includes(q);
     });
-  }, [solicitudes, filtroEstado, busqueda]);
+  }, [solicitudes, seccion, fechaDesde, fechaHasta, busqueda, obtenerFechaPagoObj]);
 
   // CONFIRMAR PAGO Y PROGRAMAR INSPECCIÓN OFICIAL
   const ejecutarCobro = async () => {
@@ -1517,26 +1548,86 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
-          <input
-            type="text"
-            placeholder="🔍 Buscar por código (Ej. EXP-1002), DNI, RUC o Nombre de Solicitante/Negocio..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            style={{ flex: 1, minWidth: "240px", padding: "12px 18px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-          />
+          {/* BARRA DE BÚSQUEDA Y FILTROS */}
+          <div style={{ display: "grid", gap: "16px", marginBottom: "20px" }}>
+            <div>
+              <input
+                type="text"
+                placeholder="🔍 Buscar por código (Ej. EXP-1002), DNI, RUC o Nombre de Solicitante/Negocio..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                style={{ width: "100%", padding: "12px 18px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px" }}
+              />
+            </div>
 
-          <select
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value)}
-            style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold", background: "#f8fafc", color: "#1e293b", minWidth: "200px" }}
-          >
-            <option value="todos">📌 Todos los estados ({solicitudes.length})</option>
-            <option value="pagado">✅ Pagados / Confirmados ({pagadas.length})</option>
-            <option value="enviado">🚀 Enviados a Inspección ({enviadasAInspeccion.length})</option>
-            <option value="anulado">❌ Anulados ({anuladas.length})</option>
-          </select>
-        </div>
+            {seccion === "historial" && (
+              <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap", background: "#f8fafc", padding: "16px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "700", color: "#334155", marginBottom: "4px" }}>
+                    📅 Fecha desde:
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaDesde}
+                    onChange={(e) => {
+                      setFechaDesde(e.target.value);
+                      setErrorFechaRange("");
+                    }}
+                    style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "700", color: "#334155", marginBottom: "4px" }}>
+                    📅 Fecha hasta:
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaHasta}
+                    onChange={(e) => {
+                      setFechaHasta(e.target.value);
+                      setErrorFechaRange("");
+                    }}
+                    style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+                      alert("⚠️ La fecha inicial no puede ser mayor que la fecha final.");
+                      setErrorFechaRange("La fecha inicial no puede ser mayor que la fecha final.");
+                      return;
+                    }
+                    setErrorFechaRange("");
+                  }}
+                  style={{ padding: "10px 20px", background: "#2563eb", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  🔎 Buscar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusqueda("");
+                    setFechaDesde("");
+                    setFechaHasta("");
+                    setErrorFechaRange("");
+                  }}
+                  style={{ padding: "10px 20px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "8px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  🧹 Limpiar filtros
+                </button>
+              </div>
+            )}
+
+            {errorFechaRange && (
+              <div style={{ background: "#fef2f2", color: "#991b1b", border: "1px solid #fca5a5", padding: "10px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
+                ⚠️ {errorFechaRange}
+              </div>
+            )}
+          </div>
 
         {solicitudesFiltradas.length === 0 ? (
           <div className="empty-state">
