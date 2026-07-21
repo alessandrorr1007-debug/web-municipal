@@ -125,7 +125,7 @@ function App() {
 
   const seccionesPorRol = {
     cajero: ["nueva-solicitud", "consulta-expedientes", "historial"],
-    inspector: ["inicio", "inspecciones", "historial", "estadisticas"],
+    inspector: ["inspecciones", "historial-inspecciones"],
     administrador: ["gestion-usuarios"],
   };
 
@@ -156,9 +156,8 @@ function App() {
     if (rolNorm === "inspector") {
       switch (seccionActiva) {
         case "inspecciones": return <PanelInspector seccion="inspecciones" />;
-        case "historial": return <PanelInspector seccion="historial" />;
-        case "estadisticas": return <PanelInspector seccion="estadisticas" />;
-        default: return <PanelInspector seccion="inicio" />;
+        case "historial-inspecciones": return <PanelInspector seccion="historial-inspecciones" />;
+        default: return <PanelInspector seccion="inspecciones" />;
       }
     }
     if (rolNorm === "administrador") {

@@ -51,6 +51,14 @@ function PanelInspector({ seccion }) {
     cargarSolicitudes();
   }, []);
 
+  useEffect(() => {
+    if (seccion === "historial" || seccion === "historial-inspecciones") {
+      setPaso("historial");
+    } else {
+      setPaso("inspecciones");
+    }
+  }, [seccion]);
+
   const formatearFechaHora = () => {
     return new Date().toLocaleString("es-PE", {
       day: "2-digit",
