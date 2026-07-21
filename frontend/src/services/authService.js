@@ -90,10 +90,28 @@ export const obtenerDocUsuarioFirestore = async (uid, correo) => {
   return { userDoc, docId };
 };
 
+export const registrarNuevaSesionId = async (uid, docId) => {
+  const nuevaSesionId = Date.now().toString() + "_" + Math.random().toString(36).substring(2, 9);
+  localStorage.setItem("web_municipal_sesion_id", nuevaSesionId);
+
+  const targetId = docId || uid;
+  if (targetId) {
+    try {
+      await setDoc(doc(db, "usuarios", targetId), {
+        sesionId: nuevaSesionId,
+        ultimoIngreso: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.warn("[AUTH] Error registrando sesionId en Firestore:", e.message);
+    }
+  }
+  return nuevaSesionId;
+};
+
 export const iniciarSesion = async (correo, password) => {
   const correoNorm = (correo || "").toLowerCase().trim();
 
-  const { userDoc } = await obtenerDocUsuarioFirestore(null, correoNorm);
+  const { userDoc, docId } = await obtenerDocUsuarioFirestore(null, correoNorm);
 
   if (!userDoc) {
     try { await signOut(auth); } catch (e) {}
@@ -114,6 +132,8 @@ export const iniciarSesion = async (correo, password) => {
     const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
     const rolFinal = userDoc.rol && rolesValidos.includes(userDoc.rol) ? userDoc.rol : "cajero";
 
+    const sesionId = await registrarNuevaSesionId(usuario.uid, docId || usuario.uid);
+
     return {
       uid: usuario.uid,
       correo: usuario.email,
@@ -123,6 +143,7 @@ export const iniciarSesion = async (correo, password) => {
       dni: userDoc.dni || "",
       activo: true,
       estado: "activo",
+      sesionId,
     };
   } catch (authError) {
     if (authError.message && (authError.message.includes("inhabilitada") || authError.message.includes("registrada"))) {
@@ -132,8 +153,11 @@ export const iniciarSesion = async (correo, password) => {
     if (userDoc.password && userDoc.password === password) {
       const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
       const rolFinal = userDoc.rol && rolesValidos.includes(userDoc.rol) ? userDoc.rol : "cajero";
+      const targetUid = userDoc.uid || docId || `USR-${Date.now()}`;
+      const sesionId = await registrarNuevaSesionId(targetUid, docId || targetUid);
+
       return {
-        uid: userDoc.uid || `USR-${Date.now()}`,
+        uid: targetUid,
         correo: correoNorm,
         nombre: userDoc.nombre || userDoc.nombre_completo || "Usuario",
         rol: rolFinal,
@@ -141,6 +165,7 @@ export const iniciarSesion = async (correo, password) => {
         dni: userDoc.dni || "",
         activo: true,
         estado: "activo",
+        sesionId,
       };
     }
 

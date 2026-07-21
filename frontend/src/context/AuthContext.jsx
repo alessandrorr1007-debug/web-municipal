@@ -45,6 +45,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const handleSessionReplaced = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("Error signing out:", e);
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    setUsuario(null);
+    alert("⚠️ Se ha iniciado sesión en esta cuenta desde otro navegador o dispositivo. Su sesión anterior ha sido cerrada.");
+  };
+
   useEffect(() => {
     let unsubscribeUserDoc = null;
 
@@ -70,6 +82,16 @@ export const AuthProvider = ({ children }) => {
               return;
             }
 
+            if (docData.sesionId) {
+              const localId = localStorage.getItem("web_municipal_sesion_id");
+              if (!localId) {
+                localStorage.setItem("web_municipal_sesion_id", docData.sesionId);
+              } else if (localId !== docData.sesionId) {
+                await handleSessionReplaced();
+                return;
+              }
+            }
+
             const rolFinal = normalizarRol(docData.rol, user.email);
 
             setUsuario({
@@ -82,6 +104,7 @@ export const AuthProvider = ({ children }) => {
               activo: true,
               estado: "activo",
               recibir_correos: docData.recibir_correos !== false,
+              sesionId: docData.sesionId || null,
             });
 
             unsubscribeUserDoc = onSnapshot(ref, (docSnap) => {
@@ -93,12 +116,19 @@ export const AuthProvider = ({ children }) => {
                   return;
                 }
 
+                const currentLocalSesionId = localStorage.getItem("web_municipal_sesion_id");
+                if (updatedData.sesionId && currentLocalSesionId && updatedData.sesionId !== currentLocalSesionId) {
+                  handleSessionReplaced();
+                  return;
+                }
+
                 setUsuario((prev) => ({
                   ...prev,
                   nombre: updatedData.nombre || updatedData.nombre_completo || prev?.nombre || "Usuario",
                   rol: normalizarRol(updatedData.rol, user.email),
                   telefono: updatedData.telefono || prev?.telefono || "",
                   dni: updatedData.dni || prev?.dni || "",
+                  sesionId: updatedData.sesionId || prev?.sesionId,
                 }));
               } else {
                 handleUserRemoval(false);

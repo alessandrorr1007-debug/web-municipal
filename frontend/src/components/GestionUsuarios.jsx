@@ -594,13 +594,15 @@ function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCar
                   type="button"
                   onClick={limpiarForm}
                   style={{
-                    padding: "10px 18px",
+                    padding: "10px 20px",
                     borderRadius: "8px",
-                    border: "1px solid #cbd5e1",
-                    background: "white",
-                    fontWeight: "600",
+                    border: "1px solid #94a3b8",
+                    background: "#f1f5f9",
+                    color: "#0f172a",
+                    fontWeight: "700",
                     fontSize: "13.5px",
                     cursor: "pointer",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
                   }}
                 >
                   Cancelar
