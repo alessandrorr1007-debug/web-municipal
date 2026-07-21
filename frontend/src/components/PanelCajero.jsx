@@ -35,6 +35,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [errorFechaRange, setErrorFechaRange] = useState("");
   const [solicitudCobro, setSolicitudCobro] = useState(null);
   const [solicitudVerDetalle, setSolicitudVerDetalle] = useState(null);
+  const [solicitudRenovacion, setSolicitudRenovacion] = useState(null);
   const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("Efectivo en Caja Municipal");
   const [comprobanteGenerado, setComprobanteGenerado] = useState(null);
   const [procesando, setProcesando] = useState(false);
@@ -882,6 +883,207 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     } catch (err) {
       console.error(err);
       alert("Error al ejecutar el registro presencial: " + err.message);
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  // CÁLCULO DE VIGENCIA Y DÍAS RESTANTES DE LICENCIA (RENOVACIÓN 1 MES ANTES)
+  const calcularEstadoLicenciaVencimiento = (sol) => {
+    if (!sol) return { aptoRenovacion: false, diasRestantes: null, fechaVencimientoStr: null };
+    const est = (sol.estado || "").toLowerCase();
+    if (!est.includes("aprobad") && !est.includes("renovad")) {
+      return { aptoRenovacion: false, diasRestantes: null, fechaVencimientoStr: null };
+    }
+
+    let fechaEmision = new Date();
+    if (sol.fechaEvaluacionInspector) {
+      const parts = sol.fechaEvaluacionInspector.split(",")[0].split("/");
+      if (parts.length === 3) fechaEmision = new Date(parts[2], parts[1] - 1, parts[0]);
+    } else if (sol.fechaSolicitud) {
+      const parts = sol.fechaSolicitud.split(",")[0].split("/");
+      if (parts.length === 3) fechaEmision = new Date(parts[2], parts[1] - 1, parts[0]);
+    }
+
+    const fechaVencimiento = new Date(fechaEmision);
+    fechaVencimiento.setFullYear(fechaVencimiento.getFullYear() + 1);
+
+    const hoy = new Date();
+    const diffTime = fechaVencimiento - hoy;
+    const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const fechaVencimientoStr = fechaVencimiento.toLocaleDateString("es-PE");
+
+    const aptoRenovacion = diasRestantes <= 30;
+    return { aptoRenovacion, diasRestantes, fechaVencimientoStr };
+  };
+
+  // PROCESAR RENOVACIÓN DIRECTA EN CAJA (COBRO DE S/ 3.00 Y EMISIÓN DE BOLETA/FACTURA)
+  const ejecutarRenovacionDirecta = async (sol) => {
+    if (!sol) return;
+    setProcesando(true);
+    try {
+      const idExpLimpio = String(sol.id).replace(/^EXP-/, "");
+      const esFactura = tipoComprobanteSeleccionado === "Factura";
+      const codComprobante = esFactura
+        ? "F001-" + Date.now().toString().slice(-6)
+        : "B001-" + Date.now().toString().slice(-6);
+      const nombreComprobanteTitulo = esFactura ? "FACTURA ELECTRÓNICA" : "BOLETA DE VENTA ELECTRÓNICA";
+      const fechaHoraActual = formatearFechaHora();
+      const nombreCajera = usuario?.nombre || usuario?.email || "Cajera de Ventanilla";
+
+      const nuevaVencimiento = new Date();
+      nuevaVencimiento.setFullYear(nuevaVencimiento.getFullYear() + 1);
+      const nuevaFechaVencimientoStr = nuevaVencimiento.toLocaleDateString("es-PE");
+
+      const logEntrada = {
+        fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+        hora: fechaHoraActual.split(",")[1]?.trim() || "",
+        usuario: nombreCajera,
+        rol: "Cajera",
+        accion: `Renovación de Licencia y Emisión de ${nombreComprobanteTitulo}`,
+        comentarios: `Renovación de licencia procesada en caja. Tasa de S/ ${MONTO_TRAMITE.toFixed(2)} cobrada (${metodoPagoSeleccionado}). Comprobante: ${codComprobante}. Nueva vigencia hasta ${nuevaFechaVencimientoStr}.`,
+      };
+
+      const cambios = {
+        estado: "Licencia renovada",
+        estadoNormalizado: "LICENCIA_RENOVADA",
+        tipoTramite: "Renovación de Licencia de Funcionamiento",
+        fechaRenovacion: fechaHoraActual,
+        fechaVencimiento: nuevaFechaVencimientoStr,
+        recordatorioRenovacionEnviado: false,
+        comprobantePago: `${nombreComprobanteTitulo} N° ${codComprobante}`,
+        numeroOperacion: codComprobante,
+        fechaPago: fechaHoraActual,
+        cajeraResponsable: nombreCajera,
+        historialAcciones: [...(sol.historialAcciones || []), logEntrada],
+      };
+
+      await actualizarSolicitud(sol.id, cambios);
+
+      if (sol.correoUsuario) {
+        const htmlNotificacionRenovacion = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden;">
+            <div style="background: #1e3a8a; padding: 24px; text-align: center; color: white;">
+              <h2 style="margin: 0; font-size: 20px;">🔄 Licencia de Funcionamiento Renovada</h2>
+              <p style="margin: 6px 0 0; font-size: 14px; opacity: 0.9;">Expediente N° EXP-${idExpLimpio}</p>
+            </div>
+            <div style="padding: 24px; color: #334155; font-size: 14px; line-height: 1.6;">
+              <p style="margin: 0 0 16px;">Estimado(a) <strong>${sol.nombreSolicitante || sol.nombresSolicitante}</strong>,</p>
+              <p style="margin: 0 0 16px;">Le confirmamos que su <strong>Renovación de Licencia de Funcionamiento Municipal</strong> ha sido procesada exitosamente.</p>
+
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="margin: 0 0 10px; color: #0f172a;">🏢 Datos de la Empresa y Nueva Vigencia</h4>
+                <p style="margin: 4px 0;"><strong>Nombre Comercial:</strong> ${sol.nombreNegocio}</p>
+                <p style="margin: 4px 0;"><strong>RUC:</strong> ${sol.ruc}</p>
+                <p style="margin: 4px 0;"><strong>Nueva Fecha de Vencimiento:</strong> <span style="color: #16a34a; font-weight: bold;">${nuevaFechaVencimientoStr}</span></p>
+              </div>
+
+              <p style="margin: 0; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+                Municipalidad Provincial de Trujillo — Sistema de Licencias Municipal
+              </p>
+            </div>
+          </div>
+        `;
+
+        const htmlBoletaRenovacion = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 2px solid #0f172a; border-radius: 10px; padding: 24px;">
+            <div style="background: #0f172a; color: white; padding: 14px 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+              <h2 style="margin: 0; font-size: 18px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+              <span style="font-size: 11px; opacity: 0.9; text-transform: uppercase; font-weight: bold; display: block; margin-top: 2px;">
+                Módulo de Atención y Caja Municipal
+              </span>
+              <span style="font-size: 10.5px; opacity: 0.75; display: block; margin-top: 2px;">RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
+            </div>
+
+            <div style="border: 2px solid #0f172a; padding: 12px 18px; text-align: center; border-radius: 8px; background: #f8fafc; margin-bottom: 20px;">
+              <span style="font-weight: 900; font-size: 15px; display: block; color: #0f172a;">${nombreComprobanteTitulo}</span>
+              <span style="font-size: 16px; font-weight: 900; color: #dc2626;">N° ${codComprobante}</span>
+              <p style="margin: 4px 0 0; font-size: 12px; color: #475569;">Fecha: ${fechaHoraActual}</p>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
+              <h4 style="margin: 0 0 8px; color: #0f172a; font-size: 13.5px; font-weight: 800; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+                🏢 Información del Contribuyente
+              </h4>
+              <p style="margin: 3px 0;"><strong>Nombre Legal:</strong> ${sol.razonSocial || sol.nombreNegocio}</p>
+              <p style="margin: 3px 0;"><strong>Nombre Comercial:</strong> ${sol.nombreNegocio}</p>
+              <p style="margin: 3px 0;"><strong>Número de RUC:</strong> ${sol.ruc}</p>
+              <p style="margin: 3px 0;"><strong>Dirección:</strong> ${sol.direccion}</p>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+              <thead>
+                <tr style="background: #0f172a; color: white;">
+                  <th style="padding: 9px; text-align: center; width: 10%;">CANT</th>
+                  <th style="padding: 9px; text-align: left;">DESCRIPCIÓN</th>
+                  <th style="padding: 9px; text-align: right; width: 20%;">P. UNIT</th>
+                  <th style="padding: 9px; text-align: right; width: 20%;">IMPORTE</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 10px; text-align: center; font-weight: bold;">1</td>
+                  <td style="padding: 10px;">
+                    Derecho de Trámite — Renovación de Licencia de Funcionamiento
+                    <small style="display: block; color: #64748b;">Expediente N° EXP-${idExpLimpio}</small>
+                  </td>
+                  <td style="padding: 10px; text-align: right;">S/ 3.00</td>
+                  <td style="padding: 10px; text-align: right; font-weight: bold;">S/ 3.00</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; background: #f8fafc; padding: 14px 18px; border-radius: 8px; border: 1px solid #cbd5e1;">
+              <div style="font-size: 12px; color: #334155;">
+                <p style="margin: 2px 0;"><strong>MÉTODO DE PAGO:</strong> ${metodoPagoSeleccionado.toUpperCase()}</p>
+                <p style="margin: 2px 0;"><strong>CAJERA:</strong> ${nombreCajera.toUpperCase()}</p>
+              </div>
+              <table style="width: 210px; font-size: 13px; text-align: right;">
+                <tr><td style="color: #475569;">OP. GRAVADA:</td><td style="font-weight: bold;">S/ 2.54</td></tr>
+                <tr><td style="color: #475569;">I.G.V. (18%):</td><td style="font-weight: bold;">S/ 0.46</td></tr>
+                <tr style="font-size: 15px; border-top: 1.5px solid #0f172a;">
+                  <td style="padding-top: 6px; font-weight: 900; color: #0f172a;">TOTAL A PAGAR:</td>
+                  <td style="padding-top: 6px; font-weight: 900; color: #16a34a;">S/ 3.00</td>
+                </tr>
+              </table>
+            </div>
+
+            <div style="text-align: center; border-top: 1px solid #cbd5e1; padding-top: 14px; font-size: 11.5px; color: #64748b;">
+              <p style="margin: 0 0 4px; font-weight: bold;">Representación impresa del comprobante de venta electrónico.</p>
+              <p style="margin: 0; color: #16a34a; font-weight: 800;">¡Gracias por su preferencia!</p>
+            </div>
+          </div>
+        `;
+
+        await crearNotificacion(
+          sol.uidUsuario || "CIUDADANO",
+          {
+            titulo: `Renovación de Licencia Confirmada — EXP-${idExpLimpio}`,
+            descripcion: `Se procesó la renovación de su licencia EXP-${idExpLimpio}. Nueva vigencia hasta el ${nuevaFechaVencimientoStr}.`,
+            icono: "🔄",
+            html: htmlNotificacionRenovacion,
+          },
+          sol.correoUsuario
+        );
+
+        await crearNotificacion(
+          sol.uidUsuario || "CIUDADANO",
+          {
+            titulo: `${nombreComprobanteTitulo} — N° ${codComprobante}`,
+            descripcion: `Comprobante de renovación N° ${codComprobante} emitido por S/ 3.00 (${metodoPagoSeleccionado}).`,
+            icono: "💳",
+            html: htmlBoletaRenovacion,
+          },
+          sol.correoUsuario
+        );
+      }
+
+      alert(`✅ Licencia renovada con éxito. Nueva vigencia hasta: ${nuevaFechaVencimientoStr}`);
+      setSolicitudRenovacion(null);
+      await cargarSolicitudes();
+    } catch (err) {
+      console.error(err);
+      alert("Error al renovar licencia: " + err.message);
     } finally {
       setProcesando(false);
     }
@@ -1770,6 +1972,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   const esFacturaDoc = (s.tipoComprobante || s.comprobantePago || s.numeroOperacion || "").toLowerCase().includes("factura") || (s.numeroOperacion || "").startsWith("F");
                   const etiquetaComprobante = esFacturaDoc ? "Factura emitida" : "Boleta emitida";
 
+                  const { aptoRenovacion, diasRestantes, fechaVencimientoStr } = calcularEstadoLicenciaVencimiento(s);
+
                   return (
                     <tr key={s.id}>
                       <td>
@@ -1792,6 +1996,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         <span className={`badge ${esPagado ? "ok" : "warning"}`}>
                           {esPagado ? "Pagado / Confirmado" : "Pendiente de Pago"}
                         </span>
+                        {aptoRenovacion && (
+                          <span className="badge warning" style={{ display: "block", marginTop: "4px", background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}>
+                            ⚠️ {diasRestantes <= 0 ? "Licencia Vencida" : "Renovación Cercana"}
+                          </span>
+                        )}
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -1815,6 +2024,18 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                               style={{ background: "#16a34a", color: "white", padding: "6px 14px", borderRadius: "6px", fontWeight: "700", fontSize: "13px" }}
                             >
                               💰 Registrar Pago
+                            </button>
+                          ) : aptoRenovacion ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSolicitudRenovacion(s);
+                                setTipoComprobanteSeleccionado("Boleta");
+                                setMetodoPagoSeleccionado("Billetera Digital (Yape / Plin)");
+                              }}
+                              style={{ background: "#d97706", color: "white", padding: "6px 12px", borderRadius: "6px", fontWeight: "700", fontSize: "13px", cursor: "pointer", border: "none" }}
+                            >
+                              🔄 Renovación Directa ({diasRestantes <= 0 ? "Vencida" : `Vence en ${diasRestantes} días`})
                             </button>
                           ) : (
                             <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "4px" }}>
@@ -2508,6 +2729,88 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL RENOVACIÓN DIRECTA EN VENTANILLA / CAJA MUNICIPAL */}
+      {solicitudRenovacion && (
+        <div className="admin-form-modal" style={{ zIndex: 1000 }}>
+          <div className="admin-form-card" style={{ maxWidth: "580px" }}>
+            <div className="admin-form-header" style={{ background: "#d97706", color: "white" }}>
+              <div>
+                <h3 style={{ color: "white", margin: 0 }}>🔄 Renovación de Licencia Municipal</h3>
+                <small style={{ color: "#fef3c7" }}>Expediente EXP-{String(solicitudRenovacion.id).replace(/^EXP-/, "")}</small>
+              </div>
+              <button type="button" onClick={() => setSolicitudRenovacion(null)} style={{ color: "white", background: "none", border: "none", fontSize: "18px", cursor: "pointer" }}>✕</button>
+            </div>
+
+            <div style={{ padding: "20px" }}>
+              <div style={{ background: "#fffbe6", border: "1.5px solid #ffe58f", padding: "16px", borderRadius: "10px", marginBottom: "16px", fontSize: "13px", color: "#873800" }}>
+                <h4 style={{ margin: "0 0 6px", color: "#d46b08" }}>🏢 Información de la Licencia a Renovar</h4>
+                <p style={{ margin: "3px 0" }}><strong>Nombre Comercial:</strong> {solicitudRenovacion.nombreNegocio}</p>
+                <p style={{ margin: "3px 0" }}><strong>RUC del Establecimiento:</strong> {solicitudRenovacion.ruc}</p>
+                <p style={{ margin: "3px 0" }}><strong>Titular:</strong> {solicitudRenovacion.nombreSolicitante || `${solicitudRenovacion.nombresSolicitante || ""} ${solicitudRenovacion.apellidosSolicitante || ""}`}</p>
+                <p style={{ margin: "3px 0", color: "#dc2626", fontWeight: "bold" }}>
+                  <strong>Fecha Vencimiento Actual:</strong> {calcularEstadoLicenciaVencimiento(solicitudRenovacion).fechaVencimientoStr}
+                </p>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Tipo de Comprobante *</label>
+                  <select
+                    value={tipoComprobanteSeleccionado}
+                    onChange={(e) => setTipoComprobanteSeleccionado(e.target.value)}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
+                  >
+                    <option value="Boleta">📄 Boleta de Venta Electrónica (B001)</option>
+                    <option value="Factura">🧾 Factura Electrónica (F001)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Método de Pago *</label>
+                  <select
+                    value={metodoPagoSeleccionado}
+                    onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
+                  >
+                    <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
+                    <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "14px", borderRadius: "10px", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "bold" }}>TASA DE RENOVACIÓN DE LICENCIA</span>
+                  <h3 style={{ margin: "2px 0 0", color: "#16a34a", fontSize: "24px", fontWeight: "800" }}>S/ {MONTO_TRAMITE.toFixed(2)}</h3>
+                </div>
+                <div style={{ textAlign: "right", fontSize: "12px", color: "#475569" }}>
+                  <p style={{ margin: "2px 0" }}>Vigencia adicional: <strong style={{ color: "#16a34a" }}>+1 Año</strong></p>
+                </div>
+              </div>
+
+              <div className="admin-form-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setSolicitudRenovacion(null)}
+                  disabled={procesando}
+                  style={{ padding: "10px 18px", background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: "8px", fontWeight: "bold", cursor: "pointer" }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => ejecutarRenovacionDirecta(solicitudRenovacion)}
+                  disabled={procesando}
+                  style={{ background: "#d97706", color: "white", padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", border: "none", cursor: "pointer" }}
+                >
+                  {procesando ? "Procesando Renovación..." : "💰 Confirmar Pago (S/ 3.00) y Renovar Licencia"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
