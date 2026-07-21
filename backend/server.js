@@ -58,16 +58,32 @@ let adminDb = null;
 
 try {
   const serviceAccountPath = join(__dirname, "firebase-service-account.json");
+  const serviceAccountB64Path = join(__dirname, "firebase-service-account.b64");
+  let serviceAccount = null;
+
   if (fs.existsSync(serviceAccountPath)) {
-    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+    serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+  } else if (fs.existsSync(serviceAccountB64Path)) {
+    const rawB64 = fs.readFileSync(serviceAccountB64Path, "utf8").trim();
+    const jsonStr = Buffer.from(rawB64, "base64").toString("utf8");
+    serviceAccount = JSON.parse(jsonStr);
+    try {
+      fs.writeFileSync(serviceAccountPath, JSON.stringify(serviceAccount, null, 2));
+    } catch (_) {}
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_B64) {
+    const jsonStr = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64.trim(), "base64").toString("utf8");
+    serviceAccount = JSON.parse(jsonStr);
+  }
+
+  if (serviceAccount) {
     adminApp = initAdminApp({
       credential: cert(serviceAccount),
     });
     adminAuth = getAdminAuth(adminApp);
     adminDb = getAdminFirestore(adminApp);
-    console.log("[ADMIN] Firebase Admin SDK inicializado correctamente con firebase-service-account.json.");
+    console.log("[ADMIN] Firebase Admin SDK inicializado correctamente.");
   } else {
-    console.warn("[ADMIN] firebase-service-account.json no encontrado.");
+    console.warn("[ADMIN] firebase-service-account.json o .b64 no encontrado.");
   }
 } catch (err) {
   console.error("[ADMIN] Error inicializando Firebase Admin SDK:", err.message);
