@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
+    "build": "cd frontend && npm install && npm run build && node -e \"try { fs.cpSync('frontend/dist', 'dist', {recursive: true}); } catch(e){}\" && node -e \"try { fs.cpSync('dist', '../dist', {recursive: true}); } catch(e){}\"",
     "start": "node backend/server.js",
     "setup-users": "node backend/scripts/setup-users.js",
     "install:all": "cd frontend && npm install && cd ../backend && npm install"
