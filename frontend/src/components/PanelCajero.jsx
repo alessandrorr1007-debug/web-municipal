@@ -74,7 +74,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [filtroEstado, setFiltroEstado] = useState("todos"); // "todos", "pendiente", "pagado", "enviado", "anulado"
   const [solicitudCobro, setSolicitudCobro] = useState(null);
   const [solicitudVerDetalle, setSolicitudVerDetalle] = useState(null);
-  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("Efectivo en caja");
+  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("Efectivo en Caja Municipal");
   const [comprobanteGenerado, setComprobanteGenerado] = useState(null);
   const [procesando, setProcesando] = useState(false);
 
@@ -1231,9 +1231,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
                           style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px", fontWeight: "700" }}
                         >
-                          <option value="Efectivo en caja">Efectivo en Caja Municipal</option>
-                          <option value="Tarjeta POS (Débito/Crédito)">Tarjeta Débito / Crédito (POS)</option>
-                          <option value="Billetera Digital (Yape / Plin)">Billetera Digital (Yape / Plin)</option>
+                          <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
+                          <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
                         </select>
                       </div>
                     </div>
@@ -1757,10 +1756,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
                   style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
                 >
-                  <option value="Efectivo en caja">Efectivo en Caja Municipal</option>
-                  <option value="Tarjeta POS (Débito/Crédito)">Tarjeta Débito / Crédito (POS)</option>
-                  <option value="Billetera Digital (Yape / Plin)">Billetera Digital (Yape / Plin)</option>
-                  <option value="Pago Confirmado Online (Demo Flow)">Pago Online (Pasarela)</option>
+                  <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
+                  <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
                 </select>
               </div>
 
@@ -2207,9 +2204,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
                       style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
                     >
-                      <option value="Efectivo en caja">Efectivo en Caja Municipal</option>
-                      <option value="Tarjeta POS (Débito/Crédito)">Tarjeta Débito / Crédito (POS)</option>
-                      <option value="Billetera Digital (Yape / Plin)">Billetera Digital (Yape / Plin)</option>
+                      <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
+                      <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
                     </select>
                   </div>
 

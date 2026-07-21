@@ -704,7 +704,7 @@ function FormularioSolicitudPresencial({ onSolicitudCreada, usuarioFuncionario }
     numeroComprobanteCaja: "",
     montoPagado: 3,
     estadoPago: "Pendiente",
-    metodoPago: "Pago presencial en caja municipal",
+    metodoPago: "Efectivo en Caja Municipal",
     estadoSunat: "",
     condicionSunat: "",
   });
@@ -902,7 +902,7 @@ function FormularioSolicitudPresencial({ onSolicitudCreada, usuarioFuncionario }
       numeroComprobanteCaja: "",
       montoPagado: 3,
       estadoPago: "Pendiente",
-      metodoPago: "Pago presencial en caja municipal",
+      metodoPago: "Efectivo en Caja Municipal",
     });
     setArchivosPdf([]);
     setErrorDni("");
