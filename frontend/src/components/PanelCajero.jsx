@@ -757,75 +757,103 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           </div>
         `;
 
-        // CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO OFICIAL (BOLETA O FACTURA CON ESTRUCTURA SUNAT SOLICITADA)
+        // CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO OFICIAL (BOLETA O FACTURA CON ESTRUCTURA SUNAT SOLICITADA - 100% COMPATIBLE CON GMAIL)
         const htmlBoletaElectronica = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 2px solid #0f172a; border-radius: 10px; padding: 24px;">
-            <div style="background: #0f172a; color: white; padding: 14px 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
-              <h2 style="margin: 0; font-size: 18px; font-weight: 900; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-              <span style="font-size: 11px; opacity: 0.9; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; display: block; margin-top: 2px;">
-                Módulo de Atención y Caja Municipal
-              </span>
-              <span style="font-size: 10.5px; opacity: 0.75; display: block; margin-top: 2px;">RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
-            </div>
+          <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 2px solid #0f172a; border-radius: 12px; padding: 24px; color: #0f172a;">
+            <!-- ENCABEZADO MUNICIPAL -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; color: #ffffff; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+              <tr>
+                <td style="padding: 16px;">
+                  <h2 style="margin: 0; font-size: 18px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                  <span style="font-size: 11px; opacity: 0.9; text-transform: uppercase; font-weight: bold; display: block; margin-top: 4px; color: #cbd5e1;">Módulo de Atención y Caja Municipal</span>
+                  <span style="font-size: 10.5px; opacity: 0.8; display: block; margin-top: 2px; color: #94a3b8;">RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
+                </td>
+              </tr>
+            </table>
 
-            <div style="border: 2px solid #0f172a; padding: 12px 18px; text-align: center; border-radius: 8px; background: #f8fafc; margin-bottom: 20px;">
-              <span style="font-weight: 900; font-size: 15px; display: block; color: #0f172a; letter-spacing: 0.5px;">${nombreComprobanteTitulo}</span>
-              <span style="font-size: 16px; font-weight: 900; color: #dc2626;">N° ${codComprobante}</span>
-              <p style="margin: 4px 0 0; font-size: 12px; color: #475569;">Fecha: ${fechaHoraActual}</p>
-            </div>
+            <!-- NUMERACIÓN DE COMPROBANTE -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border: 2px solid #0f172a; background-color: #f8fafc; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+              <tr>
+                <td style="padding: 14px;">
+                  <span style="font-weight: 900; font-size: 16px; display: block; color: #0f172a; text-transform: uppercase;">${nombreComprobanteTitulo}</span>
+                  <span style="font-size: 18px; font-weight: 900; color: #dc2626; display: block; margin-top: 2px;">N° ${codComprobante}</span>
+                  <p style="margin: 4px 0 0; font-size: 12.5px; color: #475569;">Fecha: ${fechaHoraActual}</p>
+                </td>
+              </tr>
+            </table>
 
-            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
-              <h4 style="margin: 0 0 8px; color: #0f172a; font-size: 13.5px; font-weight: 800; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
-                🏢 Información del Contribuyente
-              </h4>
-              <p style="margin: 3px 0;"><strong>Nombre Legal:</strong> ${razonSocialForm || nombreNegocioForm}</p>
-              <p style="margin: 3px 0;"><strong>Nombre Comercial:</strong> ${nombreNegocioForm}</p>
-              <p style="margin: 3px 0;"><strong>Número de RUC:</strong> ${rucForm}</p>
-              <p style="margin: 3px 0;"><strong>Dirección:</strong> ${direccionForm}</p>
-              <p style="margin: 3px 0;"><strong>Solicitante:</strong> ${nombresForm} ${apellidosForm} (DNI: ${dniForm})</p>
-            </div>
+            <!-- DATOS DEL CONTRIBUYENTE Y ESTABLECIMIENTO -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
+              <tr>
+                <td style="padding: 16px;">
+                  <h4 style="margin: 0 0 10px; color: #0f172a; font-size: 14px; font-weight: 800; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px;">🏢 Información del Contribuyente y Establecimiento</h4>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Nombre Legal / Razón Social:</strong> ${razonSocialForm || nombreNegocioForm}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Nombre Comercial:</strong> ${nombreNegocioForm}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Número de RUC:</strong> ${rucForm}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Dirección Fiscal:</strong> ${direccionForm}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Solicitante:</strong> ${nombresForm} ${apellidosForm} (DNI: ${dniForm})</p>
+                </td>
+              </tr>
+            </table>
 
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+            <!-- GRILLA TABULAR DE DETALLE -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-bottom: 20px; font-size: 13px; border: 1px solid #cbd5e1;">
               <thead>
-                <tr style="background: #0f172a; color: white;">
-                  <th style="padding: 9px; text-align: center; width: 10%;">CANT</th>
-                  <th style="padding: 9px; text-align: left;">DESCRIPCIÓN</th>
-                  <th style="padding: 9px; text-align: right; width: 20%;">P. UNIT</th>
-                  <th style="padding: 9px; text-align: right; width: 20%;">IMPORTE</th>
+                <tr style="background-color: #0f172a; color: #ffffff;">
+                  <th style="padding: 10px; text-align: center; width: 12%; color: #ffffff;">CANT</th>
+                  <th style="padding: 10px; text-align: left; color: #ffffff;">DESCRIPCIÓN</th>
+                  <th style="padding: 10px; text-align: right; width: 22%; color: #ffffff;">P. UNIT</th>
+                  <th style="padding: 10px; text-align: right; width: 22%; color: #ffffff;">IMPORTE</th>
                 </tr>
               </thead>
               <tbody>
-                <tr style="border-bottom: 1px solid #e2e8f0;">
-                  <td style="padding: 10px; text-align: center; font-weight: bold;">1</td>
-                  <td style="padding: 10px;">
-                    Derecho de Trámite — ${tipoTramiteSeleccionado}
-                    <small style="display: block; color: #64748b;">Expediente N° EXP-${expIdLimpio}</small>
+                <tr>
+                  <td style="padding: 12px; text-align: center; font-weight: bold; border-bottom: 1px solid #e2e8f0;">1</td>
+                  <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                    <strong style="color: #0f172a;">Derecho de Trámite — Nueva Licencia de Funcionamiento</strong>
+                    <span style="display: block; color: #64748b; font-size: 12px;">Expediente N° EXP-${expIdLimpio}</span>
                   </td>
-                  <td style="padding: 10px; text-align: right;">S/ 3.00</td>
-                  <td style="padding: 10px; text-align: right; font-weight: bold;">S/ 3.00</td>
+                  <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e2e8f0; color: #0f172a;">S/ 3.00</td>
+                  <td style="padding: 12px; text-align: right; font-weight: bold; border-bottom: 1px solid #e2e8f0; color: #0f172a;">S/ 3.00</td>
                 </tr>
               </tbody>
             </table>
 
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; background: #f8fafc; padding: 14px 18px; border-radius: 8px; border: 1px solid #cbd5e1;">
-              <div style="font-size: 12px; color: #334155;">
-                <p style="margin: 2px 0;"><strong>MÉTODO DE PAGO:</strong> ${metodoPagoSeleccionado.toUpperCase()}</p>
-                <p style="margin: 2px 0;"><strong>CAJERA:</strong> ${nombreCajera.toUpperCase()}</p>
-              </div>
-              <table style="width: 210px; font-size: 13px; text-align: right;">
-                <tr><td style="color: #475569;">OP. GRAVADA:</td><td style="font-weight: bold;">S/ 2.54</td></tr>
-                <tr><td style="color: #475569;">I.G.V. (18%):</td><td style="font-weight: bold;">S/ 0.46</td></tr>
-                <tr style="font-size: 15px; border-top: 1.5px solid #0f172a;">
-                  <td style="padding-top: 6px; font-weight: 900; color: #0f172a;">TOTAL A PAGAR:</td>
-                  <td style="padding-top: 6px; font-weight: 900; color: #16a34a;">S/ 3.00</td>
-                </tr>
-              </table>
-            </div>
+            <!-- RESUMEN FINANCIERO -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 20px; font-size: 12.5px;">
+              <tr>
+                <td style="padding: 16px; vertical-align: top; width: 55%;">
+                  <p style="margin: 2px 0; color: #334155;"><strong>MÉTODO DE PAGO:</strong> ${metodoPagoSeleccionado.toUpperCase()}</p>
+                  <p style="margin: 2px 0; color: #334155;"><strong>CAJERA:</strong> ${nombreCajera.toUpperCase()}</p>
+                </td>
+                <td style="padding: 16px; vertical-align: top; width: 45%; text-align: right;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
+                    <tr>
+                      <td style="color: #475569; padding: 2px 0;">OP. GRAVADA:</td>
+                      <td style="font-weight: bold; text-align: right; color: #0f172a;">S/ 2.54</td>
+                    </tr>
+                    <tr>
+                      <td style="color: #475569; padding: 2px 0;">I.G.V. (18%):</td>
+                      <td style="font-weight: bold; text-align: right; color: #0f172a;">S/ 0.46</td>
+                    </tr>
+                    <tr>
+                      <td style="padding-top: 8px; font-weight: 900; color: #0f172a; border-top: 1.5px solid #0f172a; font-size: 15px;">TOTAL A PAGAR:</td>
+                      <td style="padding-top: 8px; font-weight: 900; text-align: right; color: #16a34a; border-top: 1.5px solid #0f172a; font-size: 15px;">S/ 3.00</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
 
-            <div style="text-align: center; border-top: 1px solid #cbd5e1; padding-top: 14px; font-size: 11.5px; color: #64748b;">
-              <p style="margin: 0 0 4px; font-weight: bold;">Representación impresa del comprobante de venta electrónico.</p>
-              <p style="margin: 0; color: #16a34a; font-weight: 800; font-size: 12.5px;">¡Gracias por su preferencia!</p>
-            </div>
+            <!-- PIE LEGAL -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid #cbd5e1; text-align: center;">
+              <tr>
+                <td style="padding-top: 14px; font-size: 12px; color: #64748b;">
+                  <p style="margin: 0 0 4px; font-weight: bold;">Representación impresa del comprobante de venta electrónico.</p>
+                  <p style="margin: 0; color: #16a34a; font-weight: 800; font-size: 13px;">¡Gracias por su preferencia!</p>
+                </td>
+              </tr>
+            </table>
           </div>
         `;
 
@@ -986,72 +1014,101 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         `;
 
         const htmlBoletaRenovacion = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 2px solid #0f172a; border-radius: 10px; padding: 24px;">
-            <div style="background: #0f172a; color: white; padding: 14px 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
-              <h2 style="margin: 0; font-size: 18px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-              <span style="font-size: 11px; opacity: 0.9; text-transform: uppercase; font-weight: bold; display: block; margin-top: 2px;">
-                Módulo de Atención y Caja Municipal
-              </span>
-              <span style="font-size: 10.5px; opacity: 0.75; display: block; margin-top: 2px;">RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
-            </div>
+          <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 2px solid #0f172a; border-radius: 12px; padding: 24px; color: #0f172a;">
+            <!-- ENCABEZADO MUNICIPAL -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; color: #ffffff; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+              <tr>
+                <td style="padding: 16px;">
+                  <h2 style="margin: 0; font-size: 18px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                  <span style="font-size: 11px; opacity: 0.9; text-transform: uppercase; font-weight: bold; display: block; margin-top: 4px; color: #cbd5e1;">Módulo de Atención y Caja Municipal</span>
+                  <span style="font-size: 10.5px; opacity: 0.8; display: block; margin-top: 2px; color: #94a3b8;">RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
+                </td>
+              </tr>
+            </table>
 
-            <div style="border: 2px solid #0f172a; padding: 12px 18px; text-align: center; border-radius: 8px; background: #f8fafc; margin-bottom: 20px;">
-              <span style="font-weight: 900; font-size: 15px; display: block; color: #0f172a;">${nombreComprobanteTitulo}</span>
-              <span style="font-size: 16px; font-weight: 900; color: #dc2626;">N° ${codComprobante}</span>
-              <p style="margin: 4px 0 0; font-size: 12px; color: #475569;">Fecha: ${fechaHoraActual}</p>
-            </div>
+            <!-- NUMERACIÓN DE COMPROBANTE -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border: 2px solid #0f172a; background-color: #f8fafc; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+              <tr>
+                <td style="padding: 14px;">
+                  <span style="font-weight: 900; font-size: 16px; display: block; color: #0f172a; text-transform: uppercase;">${nombreComprobanteTitulo}</span>
+                  <span style="font-size: 18px; font-weight: 900; color: #dc2626; display: block; margin-top: 2px;">N° ${codComprobante}</span>
+                  <p style="margin: 4px 0 0; font-size: 12.5px; color: #475569;">Fecha: ${fechaHoraActual}</p>
+                </td>
+              </tr>
+            </table>
 
-            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
-              <h4 style="margin: 0 0 8px; color: #0f172a; font-size: 13.5px; font-weight: 800; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
-                🏢 Información del Contribuyente
-              </h4>
-              <p style="margin: 3px 0;"><strong>Nombre Legal:</strong> ${sol.razonSocial || sol.nombreNegocio}</p>
-              <p style="margin: 3px 0;"><strong>Nombre Comercial:</strong> ${sol.nombreNegocio}</p>
-              <p style="margin: 3px 0;"><strong>Número de RUC:</strong> ${sol.ruc}</p>
-              <p style="margin: 3px 0;"><strong>Dirección:</strong> ${sol.direccion}</p>
-            </div>
+            <!-- DATOS DEL CONTRIBUYENTE Y ESTABLECIMIENTO -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
+              <tr>
+                <td style="padding: 16px;">
+                  <h4 style="margin: 0 0 10px; color: #0f172a; font-size: 14px; font-weight: 800; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px;">🏢 Información del Contribuyente y Establecimiento</h4>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Nombre Legal / Razón Social:</strong> ${sol.razonSocial || sol.nombreNegocio}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Nombre Comercial:</strong> ${sol.nombreNegocio}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Número de RUC:</strong> ${sol.ruc}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Dirección Fiscal:</strong> ${sol.direccion}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Solicitante:</strong> ${sol.nombreSolicitante || sol.nombresSolicitante} (DNI: ${sol.dniSolicitante || sol.dni})</p>
+                </td>
+              </tr>
+            </table>
 
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+            <!-- GRILLA TABULAR DE DETALLE -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-bottom: 20px; font-size: 13px; border: 1px solid #cbd5e1;">
               <thead>
-                <tr style="background: #0f172a; color: white;">
-                  <th style="padding: 9px; text-align: center; width: 10%;">CANT</th>
-                  <th style="padding: 9px; text-align: left;">DESCRIPCIÓN</th>
-                  <th style="padding: 9px; text-align: right; width: 20%;">P. UNIT</th>
-                  <th style="padding: 9px; text-align: right; width: 20%;">IMPORTE</th>
+                <tr style="background-color: #0f172a; color: #ffffff;">
+                  <th style="padding: 10px; text-align: center; width: 12%; color: #ffffff;">CANT</th>
+                  <th style="padding: 10px; text-align: left; color: #ffffff;">DESCRIPCIÓN</th>
+                  <th style="padding: 10px; text-align: right; width: 22%; color: #ffffff;">P. UNIT</th>
+                  <th style="padding: 10px; text-align: right; width: 22%; color: #ffffff;">IMPORTE</th>
                 </tr>
               </thead>
               <tbody>
-                <tr style="border-bottom: 1px solid #e2e8f0;">
-                  <td style="padding: 10px; text-align: center; font-weight: bold;">1</td>
-                  <td style="padding: 10px;">
-                    Derecho de Trámite — Renovación de Licencia de Funcionamiento
-                    <small style="display: block; color: #64748b;">Expediente N° EXP-${idExpLimpio}</small>
+                <tr>
+                  <td style="padding: 12px; text-align: center; font-weight: bold; border-bottom: 1px solid #e2e8f0;">1</td>
+                  <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                    <strong style="color: #0f172a;">Derecho de Trámite — Renovación de Licencia de Funcionamiento</strong>
+                    <span style="display: block; color: #64748b; font-size: 12px;">Expediente N° EXP-${idExpLimpio}</span>
                   </td>
-                  <td style="padding: 10px; text-align: right;">S/ 3.00</td>
-                  <td style="padding: 10px; text-align: right; font-weight: bold;">S/ 3.00</td>
+                  <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e2e8f0; color: #0f172a;">S/ 3.00</td>
+                  <td style="padding: 12px; text-align: right; font-weight: bold; border-bottom: 1px solid #e2e8f0; color: #0f172a;">S/ 3.00</td>
                 </tr>
               </tbody>
             </table>
 
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; background: #f8fafc; padding: 14px 18px; border-radius: 8px; border: 1px solid #cbd5e1;">
-              <div style="font-size: 12px; color: #334155;">
-                <p style="margin: 2px 0;"><strong>MÉTODO DE PAGO:</strong> ${metodoPagoSeleccionado.toUpperCase()}</p>
-                <p style="margin: 2px 0;"><strong>CAJERA:</strong> ${nombreCajera.toUpperCase()}</p>
-              </div>
-              <table style="width: 210px; font-size: 13px; text-align: right;">
-                <tr><td style="color: #475569;">OP. GRAVADA:</td><td style="font-weight: bold;">S/ 2.54</td></tr>
-                <tr><td style="color: #475569;">I.G.V. (18%):</td><td style="font-weight: bold;">S/ 0.46</td></tr>
-                <tr style="font-size: 15px; border-top: 1.5px solid #0f172a;">
-                  <td style="padding-top: 6px; font-weight: 900; color: #0f172a;">TOTAL A PAGAR:</td>
-                  <td style="padding-top: 6px; font-weight: 900; color: #16a34a;">S/ 3.00</td>
-                </tr>
-              </table>
-            </div>
+            <!-- RESUMEN FINANCIERO -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 20px; font-size: 12.5px;">
+              <tr>
+                <td style="padding: 16px; vertical-align: top; width: 55%;">
+                  <p style="margin: 2px 0; color: #334155;"><strong>MÉTODO DE PAGO:</strong> ${metodoPagoSeleccionado.toUpperCase()}</p>
+                  <p style="margin: 2px 0; color: #334155;"><strong>CAJERA:</strong> ${nombreCajera.toUpperCase()}</p>
+                </td>
+                <td style="padding: 16px; vertical-align: top; width: 45%; text-align: right;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
+                    <tr>
+                      <td style="color: #475569; padding: 2px 0;">OP. GRAVADA:</td>
+                      <td style="font-weight: bold; text-align: right; color: #0f172a;">S/ 2.54</td>
+                    </tr>
+                    <tr>
+                      <td style="color: #475569; padding: 2px 0;">I.G.V. (18%):</td>
+                      <td style="font-weight: bold; text-align: right; color: #0f172a;">S/ 0.46</td>
+                    </tr>
+                    <tr>
+                      <td style="padding-top: 8px; font-weight: 900; color: #0f172a; border-top: 1.5px solid #0f172a; font-size: 15px;">TOTAL A PAGAR:</td>
+                      <td style="padding-top: 8px; font-weight: 900; text-align: right; color: #16a34a; border-top: 1.5px solid #0f172a; font-size: 15px;">S/ 3.00</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
 
-            <div style="text-align: center; border-top: 1px solid #cbd5e1; padding-top: 14px; font-size: 11.5px; color: #64748b;">
-              <p style="margin: 0 0 4px; font-weight: bold;">Representación impresa del comprobante de venta electrónico.</p>
-              <p style="margin: 0; color: #16a34a; font-weight: 800;">¡Gracias por su preferencia!</p>
-            </div>
+            <!-- PIE LEGAL -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid #cbd5e1; text-align: center;">
+              <tr>
+                <td style="padding-top: 14px; font-size: 12px; color: #64748b;">
+                  <p style="margin: 0 0 4px; font-weight: bold;">Representación impresa del comprobante de venta electrónico.</p>
+                  <p style="margin: 0; color: #16a34a; font-weight: 800; font-size: 13px;">¡Gracias por su preferencia!</p>
+                </td>
+              </tr>
+            </table>
           </div>
         `;
 
