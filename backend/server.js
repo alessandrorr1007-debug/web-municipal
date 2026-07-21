@@ -1548,7 +1548,8 @@ app.use("/pago-exitoso", express.urlencoded({ extended: false }), (req, res) => 
   return res.status(404).json({ error: "Frontend no encontrado" });
 });
 
-app.get("(.*)", (req, res) => {
+// SPA Fallback Middleware (Completamente inmune a errores de path-to-regexp)
+app.use((req, res) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "Ruta de API no encontrada." });
   }
@@ -1556,10 +1557,9 @@ app.get("(.*)", (req, res) => {
     ? join(distPathRoot, "index.html")
     : join(distPathFrontend, "index.html");
   if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(404).json({ error: "Frontend no encontrado" });
+    return res.sendFile(indexPath);
   }
+  return res.status(404).json({ error: "Frontend no encontrado" });
 });
 
 app.listen(PORT, () => {
