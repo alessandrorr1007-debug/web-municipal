@@ -477,6 +477,9 @@ function PanelInspector({ seccion }) {
                       <td>
                         <strong>{nombreCiudadano}</strong>
                         <small style={{ display: "block", color: "#475569" }}>DNI: {s.dniSolicitante || s.dni || "---"}</small>
+                        <small style={{ display: "block", color: "#2563eb", fontWeight: "600", marginTop: "2px" }}>
+                          📱 Cel: {s.telefono || "---"} | ✉️ {s.correoUsuario || s.correo || "---"}
+                        </small>
                       </td>
                       <td>
                         <strong>{s.nombreNegocio}</strong>
