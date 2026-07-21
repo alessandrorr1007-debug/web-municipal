@@ -193,17 +193,12 @@ const DOCUMENTOS_SISTEMA = [
 ];
 
 export const obtenerDocumentosPorGiro = (giro) => {
-  const giroKey = (giro || "general").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  const giroMapeado = Object.keys(DOC_NEGOCIO_ESPECIFICO).find(
-    (k) => k === giroKey || giroKey.includes(k)
-  ) || "general";
-
-  const especificos = DOC_NEGOCIO_ESPECIFICO[giroMapeado]?.documentos || [];
-
   return {
-    ciudadano: [...BASE_DOCUMENTOS, ...especificos.map((d) => ({ ...d, tipo: "ciudadano" }))],
+    ciudadano: [
+      { id: "plano_local", nombre: "Plano Arquitectónico y de Distribución del Local (PDF)", obligatorio: true }
+    ],
     sistema: DOCUMENTOS_SISTEMA.map((d) => ({ ...d, tipo: "sistema" })),
-    giroLabel: DOC_NEGOCIO_ESPECIFICO[giroMapeado]?.etiqueta || "General / Otro",
+    giroLabel: "Plano del Local (PDF Obligatorio)",
   };
 };
 
