@@ -79,6 +79,19 @@ const verificarToken = async (req, res, next) => {
   const idToken = authHeader.split("Bearer ")[1];
 
   try {
+    if (adminAuth) {
+      try {
+        const decodedToken = await adminAuth.verifyIdToken(idToken);
+        req.usuarioFirebase = {
+          uid: decodedToken.uid,
+          email: decodedToken.email || "",
+        };
+        return next();
+      } catch (adminErr) {
+        // Fallback to REST lookup
+      }
+    }
+
     const response = await axios.post(
       `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
       { idToken },
