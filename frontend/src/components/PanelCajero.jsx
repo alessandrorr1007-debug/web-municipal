@@ -1766,9 +1766,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               <tbody>
                 {solicitudesFiltradas.map((s) => {
                   const nombreCiudadano =
-                    [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante].filter(Boolean).join(" ") ||
-                    "Solicitante";
+                    (s.nombresSolicitante && s.apellidosSolicitante)
+                      ? `${s.nombresSolicitante} ${s.apellidosSolicitante}`.trim()
+                      : s.nombreSolicitante || s.nombresSolicitante || s.apellidosSolicitante || "Solicitante";
                   const esPagado = s.estadoPago === "Confirmado" || (s.estado || "").toLowerCase().includes("pagado") || (s.estado || "").toLowerCase().includes("inspeccion");
+                  const esFacturaDoc = (s.tipoComprobante || s.comprobantePago || s.numeroOperacion || "").toLowerCase().includes("factura") || (s.numeroOperacion || "").startsWith("F");
+                  const etiquetaComprobante = esFacturaDoc ? "Factura emitida" : "Boleta emitida";
 
                   return (
                     <tr key={s.id}>
@@ -1785,7 +1788,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         <small style={{ display: "block", color: "#64748b" }}>RUC: {s.ruc}</small>
                       </td>
                       <td>
-                        <span className="badge info">{s.tipoTramite || "Licencia Comercial"}</span>
+                        <span className="badge info">{s.tipoTramite || "Nueva Licencia"}</span>
                         <strong style={{ display: "block", color: "#0f766e", marginTop: "2px" }}>S/ {MONTO_TRAMITE.toFixed(2)}</strong>
                       </td>
                       <td>
@@ -1818,7 +1821,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             </button>
                           ) : (
                             <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              ✓ Enviado ({s.numeroOperacion || "Boleta emitida"})
+                              ✓ Enviado ({etiquetaComprobante})
                             </span>
                           )}
                         </div>
@@ -1846,7 +1849,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "16px" }}>
                 <h4 style={{ margin: "0 0 8px", color: "#1e293b", fontSize: "14px" }}>👤 Datos del Ciudadano (RENIEC)</h4>
                 <p style={{ margin: "4px 0", fontSize: "13.5px" }}>
-                  <strong>Nombres y Apellidos:</strong> {[solicitudVerDetalle.nombresSolicitante, solicitudVerDetalle.apellidosSolicitante, solicitudVerDetalle.nombreSolicitante].filter(Boolean).join(" ")}
+                  <strong>Nombres y Apellidos:</strong> {(solicitudVerDetalle.nombresSolicitante && solicitudVerDetalle.apellidosSolicitante) ? `${solicitudVerDetalle.nombresSolicitante} ${solicitudVerDetalle.apellidosSolicitante}`.trim() : solicitudVerDetalle.nombreSolicitante || "---"}
                 </p>
                 <p style={{ margin: "4px 0", fontSize: "13.5px" }}>
                   <strong>DNI:</strong> {solicitudVerDetalle.dniSolicitante || solicitudVerDetalle.dni || "---"}
