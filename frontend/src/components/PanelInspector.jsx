@@ -125,11 +125,10 @@ function PanelInspector({ seccion }) {
     }
 
     return inspeccionesFinalizadas.filter((s) => {
-      // 1. Filtro por Dictamen / Estado en Historial (Aprobada / Observada / Rechazada)
+      // 1. Filtro por Dictamen / Estado en Historial (Aprobada / Desaprobada)
       const est = (s.estado || "").toLowerCase();
       if (filtroEstado === "aprobada" && !est.includes("aprobado")) return false;
-      if (filtroEstado === "observada" && !est.includes("observada")) return false;
-      if (filtroEstado === "rechazada" && !est.includes("rechazado")) return false;
+      if (filtroEstado === "desaprobada" && (est.includes("aprobado") || (!est.includes("rechazad") && !est.includes("observad")))) return false;
 
       // 2. Búsqueda por DNI, RUC o Código de Expediente en Historial
       if (!busqueda.trim()) return true;
@@ -401,8 +400,7 @@ function PanelInspector({ seccion }) {
             >
               <option value="todos">📌 Todos los dictámenes</option>
               <option value="aprobada">✅ Aprobadas</option>
-              <option value="observada">⚠️ Observadas</option>
-              <option value="rechazada">❌ Rechazadas</option>
+              <option value="desaprobada">❌ Desaprobadas</option>
             </select>
           </div>
         )}
