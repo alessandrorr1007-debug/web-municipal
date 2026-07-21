@@ -59,6 +59,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   // ESTADOS PARA REGISTRO PRESENCIAL DE NUEVA SOLICITUD (WIZARD DE PASO ÚNICO ACTIVO)
   const [pasoActual, setPasoActual] = useState(1);
   const [pagoConfirmadoLocal, setPagoConfirmadoLocal] = useState(false);
+  const [tipoComprobanteSeleccionado, setTipoComprobanteSeleccionado] = useState("Boleta");
+  const [tipoTramiteSeleccionado, setTipoTramiteSeleccionado] = useState("Nueva Licencia de Funcionamiento");
   const [resultadoRegistroExitoso, setResultadoRegistroExitoso] = useState(null);
   const [mostrarModalNuevaSolicitud, setMostrarModalNuevaSolicitud] = useState(false);
   const [dniForm, setDniForm] = useState("");
@@ -653,7 +655,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     setProcesando(true);
     try {
       const idExp = Date.now().toString().slice(-6);
-      const codComprobante = "BOL-CAJA-2026-" + Date.now().toString().slice(-6);
+      const esFactura = tipoComprobanteSeleccionado === "Factura";
+      const codComprobante = esFactura
+        ? "F001-" + Date.now().toString().slice(-6)
+        : "B001-" + Date.now().toString().slice(-6);
+      const nombreComprobanteTitulo = esFactura ? "FACTURA ELECTRÓNICA" : "BOLETA DE VENTA ELECTRÓNICA";
       const fechaHoraActual = formatearFechaHora();
       const nombreCajera = usuario?.nombre || usuario?.email || "Cajera de Ventanilla";
       const uidCajera = usuario?.uid || "CAJERA-001";
@@ -675,13 +681,14 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         razonSocial: razonSocialForm || nombreNegocioForm,
         direccion: direccionForm,
         giro: giroForm,
-        tipoTramite: "Licencia de Funcionamiento Presencial",
+        tipoTramite: tipoTramiteSeleccionado,
         estado: "Inspección programada",
         estadoNormalizado: "INSPECCION_PROGRAMADA",
         estadoPago: "Confirmado",
         metodoPago: metodoPagoSeleccionado,
         montoPagado: MONTO_TRAMITE,
-        comprobantePago: `Boleta de Caja N° ${codComprobante}`,
+        tipoComprobante: nombreComprobanteTitulo,
+        comprobantePago: `${nombreComprobanteTitulo} N° ${codComprobante}`,
         numeroOperacion: codComprobante,
         fechaPago: fechaHoraActual,
         cajeraResponsable: nombreCajera,
@@ -703,8 +710,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             hora: fechaHoraActual.split(",")[1]?.trim() || "",
             usuario: nombreCajera,
             rol: "Cajera",
-            accion: "Registro Presencial, Cobro de Tasa y Asignación de Inspector",
-            comentarios: `Registro presencial en ventanilla. Pago de S/ ${MONTO_TRAMITE.toFixed(2)} registrado (${metodoPagoSeleccionado}). Boleta: ${codComprobante}. Visita asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion} a las ${horaLabel}.`,
+            accion: `Registro Presencial, Emisión de ${nombreComprobanteTitulo} y Asignación de Inspector`,
+            comentarios: `Registro presencial en ventanilla (${tipoTramiteSeleccionado}). Pago de S/ ${MONTO_TRAMITE.toFixed(2)} registrado (${metodoPagoSeleccionado}). ${nombreComprobanteTitulo}: ${codComprobante}. Visita asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion} a las ${horaLabel}.`,
           },
         ],
       };
@@ -720,12 +727,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         const htmlNotificacionSolicitud = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden;">
             <div style="background: #1e3a8a; padding: 24px; text-align: center; color: white;">
-              <h2 style="margin: 0; font-size: 20px;">📝 Registro Exitoso de Solicitud de Licencia</h2>
+              <h2 style="margin: 0; font-size: 20px;">📝 Registro Exitoso de ${tipoTramiteSeleccionado}</h2>
               <p style="margin: 6px 0 0; font-size: 14px; opacity: 0.9;">Expediente N° EXP-${expIdLimpio}</p>
             </div>
             <div style="padding: 24px; color: #334155; font-size: 14px; line-height: 1.6;">
               <p style="margin: 0 0 16px;">Estimado(a) <strong>${nombresForm} ${apellidosForm}</strong> (DNI: ${dniForm}),</p>
-              <p style="margin: 0 0 16px;">Se ha registrado exitosamente su <strong>Solicitud de Licencia de Funcionamiento Presencial</strong> en el Módulo de Atención de la Municipalidad Provincial de Trujillo.</p>
+              <p style="margin: 0 0 16px;">Se ha registrado exitosamente su <strong>${tipoTramiteSeleccionado}</strong> en el Módulo de Atención de la Municipalidad Provincial de Trujillo.</p>
               
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
                 <h4 style="margin: 0 0 10px; color: #0f172a;">🏢 Datos de la Empresa y Local</h4>
@@ -749,63 +756,75 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           </div>
         `;
 
-        // CORREO 2: BOLETA DE VENTA ELECTRÓNICA OFICIAL (SUNAT)
+        // CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO OFICIAL (BOLETA O FACTURA CON ESTRUCTURA SUNAT SOLICITADA)
         const htmlBoletaElectronica = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 2px solid #0f172a; border-radius: 10px; padding: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
-              <div>
-                <h2 style="margin: 0; color: #0f172a; font-size: 18px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-                <span style="font-size: 11px; color: #475569; font-weight: bold; display: block; margin-top: 2px;">Módulo de Atención y Caja Municipal</span>
-                <span style="font-size: 11px; color: #64748b;">RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
-              </div>
-              <div style="border: 2px solid #0f172a; padding: 10px 16px; text-align: center; border-radius: 6px; background: #f8fafc;">
-                <span style="font-weight: 800; font-size: 13px; display: block; color: #0f172a;">BOLETA DE VENTA ELECTRÓNICA</span>
-                <span style="font-size: 14px; font-weight: 800; color: #dc2626;">N° ${codComprobante}</span>
-              </div>
+            <div style="background: #0f172a; color: white; padding: 14px 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+              <h2 style="margin: 0; font-size: 18px; font-weight: 900; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+              <span style="font-size: 11px; opacity: 0.9; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; display: block; margin-top: 2px;">
+                Módulo de Atención y Caja Municipal
+              </span>
+              <span style="font-size: 10.5px; opacity: 0.75; display: block; margin-top: 2px;">RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
             </div>
 
-            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
-              <p style="margin: 3px 0;"><strong>Fecha y Hora de Emisión:</strong> ${fechaHoraActual}</p>
-              <p style="margin: 3px 0;"><strong>Señor(es):</strong> ${nombresForm} ${apellidosForm}</p>
-              <p style="margin: 3px 0;"><strong>DNI / RUC:</strong> ${rucForm || dniForm}</p>
-              <p style="margin: 3px 0;"><strong>Establecimiento:</strong> ${nombreNegocioForm} (${direccionForm})</p>
+            <div style="border: 2px solid #0f172a; padding: 12px 18px; text-align: center; border-radius: 8px; background: #f8fafc; margin-bottom: 20px;">
+              <span style="font-weight: 900; font-size: 15px; display: block; color: #0f172a; letter-spacing: 0.5px;">${nombreComprobanteTitulo}</span>
+              <span style="font-size: 16px; font-weight: 900; color: #dc2626;">N° ${codComprobante}</span>
+              <p style="margin: 4px 0 0; font-size: 12px; color: #475569;">Fecha: ${fechaHoraActual}</p>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
+              <h4 style="margin: 0 0 8px; color: #0f172a; font-size: 13.5px; font-weight: 800; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+                🏢 Información del Contribuyente
+              </h4>
+              <p style="margin: 3px 0;"><strong>Nombre Legal:</strong> ${razonSocialForm || nombreNegocioForm}</p>
+              <p style="margin: 3px 0;"><strong>Nombre Comercial:</strong> ${nombreNegocioForm}</p>
+              <p style="margin: 3px 0;"><strong>Número de RUC:</strong> ${rucForm}</p>
+              <p style="margin: 3px 0;"><strong>Dirección:</strong> ${direccionForm}</p>
+              <p style="margin: 3px 0;"><strong>Solicitante:</strong> ${nombresForm} ${apellidosForm} (DNI: ${dniForm})</p>
             </div>
 
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
               <thead>
                 <tr style="background: #0f172a; color: white;">
-                  <th style="padding: 8px; text-align: center; width: 10%;">CANT</th>
-                  <th style="padding: 8px; text-align: left;">DESCRIPCIÓN</th>
-                  <th style="padding: 8px; text-align: right; width: 20%;">P. UNIT</th>
-                  <th style="padding: 8px; text-align: right; width: 20%;">IMPORTE</th>
+                  <th style="padding: 9px; text-align: center; width: 10%;">CANT</th>
+                  <th style="padding: 9px; text-align: left;">DESCRIPCIÓN</th>
+                  <th style="padding: 9px; text-align: right; width: 20%;">P. UNIT</th>
+                  <th style="padding: 9px; text-align: right; width: 20%;">IMPORTE</th>
                 </tr>
               </thead>
               <tbody>
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                   <td style="padding: 10px; text-align: center; font-weight: bold;">1</td>
-                  <td style="padding: 10px;">Derecho de Trámite — Licencia Municipal de Funcionamiento (EXP-${expIdLimpio})</td>
+                  <td style="padding: 10px;">
+                    Derecho de Trámite — ${tipoTramiteSeleccionado}
+                    <small style="display: block; color: #64748b;">Expediente N° EXP-${expIdLimpio}</small>
+                  </td>
                   <td style="padding: 10px; text-align: right;">S/ 3.00</td>
                   <td style="padding: 10px; text-align: right; font-weight: bold;">S/ 3.00</td>
                 </tr>
               </tbody>
             </table>
 
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-              <div style="font-size: 12px; color: #475569;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; background: #f8fafc; padding: 14px 18px; border-radius: 8px; border: 1px solid #cbd5e1;">
+              <div style="font-size: 12px; color: #334155;">
                 <p style="margin: 2px 0;"><strong>MÉTODO DE PAGO:</strong> ${metodoPagoSeleccionado.toUpperCase()}</p>
-                <p style="margin: 2px 0;"><strong>CAJERO:</strong> ${nombreCajera.toUpperCase()}</p>
+                <p style="margin: 2px 0;"><strong>CAJERA:</strong> ${nombreCajera.toUpperCase()}</p>
               </div>
-              <table style="width: 220px; font-size: 13px; text-align: right;">
-                <tr><td>OP. GRAVADA:</td><td style="font-weight: bold;">S/ 2.54</td></tr>
-                <tr><td>I.G.V. (18%):</td><td style="font-weight: bold;">S/ 0.46</td></tr>
-                <tr><td>DESCUENTO:</td><td style="font-weight: bold;">S/ 0.00</td></tr>
-                <tr style="font-size: 15px; border-top: 1.5px solid #0f172a;"><td style="padding-top: 6px; font-weight: 800;">TOTAL A PAGAR:</td><td style="padding-top: 6px; font-weight: 900; color: #16a34a;">S/ 3.00</td></tr>
+              <table style="width: 210px; font-size: 13px; text-align: right;">
+                <tr><td style="color: #475569;">OP. GRAVADA:</td><td style="font-weight: bold;">S/ 2.54</td></tr>
+                <tr><td style="color: #475569;">I.G.V. (18%):</td><td style="font-weight: bold;">S/ 0.46</td></tr>
+                <tr><td style="color: #475569;">DESCUENTO:</td><td style="font-weight: bold;">S/ 0.00</td></tr>
+                <tr style="font-size: 15px; border-top: 1.5px solid #0f172a;">
+                  <td style="padding-top: 6px; font-weight: 900; color: #0f172a;">TOTAL A PAGAR:</td>
+                  <td style="padding-top: 6px; font-weight: 900; color: #16a34a;">S/ 3.00</td>
+                </tr>
               </table>
             </div>
 
             <div style="text-align: center; border-top: 1px solid #cbd5e1; padding-top: 14px; font-size: 11.5px; color: #64748b;">
               <p style="margin: 0 0 4px; font-weight: bold;">Representación impresa del comprobante de venta electrónico.</p>
-              <p style="margin: 0; color: #16a34a; font-weight: 800;">¡Gracias por su preferencia!</p>
+              <p style="margin: 0; color: #16a34a; font-weight: 800; font-size: 12.5px;">¡Gracias por su preferencia!</p>
             </div>
           </div>
         `;
@@ -814,7 +833,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         await crearNotificacion(
           solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
           {
-            titulo: `Nueva Solicitud Registrada — EXP-${expIdLimpio}`,
+            titulo: `${tipoTramiteSeleccionado} Registrada — EXP-${expIdLimpio}`,
             descripcion: `Se registró su solicitud presencial EXP-${expIdLimpio}. Inspección asignada a ${inspectorElegido.nombre} el ${fechaInspeccion} (${horaLabel}).`,
             icono: "📝",
             html: htmlNotificacionSolicitud,
@@ -822,12 +841,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           correoForm
         );
 
-        // ENVIAR CORREO 2: BOLETA DE VENTA ELECTRÓNICA
+        // ENVIAR CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO (BOLETA O FACTURA)
         await crearNotificacion(
           solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
           {
-            titulo: `Boleta de Venta Electrónica — N° ${codComprobante}`,
-            descripcion: `Comprobante de pago N° ${codComprobante} emitido por S/ 3.00 (${metodoPagoSeleccionado}).`,
+            titulo: `${nombreComprobanteTitulo} — N° ${codComprobante}`,
+            descripcion: `Comprobante de pago ${nombreComprobanteTitulo} N° ${codComprobante} emitido por S/ 3.00 (${metodoPagoSeleccionado}).`,
             icono: "💳",
             html: htmlBoletaElectronica,
           },
@@ -848,6 +867,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const resExito = {
         id: solicitudCompleta.id,
         codComprobante,
+        tipoComprobante: nombreComprobanteTitulo,
+        tipoTramite: tipoTramiteSeleccionado,
         inspectorNombre: inspectorElegido.nombre,
         fechaInspeccion,
         slotInspeccion: horaLabel,
@@ -929,25 +950,88 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 El expediente fue cobrado y derivado oficialmente para la visita de inspección técnica.
               </p>
 
-              <div style={{ background: "#f8fafc", padding: "20px 24px", borderRadius: "12px", border: "1px solid #e2e8f0", textAlign: "left", display: "grid", gap: "10px", marginBottom: "24px" }}>
-                <p style={{ margin: 0, fontSize: "14.5px", color: "#0f172a" }}>
-                  <strong>Código de Expediente:</strong> <span style={{ color: "#2563eb", fontWeight: "800", fontSize: "16px" }}>EXP-{String(resultadoRegistroExitoso.id).replace(/^EXP-/, "")}</span>
-                </p>
-                <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}>
-                  <strong>Código de Operación / Boleta:</strong> {resultadoRegistroExitoso.codComprobante}
-                </p>
-                <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}>
-                  <strong>Solicitante:</strong> {resultadoRegistroExitoso.nombreSolicitante}
-                </p>
-                <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}>
-                  <strong>Establecimiento Comercial:</strong> {resultadoRegistroExitoso.nombreNegocio}
-                </p>
-                <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}>
-                  <strong>Inspector Asignado:</strong> {resultadoRegistroExitoso.inspectorNombre}
-                </p>
-                <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}>
-                  <strong>Fecha y Hora de Inspección:</strong> {resultadoRegistroExitoso.fechaInspeccion} ({resultadoRegistroExitoso.slotInspeccion})
-                </p>
+              {/* VOUCHER / COMPROBANTE DE VENTA ELECTRÓNICO (BOLETA O FACTURA CON ESTRUCTURA SUNAT) */}
+              <div style={{ background: "#ffffff", border: "2px solid #0f172a", borderRadius: "14px", padding: "28px", maxWidth: "620px", margin: "0 auto 24px", textAlign: "left", boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}>
+                {/* ENCABEZADO CON LOGO / RECUADRO OSCURO */}
+                <div style={{ background: "#0f172a", color: "white", padding: "14px 20px", borderRadius: "8px", textAlign: "center", marginBottom: "20px" }}>
+                  <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "900", letterSpacing: "0.5px" }}>MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                  <span style={{ fontSize: "11px", opacity: 0.9, textTransform: "uppercase", fontWeight: "bold", letterSpacing: "0.5px", display: "block", marginTop: "2px" }}>
+                    Módulo de Atención y Caja Municipal
+                  </span>
+                  <span style={{ fontSize: "10.5px", opacity: 0.75, display: "block", marginTop: "2px" }}>RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
+                </div>
+
+                {/* RECUADRO DE ENCABEZADO DE COMPROBANTE Y NUMERACIÓN */}
+                <div style={{ border: "2px solid #0f172a", padding: "12px 18px", textAlign: "center", borderRadius: "8px", background: "#f8fafc", marginBottom: "20px" }}>
+                  <span style={{ fontWeight: "900", fontSize: "15px", display: "block", color: "#0f172a", letterSpacing: "0.5px" }}>
+                    {(resultadoRegistroExitoso.tipoComprobante || "BOLETA DE VENTA ELECTRÓNICA").toUpperCase()}
+                  </span>
+                  <span style={{ fontSize: "16px", fontWeight: "900", color: "#dc2626" }}>N° {resultadoRegistroExitoso.codComprobante}</span>
+                  <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#475569" }}>Fecha: {resultadoRegistroExitoso.solicitudCompleta?.fechaPago || "21/7/2026"}</p>
+                </div>
+
+                {/* DATOS DEL ESTABLECIMIENTO (INFORMACIÓN DE LA EMPRESA / CONTRIBUYENTE) */}
+                <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "10px", padding: "16px", marginBottom: "20px" }}>
+                  <h4 style={{ margin: "0 0 10px", color: "#0f172a", fontSize: "14px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "6px" }}>
+                    🏢 Información del Contribuyente y Establecimiento
+                  </h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "13px" }}>
+                    <p style={{ margin: 0 }}><strong>Nombre Legal / Razón Social:</strong> {resultadoRegistroExitoso.solicitudCompleta?.razonSocial || resultadoRegistroExitoso.nombreNegocio}</p>
+                    <p style={{ margin: 0 }}><strong>Nombre Comercial:</strong> {resultadoRegistroExitoso.nombreNegocio}</p>
+                    <p style={{ margin: 0 }}><strong>Número de RUC:</strong> {resultadoRegistroExitoso.solicitudCompleta?.ruc}</p>
+                    <p style={{ margin: 0 }}><strong>Dirección Fiscal:</strong> {resultadoRegistroExitoso.solicitudCompleta?.direccion}</p>
+                    <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Solicitante:</strong> {resultadoRegistroExitoso.nombreSolicitante} (DNI: {resultadoRegistroExitoso.solicitudCompleta?.dniSolicitante || resultadoRegistroExitoso.solicitudCompleta?.dni})</p>
+                  </div>
+                </div>
+
+                {/* DETALLE DE LOS PRODUCTOS (LA "GRILLA") */}
+                <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "20px", fontSize: "13px" }}>
+                  <thead>
+                    <tr style={{ background: "#0f172a", color: "white" }}>
+                      <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "center", width: "12%" }}>CANT</th>
+                      <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "left" }}>DESCRIPCIÓN</th>
+                      <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "right", width: "20%" }}>P. UNIT</th>
+                      <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "right", width: "20%" }}>IMPORTE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ borderBottom: "1px solid #cbd5e1" }}>
+                      <td style={{ padding: "12px", textAlign: "center", fontWeight: "bold" }}>1</td>
+                      <td style={{ padding: "12px" }}>
+                        <strong>Derecho de Trámite — {resultadoRegistroExitoso.tipoTramite || "Licencia Municipal de Funcionamiento"}</strong>
+                        <small style={{ display: "block", color: "#64748b" }}>Expediente N° EXP-{String(resultadoRegistroExitoso.id).replace(/^EXP-/, "")}</small>
+                      </td>
+                      <td style={{ padding: "12px", textAlign: "right" }}>S/ 3.00</td>
+                      <td style={{ padding: "12px", textAlign: "right", fontWeight: "800", color: "#0f172a" }}>S/ 3.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* CÁLCULO TOTAL Y DESGLOSE FINANCIERO */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
+                  <div style={{ fontSize: "12px", color: "#334155" }}>
+                    <p style={{ margin: "2px 0" }}><strong>MÉTODO DE PAGO:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.metodoPago || "TARJETA").toUpperCase()}</p>
+                    <p style={{ margin: "2px 0" }}><strong>CAJERA:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.cajeraResponsable || "CAJERA MUNICIPAL").toUpperCase()}</p>
+                    <p style={{ margin: "2px 0", color: "#1e40af" }}><strong>INSPECTOR ASIGNADO:</strong> {resultadoRegistroExitoso.inspectorNombre} ({resultadoRegistroExitoso.fechaInspeccion})</p>
+                  </div>
+                  <table style={{ width: "210px", fontSize: "13.5px" }}>
+                    <tbody>
+                      <tr><td style={{ color: "#475569" }}>OP. GRAVADA:</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 2.54</td></tr>
+                      <tr><td style={{ color: "#475569" }}>I.G.V. (18%):</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 0.46</td></tr>
+                      <tr><td style={{ color: "#475569" }}>DESCUENTO:</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 0.00</td></tr>
+                      <tr style={{ fontSize: "16px", borderTop: "1.5px solid #0f172a" }}>
+                        <td style={{ paddingTop: "6px", fontWeight: "900", color: "#0f172a" }}>TOTAL A PAGAR:</td>
+                        <td style={{ paddingTop: "6px", textAlign: "right", fontWeight: "900", color: "#16a34a" }}>S/ 3.00</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* PIE DE PÁGINA Y MENSAJE LEGAL */}
+                <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: "14px", fontSize: "12px", color: "#64748b", textAlign: "center" }}>
+                  <p style={{ margin: "0 0 4px", fontWeight: "bold" }}>Representación impresa del comprobante de venta electrónico.</p>
+                  <p style={{ margin: 0, color: "#16a34a", fontWeight: "800", fontSize: "13px" }}>¡Gracias por su preferencia!</p>
+                </div>
               </div>
 
               <div style={{ display: "flex", justifyContent: "center", gap: "14px", flexWrap: "wrap" }}>
@@ -1361,19 +1445,53 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         </div>
                         <div style={{ textAlign: "right", background: "#ffffff", padding: "10px 16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
                           <small style={{ color: "#64748b", fontWeight: "bold", display: "block", fontSize: "11px" }}>COMPROBANTE A EMITIR</small>
-                          <strong style={{ color: "#0f172a", fontSize: "14px" }}>Boleta N° BOL-CAJA-2026-AUTO</strong>
+                          <strong style={{ color: tipoComprobanteSeleccionado === "Factura" ? "#dc2626" : "#2563eb", fontSize: "14px" }}>
+                            {tipoComprobanteSeleccionado === "Factura" ? "🧾 Factura Electrónica (F001-AUTO)" : "📄 Boleta Electrónica (B001-AUTO)"}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px" }}>
+                        <div>
+                          <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                            Tipo de Comprobante a Emitir *
+                          </label>
+                          <select
+                            value={tipoComprobanteSeleccionado}
+                            onChange={(e) => setTipoComprobanteSeleccionado(e.target.value)}
+                            style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
+                          >
+                            <option value="Boleta">📄 Boleta de Venta Electrónica (B001)</option>
+                            <option value="Factura">🧾 Factura Electrónica (F001)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                            Seleccione Método de Pago *
+                          </label>
+                          <select
+                            value={metodoPagoSeleccionado}
+                            onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
+                            style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
+                          >
+                            <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
+                            <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
+                          </select>
                         </div>
                       </div>
 
                       <div style={{ marginBottom: "16px" }}>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "8px" }}>Seleccione Método de Pago *</label>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                          Tipo de Trámite Municipal *
+                        </label>
                         <select
-                          value={metodoPagoSeleccionado}
-                          onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
-                          style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px", fontWeight: "700" }}
+                          value={tipoTramiteSeleccionado}
+                          onChange={(e) => setTipoTramiteSeleccionado(e.target.value)}
+                          style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
                         >
-                          <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                          <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
+                          <option value="Nueva Licencia de Funcionamiento">📜 Nueva Licencia de Funcionamiento</option>
+                          <option value="Renovación de Licencia de Funcionamiento">🔄 Renovación de Licencia de Funcionamiento</option>
                         </select>
                       </div>
 
