@@ -127,7 +127,7 @@ function Login({ onVolver, errorInicial = "" }) {
                       <label style={inputLabel}>Correo electrónico</label>
                       <input
                         type="email"
-                        placeholder="usuario@munitrujillo.gob.pe"
+                        placeholder="usuario@gmail.com"
                         value={correoRecuperacion}
                         onChange={(e) => setCorreoRecuperacion(e.target.value)}
                         required
@@ -169,7 +169,7 @@ function Login({ onVolver, errorInicial = "" }) {
                     <label style={inputLabel}>Correo electrónico *</label>
                     <input
                       type="email"
-                      placeholder="usuario@munitrujillo.gob.pe"
+                      placeholder="usuario@gmail.com"
                       value={correo}
                       onChange={(e) => setCorreo(e.target.value)}
                       required
