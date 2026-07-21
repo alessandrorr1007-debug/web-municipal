@@ -252,6 +252,84 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     });
   }, [solicitudes]);
 
+  // EVALUACIÓN SECUENCIAL DE LOS 7 PASOS DEL WIZARD DE CAJERO
+  // Paso 1: Validación RENIEC
+  const paso1Completado = dniValidado && Boolean(nombresForm) && Boolean(apellidosForm);
+
+  // Paso 2: Datos de Contacto (Teléfono Celular iniciado en 9 y Correo válido)
+  const esTelefonoValido = /^9\d{8}$/.test(telefonoForm);
+  const esCorreoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoForm);
+  const paso2Completado = paso1Completado && esTelefonoValido && esCorreoValido;
+
+  // Paso 3: Validación SUNAT
+  const paso3Completado = paso2Completado && rucValidado && Boolean(nombreNegocioForm) && Boolean(direccionForm);
+
+  // Paso 4: Carga de Documentos Obligatorios por Giro
+  const reqsDocInfo = obtenerDocumentosPorGiro(giroForm);
+  const reqsDoc = reqsDocInfo?.ciudadano || [];
+  const reqsObligatorios = reqsDoc.filter((d) => d.obligatorio);
+  const faltanObligatorios = reqsObligatorios.some((req) => !archivosPresenciales.some((a) => a.docId === req.id));
+  const paso4Completado = paso3Completado && reqsObligatorios.length > 0 && !faltanObligatorios;
+
+  // Paso 5: Cobro de Tasa (S/ 3.00) y Método de Pago
+  const paso5Completado = paso4Completado && Boolean(metodoPagoSeleccionado);
+
+  // Paso 6: Programación de Inspección Técnica
+  const paso6Completado = paso5Completado && Boolean(inspectorElegido) && Boolean(fechaInspeccion) && Boolean(slotInspeccion);
+
+  // Paso 7: Registro y Finalización
+  const paso7Listo = paso6Completado;
+
+  // Conteo de pasos completados para la barra de progreso
+  const pasosCompletadosCount = [
+    paso1Completado,
+    paso2Completado,
+    paso3Completado,
+    paso4Completado,
+    paso5Completado,
+    paso6Completado,
+    paso7Listo
+  ].filter(Boolean).length;
+
+  const porcentajeProgreso = Math.round((pasosCompletadosCount / 7) * 100);
+
+  const obtenerEstadoPaso = (numPaso) => {
+    if (numPaso === 1) {
+      if (paso1Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
+      return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
+    }
+    if (numPaso === 2) {
+      if (!paso1Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
+      if (paso2Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
+      return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
+    }
+    if (numPaso === 3) {
+      if (!paso2Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
+      if (paso3Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
+      return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
+    }
+    if (numPaso === 4) {
+      if (!paso3Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
+      if (paso4Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
+      return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
+    }
+    if (numPaso === 5) {
+      if (!paso4Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
+      if (paso5Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
+      return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
+    }
+    if (numPaso === 6) {
+      if (!paso5Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
+      if (paso6Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
+      return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
+    }
+    if (numPaso === 7) {
+      if (!paso6Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
+      return { icono: "🚀", texto: "Listo", bg: "#dcfce7", color: "#15803d" };
+    }
+    return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
+  };
+
   // BUSQUEDA Y FILTRADO AVANZADO POR CÓDIGO, DNI, RUC, NOMBRE Y FILTRO DE ESTADO
   const solicitudesFiltradas = useMemo(() => {
     const lista = Array.isArray(solicitudes) ? solicitudes : [];
@@ -612,27 +690,82 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         </div>
       </div>
 
-      {/* VISTA 1: NUEVA SOLICITUD PRESENCIAL DIRECTA */}
+      {/* VISTA 1: NUEVA SOLICITUD PRESENCIAL DIRECTA (WIZARD SECUENCIAL DE 7 PASOS) */}
       {seccion === "nueva-solicitud" && (
         <section className="section-card">
           <div className="section-header" style={{ background: "linear-gradient(135deg, #16a34a 0%, #065f46 100%)", color: "white", padding: "16px 20px", borderRadius: "10px", marginBottom: "20px" }}>
-            <h3 style={{ margin: 0, color: "white", fontSize: "18px" }}>➕ Formulario Presencial de Solicitud de Licencia Municipal</h3>
-            <p style={{ margin: "4px 0 0", color: "#e2e8f0", fontSize: "13px" }}>Complete la validación RENIEC/SUNAT, adjunte los requisitos según el giro comercial, procese el cobro y programe la inspección.</p>
+            <h3 style={{ margin: 0, color: "white", fontSize: "18px" }}>➕ Registro Presencial de Solicitud de Licencia Municipal (Paso a Paso)</h3>
+            <p style={{ margin: "4px 0 0", color: "#e2e8f0", fontSize: "13px" }}>Flujo secuencial obligatorio: complete cada paso en orden para desbloquear las etapas posteriores y finalizar el expediente.</p>
+          </div>
+
+          {/* BARRA DE PROGRESO GLOBAL DEL WIZARD (7 PASOS) */}
+          <div style={{ background: "#f8fafc", padding: "16px 20px", borderRadius: "12px", border: "1px solid #cbd5e1", marginBottom: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <h4 style={{ margin: 0, color: "#1e293b", fontSize: "14.5px", fontWeight: "bold" }}>
+                📊 Progreso del Trámite Presencial: {pasosCompletadosCount} de 7 Pasos ({porcentajeProgreso}%)
+              </h4>
+              <span style={{ background: porcentajeProgreso === 100 ? "#dcfce7" : "#e0f2fe", color: porcentajeProgreso === 100 ? "#15803d" : "#0369a1", padding: "4px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold" }}>
+                {porcentajeProgreso === 100 ? "✅ ¡Listo para Registrar!" : "🟡 Flujo Secuencial En Proceso"}
+              </span>
+            </div>
+
+            <div style={{ height: "10px", width: "100%", background: "#e2e8f0", borderRadius: "5px", overflow: "hidden", marginBottom: "14px" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${porcentajeProgreso}%`,
+                  background: porcentajeProgreso === 100 ? "linear-gradient(90deg, #16a34a, #059669)" : "linear-gradient(90deg, #2563eb, #0d9488)",
+                  transition: "width 0.4s ease"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "6px" }}>
+              {[
+                { n: 1, title: "1. RENIEC" },
+                { n: 2, title: "2. Contacto" },
+                { n: 3, title: "3. SUNAT" },
+                { n: 4, title: "4. Documentos" },
+                { n: 5, title: "5. Pago Tasa" },
+                { n: 6, title: "6. Inspección" },
+                { n: 7, title: "7. Finalizar" }
+              ].map((step) => {
+                const st = obtenerEstadoPaso(step.n);
+                return (
+                  <div
+                    key={step.n}
+                    style={{
+                      padding: "8px 6px",
+                      textAlign: "center",
+                      borderRadius: "8px",
+                      background: st.bg,
+                      color: st.color,
+                      fontSize: "11.5px",
+                      fontWeight: "bold",
+                      border: `1px solid ${st.color}30`
+                    }}
+                  >
+                    {st.icono} {step.title}
+                    <span style={{ display: "block", fontSize: "10px", marginTop: "2px", opacity: 0.9 }}>{st.texto}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <form onSubmit={ejecutarRegistroPresencialCompleto}>
-            {/* PASO 1: DATOS DEL SOLICITANTE CON VALIDACIÓN RENIEC */}
+            {/* PASO 1: VALIDACIÓN RENIEC (OBLIGATORIO) */}
             <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>👤 1. Datos del Solicitante (Consulta RENIEC Obligatoria)</h4>
-                <span style={{ background: dniValidado ? "#dcfce7" : "#fef3c7", color: dniValidado ? "#15803d" : "#b45309", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                  {dniValidado ? "✓ RENIEC Validado (Campos Bloqueados)" : "🔒 Consulta RENIEC Requerida"}
+                <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>👤 Paso 1: Validación RENIEC (Obligatorio)</h4>
+                <span style={{ background: paso1Completado ? "#dcfce7" : "#fef3c7", color: paso1Completado ? "#15803d" : "#b45309", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                  {paso1Completado ? "✅ Completado" : "🟡 En Proceso (Consulta DNI)"}
                 </span>
               </div>
               
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>DNI del Titular (Editable) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>DNI del Titular (8 dígitos) *</label>
                   <div style={{ display: "flex", gap: "6px" }}>
                     <input
                       type="text"
@@ -640,7 +773,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       placeholder="DNI (8 dígitos)"
                       value={dniForm}
                       onChange={(e) => {
-                        setDniForm(e.target.value);
+                        setDniForm(e.target.value.replace(/\D/g, "").slice(0, 8));
                         setDniValidado(false);
                         setNombresForm("");
                         setApellidosForm("");
@@ -654,19 +787,62 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       disabled={consultandoDni}
                       style={{ padding: "8px 12px", background: dniValidado ? "#16a34a" : "#2563eb", color: "white", border: "none", borderRadius: "8px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer" }}
                     >
-                      {consultandoDni ? "Buscando..." : dniValidado ? "✓ RENIEC" : "🔍 Consultar RENIEC"}
+                      {consultandoDni ? "Buscando..." : dniValidado ? "✓ RENIEC OK" : "🔍 Consultar RENIEC"}
                     </button>
                   </div>
                 </div>
 
+                <div style={{ opacity: dniValidado ? 1 : 0.6 }}>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Nombres (Oficial RENIEC - Solo Lectura) *</label>
+                  <input
+                    type="text"
+                    placeholder="🔒 Se autocompleta consultando RENIEC"
+                    value={nombresForm}
+                    readOnly
+                    onKeyDown={(e) => e.preventDefault()}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Apellidos (Oficial RENIEC - Solo Lectura) *</label>
+                <input
+                  type="text"
+                  placeholder="🔒 Se autocompleta consultando RENIEC"
+                  value={apellidosForm}
+                  readOnly
+                  onKeyDown={(e) => e.preventDefault()}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
+                />
+              </div>
+            </div>
+
+            {/* PASO 2: DATOS DE CONTACTO (HABILITADO TRAS PASO 1) */}
+            <div style={{ background: paso1Completado ? "#f8fafc" : "#f1f5f9", padding: "16px", borderRadius: "10px", border: paso1Completado ? "1px solid #cbd5e1" : "1px dashed #cbd5e1", marginBottom: "16px", opacity: paso1Completado ? 1 : 0.7 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <h4 style={{ margin: 0, color: paso1Completado ? "#166534" : "#64748b", fontSize: "14.5px" }}>📞 Paso 2: Datos de Contacto (Celular y Correo)</h4>
+                <span style={{ background: paso2Completado ? "#dcfce7" : paso1Completado ? "#fef3c7" : "#f1f5f9", color: paso2Completado ? "#15803d" : paso1Completado ? "#b45309" : "#64748b", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                  {paso2Completado ? "✅ Completado" : !paso1Completado ? "🔒 Bloqueado" : "🟡 En Proceso"}
+                </span>
+              </div>
+
+              {!paso1Completado && (
+                <div style={{ background: "#fffbe3", color: "#b45309", padding: "10px 14px", borderRadius: "8px", border: "1px solid #fde68a", marginBottom: "12px", fontWeight: "bold", fontSize: "12.5px" }}>
+                  🔒 Debe validar el DNI en RENIEC (Paso 1) para continuar.
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>
-                    📱 Teléfono Celular (Editable - 9 dígitos) *
+                    📱 Teléfono Celular (Perú - 9 dígitos) *
                   </label>
                   <input
                     type="tel"
                     inputMode="numeric"
                     maxLength={9}
+                    disabled={!paso1Completado}
                     placeholder="Ej. 987654321"
                     value={telefonoForm}
                     onChange={(e) => {
@@ -678,79 +854,75 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       width: "100%",
                       padding: "8px 12px",
                       borderRadius: "8px",
-                      border: (telefonoForm && !/^9\d{8}$/.test(telefonoForm)) ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                      border: (telefonoForm && !esTelefonoValido) ? "1px solid #dc2626" : "1px solid #cbd5e1",
                       fontSize: "13.5px",
-                      fontWeight: "bold"
+                      fontWeight: "bold",
+                      background: !paso1Completado ? "#e2e8f0" : "white"
                     }}
                   />
-                  {telefonoForm && !/^9\d{8}$/.test(telefonoForm) && (
+                  {telefonoForm && !esTelefonoValido && (
                     <small style={{ color: "#dc2626", fontSize: "11px", fontWeight: "bold", display: "block", marginTop: "2px" }}>
-                      ⚠️ Ingrese un celular peruano de 9 dígitos que inicie con 9.
+                      ⚠️ Debe ingresar un celular peruano válido de 9 dígitos que inicie con 9.
+                    </small>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>
+                    ✉️ Correo Electrónico de Notificaciones *
+                  </label>
+                  <input
+                    type="email"
+                    disabled={!paso1Completado}
+                    placeholder="solicitante@correo.com"
+                    value={correoForm}
+                    onChange={(e) => setCorreoForm(e.target.value)}
+                    required
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: (correoForm && !esCorreoValido) ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                      fontSize: "13.5px",
+                      background: !paso1Completado ? "#e2e8f0" : "white"
+                    }}
+                  />
+                  {correoForm && !esCorreoValido && (
+                    <small style={{ color: "#dc2626", fontSize: "11px", fontWeight: "bold", display: "block", marginTop: "2px" }}>
+                      ⚠️ Ingrese un formato de correo electrónico válido.
                     </small>
                   )}
                 </div>
               </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Nombres (Oficial RENIEC - Solo Lectura) *</label>
-                  <input
-                    type="text"
-                    placeholder="🔒 Se autocompleta consultando RENIEC"
-                    value={nombresForm}
-                    readOnly
-                    required
-                    onKeyDown={(e) => e.preventDefault()}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Apellidos (Oficial RENIEC - Solo Lectura) *</label>
-                  <input
-                    type="text"
-                    placeholder="🔒 Se autocompleta consultando RENIEC"
-                    value={apellidosForm}
-                    readOnly
-                    required
-                    onKeyDown={(e) => e.preventDefault()}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Correo Electrónico de Notificaciones (Editable) *</label>
-                <input
-                  type="email"
-                  placeholder="solicitante@correo.com"
-                  value={correoForm}
-                  onChange={(e) => setCorreoForm(e.target.value)}
-                  required
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
-                />
-              </div>
             </div>
 
-            {/* PASO 2: DATOS DEL NEGOCIO CON VALIDACIÓN SUNAT */}
-            <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
+            {/* PASO 3: VALIDACIÓN SUNAT (HABILITADO TRAS PASO 2) */}
+            <div style={{ background: paso2Completado ? "#f8fafc" : "#f1f5f9", padding: "16px", borderRadius: "10px", border: paso2Completado ? "1px solid #cbd5e1" : "1px dashed #cbd5e1", marginBottom: "16px", opacity: paso2Completado ? 1 : 0.7 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>🏢 2. Establecimiento Comercial (Consulta SUNAT Obligatoria)</h4>
-                <span style={{ background: rucValidado ? "#dcfce7" : "#fef3c7", color: rucValidado ? "#15803d" : "#b45309", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                  {rucValidado ? `✓ SUNAT Validado (${estadoSunat || "ACTIVO"} - ${condicionSunat || "HABIDO"})` : "🔒 Consulta SUNAT Requerida"}
+                <h4 style={{ margin: 0, color: paso2Completado ? "#166534" : "#64748b", fontSize: "14.5px" }}>🏢 Paso 3: Validación SUNAT (Obligatorio)</h4>
+                <span style={{ background: paso3Completado ? "#dcfce7" : paso2Completado ? "#fef3c7" : "#f1f5f9", color: paso3Completado ? "#15803d" : paso2Completado ? "#b45309" : "#64748b", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                  {paso3Completado ? `✓ SUNAT Validado (${estadoSunat || "ACTIVO"})` : !paso2Completado ? "🔒 Bloqueado" : "🟡 En Proceso (Consulta RUC)"}
                 </span>
               </div>
 
+              {!paso2Completado && (
+                <div style={{ background: "#fffbe3", color: "#b45309", padding: "10px 14px", borderRadius: "8px", border: "1px solid #fde68a", marginBottom: "12px", fontWeight: "bold", fontSize: "12.5px" }}>
+                  🔒 Debe validar el RUC en SUNAT para continuar.
+                </div>
+              )}
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "10px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>RUC del Local (Editable - 11 dígitos) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>RUC del Local (11 dígitos) *</label>
                   <div style={{ display: "flex", gap: "6px" }}>
                     <input
                       type="text"
                       maxLength={11}
+                      disabled={!paso2Completado}
                       placeholder="RUC (11 dígitos)"
                       value={rucForm}
                       onChange={(e) => {
-                        setRucForm(e.target.value);
+                        setRucForm(e.target.value.replace(/\D/g, "").slice(0, 11));
                         setRucValidado(false);
                         setNombreNegocioForm("");
                         setRazonSocialForm("");
@@ -759,15 +931,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         setCondicionSunat("");
                       }}
                       required
-                      style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
+                      style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: !paso2Completado ? "#e2e8f0" : "white" }}
                     />
                     <button
                       type="button"
                       onClick={manejarConsultarRucPresencial}
-                      disabled={consultandoRuc}
-                      style={{ padding: "8px 12px", background: rucValidado ? "#16a34a" : "#2563eb", color: "white", border: "none", borderRadius: "8px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer" }}
+                      disabled={!paso2Completado || consultandoRuc}
+                      style={{ padding: "8px 12px", background: rucValidado ? "#16a34a" : !paso2Completado ? "#cbd5e1" : "#2563eb", color: "white", border: "none", borderRadius: "8px", fontSize: "12.5px", fontWeight: "bold", cursor: paso2Completado ? "pointer" : "not-allowed" }}
                     >
-                      {consultandoRuc ? "Buscando..." : rucValidado ? "✓ SUNAT" : "🔍 Consultar SUNAT"}
+                      {consultandoRuc ? "Buscando..." : rucValidado ? "✓ SUNAT OK" : "🔍 Consultar SUNAT"}
                     </button>
                   </div>
                 </div>
@@ -794,7 +966,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     placeholder="🔒 Se autocompleta consultando SUNAT"
                     value={nombreNegocioForm}
                     readOnly
-                    required
                     onKeyDown={(e) => e.preventDefault()}
                     style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                   />
@@ -819,7 +990,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   placeholder="🔒 Se autocompleta consultando SUNAT"
                   value={direccionForm}
                   readOnly
-                  required
                   onKeyDown={(e) => e.preventDefault()}
                   style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
                 />
@@ -827,7 +997,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Estado del Contribuyente (SUNAT)</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Estado Contribuyente (SUNAT)</label>
                   <input
                     type="text"
                     readOnly
@@ -837,7 +1007,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Condición del Contribuyente (SUNAT)</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Condición Contribuyente (SUNAT)</label>
                   <input
                     type="text"
                     readOnly
@@ -849,29 +1019,52 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               </div>
             </div>
 
-            {/* PASO 3: REQUISITOS DOCUMENTALES SEGÚN ACTIVIDAD ECONÓMICA OBTENIDA */}
-            <div style={{ background: "#fffbeb", padding: "16px", borderRadius: "10px", border: "1px solid #fde68a", marginBottom: "16px" }}>
-              <h4 style={{ margin: "0 0 6px", color: "#b45309", fontSize: "14.5px" }}>
-                📄 3. Documentos Obligatorios para: <u>{obtenerDocumentosPorGiro(giroForm).giroLabel}</u> {rucValidado && "(Cargados automáticamente de SUNAT)"}
-              </h4>
-              <p style={{ color: "#92400e", fontSize: "12.5px", margin: "0 0 12px" }}>
-                Cargue los archivos adjuntos obligatorios requeridos para esta actividad económica:
-              </p>
+            {/* PASO 4: DOCUMENTOS REQUERIDOS (HABILITADO TRAS PASO 3) */}
+            <div style={{ background: paso3Completado ? "#fffbeb" : "#f1f5f9", padding: "16px", borderRadius: "10px", border: paso3Completado ? "1px solid #fde68a" : "1px dashed #cbd5e1", marginBottom: "16px", opacity: paso3Completado ? 1 : 0.7 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <h4 style={{ margin: 0, color: paso3Completado ? "#b45309" : "#64748b", fontSize: "14.5px" }}>
+                  📄 Paso 4: Carga de Documentos para: <u>{reqsDocInfo.giroLabel}</u>
+                </h4>
+                <span style={{ background: paso4Completado ? "#dcfce7" : paso3Completado ? "#fef3c7" : "#f1f5f9", color: paso4Completado ? "#15803d" : paso3Completado ? "#b45309" : "#64748b", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                  {paso4Completado ? "✅ Todos los Documentos Cargados" : !paso3Completado ? "🔒 Bloqueado" : "❌ Documento Pendiente"}
+                </span>
+              </div>
+
+              {!paso3Completado && (
+                <div style={{ background: "#fffbe3", color: "#b45309", padding: "10px 14px", borderRadius: "8px", border: "1px solid #fde68a", marginBottom: "12px", fontWeight: "bold", fontSize: "12.5px" }}>
+                  🔒 Paso 4 Bloqueado: Debe consultar y validar el RUC en SUNAT (Paso 3) para habilitar los requisitos documentales.
+                </div>
+              )}
 
               <div style={{ display: "grid", gap: "10px" }}>
-                {obtenerDocumentosPorGiro(giroForm).ciudadano.map((docReq) => {
+                {reqsDoc.map((docReq) => {
                   const subido = archivosPresenciales.find((a) => a.docId === docReq.id);
                   return (
-                    <div key={docReq.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "white", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
+                    <div key={docReq.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "white", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
                       <div>
                         <strong style={{ fontSize: "13px", color: "#1e293b" }}>{docReq.nombre}</strong>
                         {docReq.obligatorio && <span style={{ color: "#dc2626", fontSize: "12px", marginLeft: "6px" }}>* Obligatorio</span>}
-                        {subido && <small style={{ display: "block", color: "#16a34a", fontWeight: "bold" }}>✓ Cargado: {subido.archivoNombre}</small>}
+                        <div style={{ marginTop: "4px" }}>
+                          {subido ? (
+                            <span style={{ background: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "bold" }}>
+                              ✓ Documento cargado: {subido.archivoNombre}
+                            </span>
+                          ) : docReq.obligatorio ? (
+                            <span style={{ background: "#fee2e2", color: "#dc2626", padding: "2px 8px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "bold" }}>
+                              ❌ Documento obligatorio pendiente
+                            </span>
+                          ) : (
+                            <span style={{ background: "#f1f5f9", color: "#64748b", padding: "2px 8px", borderRadius: "6px", fontSize: "11.5px" }}>
+                              Opcional
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <input
                         type="file"
                         accept=".pdf,image/*"
+                        disabled={!paso3Completado}
                         onChange={(e) => manejarArchivoPresencial(e, docReq.id, docReq.nombre)}
                         style={{ fontSize: "12px" }}
                       />
@@ -881,19 +1074,29 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               </div>
             </div>
 
-            {/* PASO 4: COBRO Y PROGRAMACIÓN DE INSPECCIÓN */}
-            <div style={{ background: "#f0fdf4", padding: "16px", borderRadius: "10px", border: "1px solid #bbf7d0", marginBottom: "16px" }}>
-              <h4 style={{ margin: "0 0 12px", color: "#166534", fontSize: "14.5px" }}>
-                💰 4. Pago de Tasa (S/ 3.00) y Programación de Inspección Técnica
-              </h4>
+            {/* PASO 5: REGISTRO Y CONFIRMACIÓN DE PAGO (HABILITADO TRAS PASO 4) */}
+            <div style={{ background: paso4Completado ? "#f0fdf4" : "#f1f5f9", padding: "16px", borderRadius: "10px", border: paso4Completado ? "1px solid #bbf7d0" : "1px dashed #cbd5e1", marginBottom: "16px", opacity: paso4Completado ? 1 : 0.7 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <h4 style={{ margin: 0, color: paso4Completado ? "#166534" : "#64748b", fontSize: "14.5px" }}>💰 Paso 5: Cobro de Tasa Municipal (S/ 3.00)</h4>
+                <span style={{ background: paso5Completado ? "#dcfce7" : paso4Completado ? "#fef3c7" : "#f1f5f9", color: paso5Completado ? "#15803d" : paso4Completado ? "#b45309" : "#64748b", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                  {paso5Completado ? "✅ Pago Confirmado (Boleta Generada)" : !paso4Completado ? "🔒 Bloqueado" : "🟡 En Proceso de Cobro"}
+                </span>
+              </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+              {!paso4Completado && (
+                <div style={{ background: "#fffbe3", color: "#b45309", padding: "10px 14px", borderRadius: "8px", border: "1px solid #fde68a", marginBottom: "12px", fontWeight: "bold", fontSize: "12.5px" }}>
+                  🔒 Paso 5 Bloqueado: Debe cargar todos los documentos obligatorios requeridos (Paso 4) para habilitar el cobro.
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", alignItems: "center" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Método de Pago *</label>
                   <select
                     value={metodoPagoSeleccionado}
+                    disabled={!paso4Completado}
                     onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: !paso4Completado ? "#e2e8f0" : "white" }}
                   >
                     <option value="Efectivo en caja">Efectivo en Caja Municipal</option>
                     <option value="Tarjeta POS (Débito/Crédito)">Tarjeta Débito / Crédito (POS)</option>
@@ -901,22 +1104,66 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </select>
                 </div>
 
+                <div style={{ background: "white", padding: "10px 14px", borderRadius: "8px", border: "1px solid #bbf7d0" }}>
+                  <small style={{ display: "block", color: "#166534", fontWeight: "bold", fontSize: "11px" }}>🧾 COMPROBANTE DE CAJA A EMITIR</small>
+                  <strong style={{ color: "#047857", fontSize: "14px" }}>Boleta N° BOL-CAJA-2026-AUTO</strong>
+                  <span style={{ display: "block", fontSize: "12px", color: "#334155", fontWeight: "bold", marginTop: "2px" }}>Monto Cobrado: S/ {MONTO_TRAMITE.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* PASO 6: PROGRAMACIÓN DE INSPECCIÓN (HABILITADO TRAS PASO 5) */}
+            <div style={{ background: paso5Completado ? "#f0fdf4" : "#f1f5f9", padding: "16px", borderRadius: "10px", border: paso5Completado ? "1px solid #bbf7d0" : "1px dashed #cbd5e1", marginBottom: "16px", opacity: paso5Completado ? 1 : 0.7 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <h4 style={{ margin: 0, color: paso5Completado ? "#166534" : "#64748b", fontSize: "14.5px" }}>📅 Paso 6: Programación de Inspección Técnica</h4>
+                <span style={{ background: paso6Completado ? "#dcfce7" : paso5Completado ? "#fef3c7" : "#f1f5f9", color: paso6Completado ? "#15803d" : paso5Completado ? "#b45309" : "#64748b", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                  {paso6Completado ? "✅ Inspección Programada" : !paso5Completado ? "🔒 Bloqueado" : "🟡 En Proceso de Selección"}
+                </span>
+              </div>
+
+              {!paso5Completado && (
+                <div style={{ background: "#fffbe3", color: "#b45309", padding: "10px 14px", borderRadius: "8px", border: "1px solid #fde68a", marginBottom: "12px", fontWeight: "bold", fontSize: "12.5px" }}>
+                  🔒 Paso 6 Bloqueado: Debe confirmar el método de pago en el Paso 5 para habilitar la programación de la inspección.
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Fecha de Inspección (DD/MM/YYYY) *</label>
                   <input
                     type="text"
+                    disabled={!paso5Completado}
                     placeholder="DD/MM/YYYY"
                     value={fechaInspeccion}
                     onChange={(e) => setFechaInspeccion(e.target.value)}
                     required
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: !paso5Completado ? "#e2e8f0" : "white" }}
                   />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Rango Horario de Inspección *</label>
+                  <select
+                    value={slotInspeccion}
+                    disabled={!paso5Completado}
+                    onChange={(e) => setSlotInspeccion(e.target.value)}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: !paso5Completado ? "#e2e8f0" : "white" }}
+                  >
+                    {TIME_SLOTS.map((slot) => {
+                      const ocupado = inspectorElegido && esHorarioOcupado(inspectorElegido.uid, fechaInspeccion, slot.value);
+                      return (
+                        <option key={slot.value} value={slot.value} disabled={ocupado}>
+                          {slot.label} {ocupado ? " (Ocupado para este inspector)" : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
               </div>
 
-              <div style={{ marginBottom: "12px" }}>
+              <div>
                 <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>Seleccionar Inspector Asignado (Máx 4/día) *</label>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", pointerEvents: paso5Completado ? "auto" : "none" }}>
                   {INSPECTORES_DEFAULT.map((insp) => {
                     const cupos = obtenerConteoInspectorEnFecha(insp.uid, fechaInspeccion);
                     const estaLleno = cupos >= 4;
@@ -926,6 +1173,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       <div
                         key={insp.uid}
                         onClick={() => {
+                          if (!paso5Completado) return;
                           if (estaLleno) {
                             alert(`⚠️ El inspector ${insp.nombre} ha completado el máximo de 4 inspecciones para el día ${fechaInspeccion}. Elija otro inspector.`);
                             return;
@@ -936,8 +1184,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           padding: "8px 10px",
                           borderRadius: "8px",
                           border: esSel ? "2px solid #16a34a" : estaLleno ? "1px solid #fca5a5" : "1px solid #cbd5e1",
-                          background: esSel ? "#f0fdf4" : estaLleno ? "#fef2f2" : "white",
-                          cursor: estaLleno ? "not-allowed" : "pointer",
+                          background: esSel ? "#f0fdf4" : estaLleno ? "#fef2f2" : !paso5Completado ? "#f1f5f9" : "white",
+                          cursor: !paso5Completado || estaLleno ? "not-allowed" : "pointer",
                           fontSize: "12.5px"
                         }}
                       >
@@ -951,49 +1199,39 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   })}
                 </div>
               </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Rango Horario de Inspección *</label>
-                <select
-                  value={slotInspeccion}
-                  onChange={(e) => setSlotInspeccion(e.target.value)}
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
-                >
-                  {TIME_SLOTS.map((slot) => {
-                    const ocupado = inspectorElegido && esHorarioOcupado(inspectorElegido.uid, fechaInspeccion, slot.value);
-                    return (
-                      <option key={slot.value} value={slot.value} disabled={ocupado}>
-                        {slot.label} {ocupado ? " (Ocupado para este inspector)" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
             </div>
 
-            <div style={{ textAlign: "right" }}>
+            {/* PASO 7: FINALIZAR Y REGISTRAR SOLICITUD */}
+            <div style={{ textAlign: "right", marginTop: "20px" }}>
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={procesando || !dniValidado || !rucValidado || !inspectorElegido}
+                disabled={procesando || !paso6Completado}
                 style={{
-                  background: (dniValidado && rucValidado && inspectorElegido) ? "#16a34a" : "#cbd5e1",
+                  background: paso6Completado ? "#16a34a" : "#cbd5e1",
                   color: "white",
-                  padding: "12px 24px",
-                  fontSize: "15px",
+                  padding: "14px 28px",
+                  fontSize: "15.5px",
                   fontWeight: "bold",
-                  cursor: (dniValidado && rucValidado && inspectorElegido) ? "pointer" : "not-allowed"
+                  cursor: paso6Completado ? "pointer" : "not-allowed",
+                  boxShadow: paso6Completado ? "0 4px 6px rgba(22, 163, 74, 0.25)" : "none"
                 }}
               >
                 {procesando
                   ? "Procesando Registro Presencial..."
-                  : !dniValidado
-                  ? "🔒 1. Valide DNI en RENIEC para continuar"
-                  : !rucValidado
-                  ? "🔒 2. Valide RUC en SUNAT para continuar"
-                  : !inspectorElegido
-                  ? "⚠️ 3. Seleccione un Inspector"
-                  : "🚀 Registrar, Cobrar y Asignar Inspección"}
+                  : !paso1Completado
+                  ? "🔒 Paso 1 Incompleto: Valide DNI en RENIEC"
+                  : !paso2Completado
+                  ? "🔒 Paso 2 Incompleto: Ingrese celular peruano e email"
+                  : !paso3Completado
+                  ? "🔒 Paso 3 Incompleto: Valide RUC en SUNAT"
+                  : !paso4Completado
+                  ? "🔒 Paso 4 Incompleto: Suba todos los documentos obligatorios"
+                  : !paso5Completado
+                  ? "🔒 Paso 5 Incompleto: Seleccione el método de pago"
+                  : !paso6Completado
+                  ? "🔒 Paso 6 Incompleto: Asigne inspector y fecha de visita"
+                  : "🚀 Registrar Solicitud y Finalizar Trámite"}
               </button>
             </div>
           </form>
