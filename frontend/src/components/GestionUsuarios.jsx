@@ -14,6 +14,7 @@ function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCar
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nombre: "", correo: "", password: "", rol: "cajero" });
+  const [mostrarPasswordModal, setMostrarPasswordModal] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [errorForm, setErrorForm] = useState("");
@@ -504,15 +505,45 @@ function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCar
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
                     Contraseña Inicial *
                   </label>
-                  <input
-                    type="password"
-                    placeholder="Mínimo 6 caracteres"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    required
-                    minLength={6}
-                    style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={mostrarPasswordModal ? "text" : "password"}
+                      placeholder="Mínimo 6 caracteres"
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      required
+                      minLength={6}
+                      style={{
+                        width: "100%",
+                        padding: "10px 42px 10px 14px",
+                        borderRadius: "8px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "14px",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMostrarPasswordModal(!mostrarPasswordModal)}
+                      title={mostrarPasswordModal ? "Ocultar contraseña" : "Ver contraseña"}
+                      style={{
+                        position: "absolute",
+                        right: "10px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "16px",
+                        padding: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        lineHeight: "1",
+                      }}
+                    >
+                      {mostrarPasswordModal ? "👁️" : "🙈"}
+                    </button>
+                  </div>
                 </div>
               )}
 

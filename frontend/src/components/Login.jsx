@@ -10,6 +10,7 @@ function Login({ onVolver, errorInicial = "" }) {
 
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
+  const [verPassword, setVerPassword] = useState(false);
   const [error, setError] = useState(errorInicial || "");
   const [cargando, setCargando] = useState(false);
 
@@ -179,15 +180,45 @@ function Login({ onVolver, errorInicial = "" }) {
 
                   <div>
                     <label style={inputLabel}>Contraseña *</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      minLength={6}
-                      style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px" }}
-                    />
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type={verPassword ? "text" : "password"}
+                        placeholder="••••••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        style={{
+                          width: "100%",
+                          padding: "12px 45px 12px 16px",
+                          borderRadius: "10px",
+                          border: "1.5px solid #cbd5e1",
+                          fontSize: "14.5px",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setVerPassword(!verPassword)}
+                        title={verPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                        style={{
+                          position: "absolute",
+                          right: "12px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: "18px",
+                          padding: "4px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          lineHeight: "1",
+                        }}
+                      >
+                        {verPassword ? "👁️" : "🙈"}
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ textAlign: "right", marginTop: "-4px" }}>
