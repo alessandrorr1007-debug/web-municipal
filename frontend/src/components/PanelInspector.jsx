@@ -122,24 +122,10 @@ function PanelInspector({ seccion }) {
   const solicitudesFiltradas = useMemo(() => {
     const listaBase = esHistorial ? inspeccionesFinalizadas : inspeccionesHoy;
 
-    return listaBase.filter((s) => {
-      // 1. Filtro por Estado
-      const est = (s.estado || "").toLowerCase();
-      if (filtroEstado === "pendiente_programar") {
-        if (s.fechaVisitaInspector) return false;
-      } else if (filtroEstado === "programada") {
-        if (!s.fechaVisitaInspector || est.includes("aprobado") || est.includes("rechazado")) return false;
-      } else if (filtroEstado === "aprobada") {
-        if (!est.includes("aprobado")) return false;
-      } else if (filtroEstado === "observada") {
-        if (!est.includes("observada")) return false;
-      } else if (filtroEstado === "rechazada") {
-        if (!est.includes("rechazado")) return false;
-      }
+    if (!busqueda.trim()) return listaBase;
 
-      // 2. Búsqueda por Código, DNI, RUC o Nombre
-      if (!busqueda.trim()) return true;
-      const q = busqueda.toLowerCase().trim();
+    const q = busqueda.toLowerCase().trim();
+    return listaBase.filter((s) => {
       const dni = (s.dniSolicitante || s.dni || "").toLowerCase();
       const idExp = (s.id || "").toLowerCase();
       const codExp = `exp-${idExp}`;
@@ -148,7 +134,7 @@ function PanelInspector({ seccion }) {
 
       return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
     });
-  }, [solicitudes, filtroEstado, busqueda, esHistorial, inspeccionesHoy, inspeccionesFinalizadas]);
+  }, [solicitudes, busqueda, esHistorial, inspeccionesHoy, inspeccionesFinalizadas]);
 
   // ABRIR MODAL DE ATENCIÓN DE INSPECCIÓN
   const abrirModalAtencion = (solicitud, tabInicial = "evaluacion") => {
@@ -398,26 +384,13 @@ function PanelInspector({ seccion }) {
             onChange={(e) => setBusqueda(e.target.value)}
             style={{ flex: 1, minWidth: "240px", padding: "12px 18px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px" }}
           />
-
-          <select
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value)}
-            style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold", background: "#f8fafc", color: "#1e293b", minWidth: "200px" }}
-          >
-            <option value="todos">📌 Todos los estados</option>
-            {!esHistorial && <option value="pendiente_programar">⏳ Pendientes de Programar</option>}
-            {!esHistorial && <option value="programada">📅 Programadas</option>}
-            <option value="aprobada">✅ Aprobadas</option>
-            <option value="observada">⚠️ Observadas / Subsanación</option>
-            <option value="rechazada">❌ Rechazadas</option>
-          </select>
         </div>
 
         {solicitudesFiltradas.length === 0 ? (
           <div className="empty-state">
             <div style={{ fontSize: "36px", marginBottom: "10px" }}>{esHistorial ? "📈" : "🔍"}</div>
-            <h3>{esHistorial ? "No se encontraron inspecciones atendidas" : "No se encontraron expedientes pendientes"}</h3>
-            <p>{esHistorial ? "Las inspecciones que evalúes y finalices aparecerán registradas en esta sección." : "Ajusta la búsqueda o el filtro de estado."}</p>
+            <h3>{esHistorial ? "No se encontraron inspecciones atendidas" : "No hay inspecciones programadas para hoy"}</h3>
+            <p>{esHistorial ? "Las inspecciones que evalúes y finalices aparecerán registradas en esta sección." : "Las inspecciones agendadas para la fecha actual aparecerán en esta lista."}</p>
           </div>
         ) : (
           <div className="tabla-container">
