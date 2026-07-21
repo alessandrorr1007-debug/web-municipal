@@ -1,115 +1,69 @@
 # Sistema Municipal de Licencias de Funcionamiento
 
-Aplicación web profesional de Licencias de Funcionamiento diseñada para la **Municipalidad de Trujillo**. Arquitectura SPA híbrida cliente-servidor con panel multi-rol, pagos en línea y gestión completa de expedientes.
+Aplicación web profesional para la gestión integral de **Licencias de Funcionamiento Municipal** diseñada para la **Municipalidad Provincial de Trujillo**.
+
+[![Estado del Despliegue](https://img.shields.io/badge/Despliegue-Render.com-green.svg)](https://webmunicipal.onrender.com)
+[![Licencia](https://img.shields.io/badge/Municipalidad-Trujillo-blue.svg)](#)
 
 ---
 
-## Arquitectura
+## 📄 Guía Completa de Funcionamiento
 
-```
-WebMunicipal/
-├── frontend/               React 19 + Vite 8
-│   ├── src/
-│   │   ├── components/     Paneles por rol, Login, Sidebar, etc.
-│   │   ├── config/         Estados, documentos, inspecciones
-│   │   ├── context/        AuthContext (Firebase Auth)
-│   │   ├── services/       API calls (auth, pagos, DNI/RUC, PDF, etc.)
-│   │   └── firebase.js     Configuración Firebase
-│   ├── index.html
-│   └── vite.config.js
-├── backend/                Express 5 + Node.js
-│   ├── server.js           API REST + SPA fallback
-│   ├── emailProvider.js    Wrapper Nodemailer (Gmail SMTP)
-│   └── scripts/
-│       └── setup-users.js  Seed de usuarios de prueba (Firebase Admin)
-├── render.yaml             Configuración de despliegue
-└── package.json            Scripts raíz (dev, build, start)
-```
+Para conocer a detalle el funcionamiento paso a paso de los roles **Administrador**, **Cajero** e **Inspector**, consulta el archivo de documentación oficial:
 
-## Stack Tecnológico
+👉 **[MANUAL_SISTEMA.md](MANUAL_SISTEMA.md)**
+
+---
+
+## 🏛️ Estructura y Roles del Sistema
+
+| Rol | Función Principal | Funcionalidades Clave |
+|-----|------------------|----------------------|
+| 🛡️ **Administrador** | Gestión de Usuarios y Seguridad | • Registro de cuentas para Cajeros e Inspectores.<br>• Protección de Rol Administrador (`🛡️ Protegido`).<br>• Inhabilitación / Activación de cuentas.<br>• Eliminación síncrona en Firestore y Firebase Auth.<br>• Control de Sesión Única Activa (`sessionStorage`). |
+| 💰 **Cajera Municipal** | Registro Presencial y Cobro de Tasa | • Validación obligatoria RENIEC (DNI 8 dígitos).<br>• Validación obligatoria SUNAT (RUC 11 dígitos, ACTIVO, HABIDO y Jurisdicción Trujillo).<br>• Carga de Plano PDF del Local Comercial.<br>• Cobro de Tasa Municipal (S/ 3.00) irreversible y emisión de Boleta.<br>• Asignación automática de fecha/horario e inspector (Máx 4/día).<br>• Notificación/Correo automático al ciudadano. |
+| 🔍 **Inspector Municipal** | Inspección Técnica y Dictamen | • Vista directa de **Inspecciones de Hoy**.<br>• Visibilidad de Celular y Correo del ciudadano.<br>• Dictamen técnico en terreno (**Aprobar** / **Desaprobar**).<br>• Carga de hasta 2 fotografías de evidencia.<br>• **Historial de Inspecciones Atendidas** con Buscador (DNI, RUC, Expediente) y Filtro por Dictamen (**Aprobadas** / **Desaprobadas**). |
+
+---
+
+## 🛠️ Stack Tecnológico
 
 | Capa | Tecnologías |
 |------|-------------|
-| Frontend | React 19, Vite 8, Vanilla CSS |
-| Backend | Express 5, Node.js, Axios |
-| Base de datos | Firebase Auth + Firestore |
-| Pagos | Flow (producción) + Caja Municipal (presencial) + Demo |
-| Documentos | DNI y RUC vía Decolecta (RENIEC/SUNAT) |
-| Correo | Nodemailer (Gmail SMTP) |
-| PDF | jsPDF + QRCode |
-| Despliegue | Render.com |
+| **Frontend** | React 19, Vite 8, Vanilla CSS |
+| **Backend** | Express 5, Node.js |
+| **Autenticación & BD** | Firebase Auth + Firebase Cloud Firestore |
+| **APIs Externas** | Decolecta API (RENIEC para DNI / SUNAT para RUC) |
+| **Notificaciones** | Nodemailer (Gmail SMTP) |
+| **Despliegue** | Render.com (SPA + Express REST API) |
 
 ---
 
-## Roles del Sistema
+## 🔑 Credenciales de Prueba
 
-### 1. Administrador (`medicitasapp01@gmail.com` / `admin321`)
-- Dashboard con métricas y gráficos globales
-- Gestión de usuarios (Cajeros, Funcionarios, Inspectores)
-- Gestión de roles
-- Configuración del sistema
-- Reportes consolidados
-- Auditoría de bitácora
-
-### 2. Cajero (`alessandropaul19@gmail.com` / `cajeroprueba`)
-- Creación de nuevas solicitudes (wizard multi-paso)
-- Búsqueda de trámites por DNI, correo o N° Expediente
-- Validación SUNAT (estado y condición obligatorios)
-- Cobro de tasa (S/ 3.00) y generación de comprobante
-- 3 opciones de pago: Flow en línea, Caja presencial, Demo simulación
-
-### 3. Funcionario
-- Evaluación y revisión de expedientes pagados
-- Aprobación, observación o rechazo de solicitudes
-- Programación de inspecciones (fecha mínima: mañana, máximo 4/día por inspector)
-- Asignación automática de inspector y franja horaria
-
-### 4. Inspector (`arodriguezr1020@gmail.com` / `inspectorprueba`)
-- Panel de agenda del día con visitas programadas
-- Subida de hasta 2 evidencias fotográficas
-- Registro de resultado: Aprobado, Observado o No atendido
-- Regla de doble observación (2da observación = rechazo definitivo)
-
-### 5. Solicitante (Negocio / Contribuyente)
-- Registro validado por DNI
-- Creación de solicitudes con carga de documentos PDF
-- Selección de método de pago
-- Consulta de trámites y descarga de licencias (PDF + QR)
+| Rol | Correo Electrónico | Contraseña |
+|-----|-------------------|------------|
+| **Administrador** | `medicitasapp01@gmail.com` | `admin321` |
+| **Cajera** | `alessandropaul19@gmail.com` | `cajeroprueba` |
+| **Inspector** | `arodriguezr1020@gmail.com` | `inspectorprueba` |
 
 ---
 
-## Ciclo de Vida del Trámite
-
-```
-Registrado → Pendiente de pago → Pagado → En revisión → Inspección programada
-    → Inspección realizada → Aprobado → Licencia emitida
-    
-    En cualquier punto puede pasar a: Observado → Reprogramado → ...
-    O directamente a: Rechazado
-```
-
-**Estados:** Registrado, Pendiente de pago, Pagado, En revisión, Inspección programada, Inspección realizada, Observado, Reprogramado, Aprobado, Licencia emitida, Rechazado
-
----
-
-## Instalación y Ejecución Local
+## 💻 Ejecución Local
 
 ### Prerrequisitos
 - Node.js v18+
-- Cuenta de Firebase (Auth + Firestore)
+- Proyecto Firebase activo
 
-### 1. Instalar dependencias
+### 1. Instalación de Dependencias
 
 ```bash
-# Desde la raíz
+# Instala dependencias en frontend y backend
 npm run install:all
 ```
 
-Esto instala dependencias en `frontend/` y `backend/`.
+### 2. Variables de Entorno
 
-### 2. Configurar variables de entorno
-
-**`frontend/.env`** (ya creado con valores de ejemplo):
+**`frontend/.env`**:
 ```env
 VITE_FIREBASE_API_KEY=tu_api_key
 VITE_FIREBASE_AUTH_DOMAIN=tu_proyecto.firebaseapp.com
@@ -126,83 +80,25 @@ PORT=3000
 DECOLECTA_TOKEN=tu_token_decolecta
 SMTP_EMAIL=tu_correo_gmail
 SMTP_PASSWORD=tu_app_password_gmail
-FLOW_API_KEY=tu_api_key_flow
-FLOW_SECRET_KEY=tu_secret_key_flow
-FLOW_ENV=production
-PAYMENT_DEMO_ENABLED=true
 FRONTEND_URL=http://localhost:5173
 ```
 
-### 3. Crear usuarios de prueba (opcional)
-
-Descarga `firebase-service-account.json` desde Firebase Console → Project Settings → Service Accounts y guárdalo en `backend/`.
+### 3. Iniciar Servidores de Desarrollo
 
 ```bash
-npm run setup-users
-```
-
-Esto crea los 3 usuarios de prueba en Firebase Auth + Firestore.
-
-### 4. Levantar el sistema
-
-```bash
-# Frontend (terminal 1)
+# Terminal 1 - Frontend (Vite)
 cd frontend && npm run dev
 
-# Backend (terminal 2)
-cd backend && npm run start   # o desde raíz: npm start
-```
-
-- Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:3000`
-
-### 5. Build para producción
-
-```bash
-npm run build    # Compila frontend/ → frontend/dist/
-npm start        # Inicia backend que sirve frontend/dist/
+# Terminal 2 - Backend (Express)
+cd backend && npm run start
 ```
 
 ---
 
-## Despliegue en Render
+## 🚀 Despliegue en Render
 
-El archivo `render.yaml` configura automáticamente:
-- **Build:** `cd frontend && npm install && npm run build && cd ../backend && npm install`
-- **Start:** `node backend/server.js`
+El repositorio está listo para despliegue continuo en **Render.com** mediante `render.yaml`:
+- **Build Command:** `cd frontend && npm install && npm run build && cd ../backend && npm install`
+- **Start Command:** `node backend/server.js`
 
-El backend sirve los archivos estáticos de `frontend/dist/` y maneja el SPA fallback.
-
----
-
-## APIs Externas
-
-| Servicio | Uso | Endpoint Backend |
-|----------|-----|------------------|
-| Decolecta | Consulta DNI (RENIEC) | `/api/consultar-dni/:numero` |
-| Decolecta | Consulta RUC (SUNAT) | `/api/consultar-ruc/:numero` |
-| Flow | Crear orden de pago | `/api/pagos/crear-orden` |
-| Flow | Verificar pago | `/api/pagos/verificar/:token` |
-| Flow | Callback webhook | `/api/pagos/flow/callback` |
-
----
-
-## Usuarios de Prueba
-
-| Rol | Email | Contraseña |
-|-----|-------|------------|
-| Cajero | `alessandropaul19@gmail.com` | `cajeroprueba` |
-| Inspector | `arodriguezr1020@gmail.com` | `inspectorprueba` |
-| Administrador | `medicitasapp01@gmail.com` | `admin321` |
-
----
-
-## Comandos Disponibles
-
-| Comando | Descripción |
-|---------|-------------|
-| `npm run dev` | Frontend en modo desarrollo (Vite) |
-| `npm run build` | Compilar frontend para producción |
-| `npm start` | Iniciar backend en producción |
-| `npm run setup-users` | Crear usuarios de prueba en Firebase |
-| `npm run install:all` | Instalar dependencias de frontend + backend |
+El servidor Express sirve los activos estáticos del frontend desde `frontend/dist` con soporte para enrutamiento SPA.
