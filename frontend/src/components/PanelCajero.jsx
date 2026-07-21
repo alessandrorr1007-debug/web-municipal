@@ -464,17 +464,27 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     return isNaN(d.getTime()) ? null : d;
   }, []);
 
+  const obtenerFechaHoyStr = useCallback(() => {
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, "0");
+    const d = String(hoy.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
+
   // BUSQUEDA Y FILTRADO POR CÓDIGO, DNI, RUC, NOMBRE Y RANGO DE FECHAS DE PAGO
   const solicitudesFiltradas = useMemo(() => {
     const lista = Array.isArray(solicitudes) ? solicitudes : [];
+    const hoyStr = obtenerFechaHoyStr();
+
     return lista.filter((s) => {
       if (!s) return false;
 
       // 1. Filtro por Rango de Fechas de Pago (solo si se especifican fechas)
       if (seccion === "historial") {
         if (fechaDesde || fechaHasta) {
-          if (fechaDesde && fechaDesde < "2026-07-14") return false;
-          if (fechaHasta && fechaHasta < "2026-07-14") return false;
+          if (fechaDesde && (fechaDesde < "2026-07-14" || fechaDesde > hoyStr)) return false;
+          if (fechaHasta && (fechaHasta < "2026-07-14" || fechaHasta > hoyStr)) return false;
           if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) return false;
 
           const fechaPagoObj = obtenerFechaPagoObj(s);
@@ -503,11 +513,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const codExp = `exp-${idExp}`;
       const ruc = String(s.ruc || "").toLowerCase();
       const razonSocial = String(s.razonSocial || "").toLowerCase();
-      const nombreSol = String([s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante, s.nombreNegocio].filter(Boolean).join(" ")).toLowerCase();
-
       return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q) || razonSocial.includes(q);
     });
-  }, [solicitudes, seccion, fechaDesde, fechaHasta, busqueda, obtenerFechaPagoObj]);
+  }, [solicitudes, seccion, fechaDesde, fechaHasta, busqueda, obtenerFechaPagoObj, obtenerFechaHoyStr]);
 
   // CONFIRMAR PAGO Y PROGRAMAR INSPECCIÓN OFICIAL
   const ejecutarCobro = async () => {
@@ -1571,17 +1579,30 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   <input
                     type="date"
                     min="2026-07-14"
+                    max={obtenerFechaHoyStr()}
                     value={fechaDesde}
                     onChange={(e) => {
                       const val = e.target.value;
+                      const hoyStr = obtenerFechaHoyStr();
                       if (val && val < "2026-07-14") {
                         alert("⚠️ No existen registros anteriores al 14/07/2026.");
                         setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
                         setFechaDesde("2026-07-14");
                         return;
                       }
+                      if (val && val > hoyStr) {
+                        alert("⚠️ No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
+                        setErrorFechaRange("No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
+                        setFechaDesde(hoyStr);
+                        return;
+                      }
+                      if (val && fechaHasta && val > fechaHasta) {
+                        alert("⚠️ La fecha inicial no puede ser mayor que la fecha final.");
+                        setErrorFechaRange("La fecha inicial no puede ser mayor que la fecha final.");
+                      } else {
+                        setErrorFechaRange("");
+                      }
                       setFechaDesde(val);
-                      setErrorFechaRange("");
                     }}
                     style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
                   />
@@ -1593,18 +1614,32 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </label>
                   <input
                     type="date"
-                    min="2026-07-14"
+                    min={fechaDesde || "2026-07-14"}
+                    max={obtenerFechaHoyStr()}
                     value={fechaHasta}
                     onChange={(e) => {
                       const val = e.target.value;
+                      const hoyStr = obtenerFechaHoyStr();
                       if (val && val < "2026-07-14") {
                         alert("⚠️ No existen registros anteriores al 14/07/2026.");
                         setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
                         setFechaHasta("2026-07-14");
                         return;
                       }
-                      setFechaHasta(val);
+                      if (val && val > hoyStr) {
+                        alert("⚠️ No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
+                        setErrorFechaRange("No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
+                        setFechaHasta(hoyStr);
+                        return;
+                      }
+                      if (val && fechaDesde && val < fechaDesde) {
+                        alert("⚠️ La fecha final no puede ser menor que la fecha inicial.");
+                        setErrorFechaRange("La fecha final no puede ser menor que la fecha inicial.");
+                        setFechaHasta(fechaDesde);
+                        return;
+                      }
                       setErrorFechaRange("");
+                      setFechaHasta(val);
                     }}
                     style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
                   />
@@ -1613,6 +1648,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 <button
                   type="button"
                   onClick={() => {
+                    const hoyStr = obtenerFechaHoyStr();
                     if (fechaDesde && fechaDesde < "2026-07-14") {
                       alert("⚠️ No existen registros anteriores al 14/07/2026.");
                       setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
@@ -1621,6 +1657,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     if (fechaHasta && fechaHasta < "2026-07-14") {
                       alert("⚠️ No existen registros anteriores al 14/07/2026.");
                       setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
+                      return;
+                    }
+                    if ((fechaDesde && fechaDesde > hoyStr) || (fechaHasta && fechaHasta > hoyStr)) {
+                      alert("⚠️ No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
+                      setErrorFechaRange("No es posible seleccionar fechas futuras. Seleccione una fecha hasta el día de hoy.");
                       return;
                     }
                     if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
