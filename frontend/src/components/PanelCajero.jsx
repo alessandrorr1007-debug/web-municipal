@@ -703,8 +703,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         ],
       };
 
-      const idGenerado = await guardarSolicitud(nuevaSolicitudPresencial);
-      const solicitudCompleta = { ...nuevaSolicitudPresencial, id: idGenerado || idExp };
+      const resGuardado = await guardarSolicitud(nuevaSolicitudPresencial);
+      const idReal = typeof resGuardado === "object" ? String(resGuardado.id || idExp) : String(resGuardado || idExp);
+      const solicitudCompleta = { ...nuevaSolicitudPresencial, id: idReal };
 
       if (correoForm) {
         await crearNotificacion(
