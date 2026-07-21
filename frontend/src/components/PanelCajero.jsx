@@ -14,13 +14,57 @@ import {
   TIME_SLOTS,
   formatearFechaLocal,
   esHorarioPasado,
+  MENSAJE_FECHA_INSPECCION,
+  obtenerFechaMinimaInspeccion,
 } from "../config/inspeccionConfig";
 
 const MONTO_TRAMITE = 3.0;
 
 const INSPECTORES_DEFAULT = [
-  { uid: "INSP-001", nombre: "Inspector Carlos Ramírez", correo: "inspector@munitrujillo.gob.pe", cargo: "Inspector Municipal de Seguridad Edil" },
+  { uid: "INSP-001", nombre: "Inspector Carlos Ramírez", correo: "carlos.ramirez@munitrujillo.gob.pe", cargo: "Inspector Municipal de Defensa Civil" },
+  { uid: "INSP-002", nombre: "Inspectora Ana Torres", correo: "ana.torres@munitrujillo.gob.pe", cargo: "Inspectora de Licencias y Subgerencia" },
+  { uid: "INSP-003", nombre: "Inspector Luis Pérez", correo: "luis.perez@munitrujillo.gob.pe", cargo: "Inspector Técnico Edilicio" },
 ];
+
+const obtenerFechaMananaObj = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d;
+};
+
+const formatearFechaDDMMYYYY = (d) => {
+  const dia = String(d.getDate()).padStart(2, "0");
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const anio = d.getFullYear();
+  return `${dia}/${mes}/${anio}`;
+};
+
+const formatearFechaYYYYMMDD = (d) => {
+  const dia = String(d.getDate()).padStart(2, "0");
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const anio = d.getFullYear();
+  return `${anio}-${mes}-${dia}`;
+};
+
+const esFechaPermitidaInspeccion = (fechaStr) => {
+  if (!fechaStr) return false;
+  let fechaObj;
+  if (fechaStr.includes("-")) {
+    const [y, m, d] = fechaStr.split("-").map(Number);
+    fechaObj = new Date(y, m - 1, d);
+  } else if (fechaStr.includes("/")) {
+    const [d, m, y] = fechaStr.split("/").map(Number);
+    fechaObj = new Date(y, m - 1, d);
+  } else {
+    fechaObj = new Date(fechaStr);
+  }
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  fechaObj.setHours(0, 0, 0, 0);
+
+  return fechaObj > hoy;
+};
 
 function PanelCajero({ seccion, cambiarSeccion }) {
   const { usuario } = useAuth();
@@ -45,9 +89,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     }
   }, [seccion]);
 
-  // ESTADOS DE ASIGNACIÓN E INSPECCIÓN DIRECTA
-  const [inspectorElegido, setInspectorElegido] = useState(null);
-  const [fechaInspeccion, setFechaInspeccion] = useState(formatearFechaLocal(new Date()));
+  // ESTADOS DE ASIGNACIÓN E INSPECCIÓN DIRECTA (DESDE MAÑANA COMO MÍNIMO)
+  const [inspectorElegido, setInspectorElegido] = useState(() => INSPECTORES_DEFAULT[0]);
+  const [fechaInspeccion, setFechaInspeccion] = useState(() => formatearFechaDDMMYYYY(obtenerFechaMananaObj()));
   const [slotInspeccion, setSlotInspeccion] = useState("08:00");
 
   // ESTADOS PARA REGISTRO PRESENCIAL DE NUEVA SOLICITUD (WIZARD DE PASO ÚNICO ACTIVO)
@@ -71,7 +115,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
   // ESTADOS DE VALIDACIÓN REAL RENIEC Y SUNAT
   const [dniValidado, setDniValidado] = useState(false);
+  const [rucValidado, setRucValidado] = useState(false);
   // ESTADOS DE UBICACIÓN Y JURISDICCIÓN SUNAT
+  const [estadoSunat, setEstadoSunat] = useState("");
+  const [condicionSunat, setCondicionSunat] = useState("");
   const [distritoSunat, setDistritoSunat] = useState("");
   const [provinciaSunat, setProvinciaSunat] = useState("");
   const [departamentoSunat, setDepartamentoSunat] = useState("");
@@ -224,6 +271,33 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     });
   }, [solicitudes]);
 
+  // PROGRAMACIÓN AUTOMÁTICA Y SUGERENCIA DE INSPECTOR/HORARIO CUANDO CAMBIA LA FECHA
+  useEffect(() => {
+    if (!fechaInspeccion || !esFechaPermitidaInspeccion(fechaInspeccion)) return;
+
+    // Buscar primer inspector disponible (< 4 cupos)
+    const primerDisponible = INSPECTORES_DEFAULT.find((insp) => {
+      const c = obtenerConteoInspectorEnFecha(insp.uid, fechaInspeccion);
+      return c < 4;
+    }) || INSPECTORES_DEFAULT[0];
+
+    let actualInsp = inspectorElegido;
+    if (!actualInsp || obtenerConteoInspectorEnFecha(actualInsp.uid, fechaInspeccion) >= 4) {
+      actualInsp = primerDisponible;
+      setInspectorElegido(primerDisponible);
+    }
+
+    if (actualInsp) {
+      // Buscar primer horario libre
+      const primerSlotLibre = TIME_SLOTS.find(
+        (s) => !esHorarioOcupado(actualInsp.uid, fechaInspeccion, s.value)
+      );
+      if (primerSlotLibre) {
+        setSlotInspeccion(primerSlotLibre.value);
+      }
+    }
+  }, [fechaInspeccion, solicitudes, obtenerConteoInspectorEnFecha, esHorarioOcupado]);
+
   const cargarSolicitudes = async () => {
     try {
       setCargando(true);
@@ -299,7 +373,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const paso2Completado = paso1Completado && esTelefonoValido && esCorreoValido;
 
   // Paso 3: Validación SUNAT
-  const paso3Completado = paso2Completado && rucValidado && Boolean(nombreNegocioForm) && Boolean(direccionForm);
+  const sunatPermiteContinuar = rucValidado && estadoSunat === "ACTIVO" && condicionSunat === "HABIDO";
+  const paso3Completado = paso2Completado && sunatPermiteContinuar && Boolean(nombreNegocioForm) && Boolean(direccionForm);
 
   // Paso 4: Carga de Documentos Obligatorios por Giro
   const reqsDocInfo = obtenerDocumentosPorGiro(giroForm);
@@ -1008,12 +1083,22 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             🏢 Información del Contribuyente (SUNAT)
                           </h4>
                           <div style={{ display: "flex", gap: "8px" }}>
-                            <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                              ✓ {estadoSunat || "ACTIVO"}
-                            </span>
-                            <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                              ✓ {condicionSunat || "HABIDO"}
-                            </span>
+                            {(() => {
+                              const esActivo = estadoSunat === "ACTIVO";
+                              return (
+                                <span style={{ background: esActivo ? "#dcfce7" : "#fee2e2", color: esActivo ? "#15803d" : "#dc2626", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                                  {esActivo ? "✓" : "✗"} {estadoSunat}
+                                </span>
+                              );
+                            })()}
+                            {(() => {
+                              const esHabido = condicionSunat === "HABIDO";
+                              return (
+                                <span style={{ background: esHabido ? "#dcfce7" : "#fee2e2", color: esHabido ? "#15803d" : "#dc2626", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
+                                  {esHabido ? "✓" : "✗"} {condicionSunat}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -1031,10 +1116,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             <strong>Actividad Económica:</strong> <span style={{ color: "#0f172a", fontWeight: "600" }}>{actividadEconomicaSunat || reqsDocInfo.giroLabel}</span>
                           </p>
                           <p style={{ margin: 0, fontSize: "13.5px", color: "#334155" }}>
-                            <strong>Estado del Contribuyente:</strong> <span style={{ color: "#15803d", fontWeight: "700" }}>{estadoSunat || "ACTIVO"}</span>
+                            <strong>Estado del Contribuyente:</strong> <span style={{ color: estadoSunat === "ACTIVO" ? "#15803d" : "#dc2626", fontWeight: "700" }}>{estadoSunat || "---"}</span>
                           </p>
                           <p style={{ margin: 0, fontSize: "13.5px", color: "#334155" }}>
-                            <strong>Condición del Contribuyente:</strong> <span style={{ color: "#15803d", fontWeight: "700" }}>{condicionSunat || "HABIDO"}</span>
+                            <strong>Condición del Contribuyente:</strong> <span style={{ color: condicionSunat === "HABIDO" ? "#15803d" : "#dc2626", fontWeight: "700" }}>{condicionSunat || "---"}</span>
                           </p>
                         </div>
 
@@ -1055,6 +1140,34 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             </p>
                             <p style={{ margin: 0, fontSize: "13px", color: "#334155" }}>
                               <strong>📍 Departamento:</strong> {departamentoSunat}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ALERTA DE RECHAZO POR ESTADO/CONDICIÓN SUNAT NO VÁLIDA - PASO 3 */}
+                    {rucValidado && !sunatPermiteContinuar && (
+                      <div style={{ background: "#fef2f2", border: "1.5px solid #dc2626", color: "#991b1b", padding: "16px 20px", borderRadius: "14px", marginTop: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                          <span style={{ fontSize: "20px", lineHeight: "1" }}>🚫</span>
+                          <div>
+                            <strong style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>
+                              Establecimiento NO puede continuar con el trámite
+                            </strong>
+                            <p style={{ margin: "0 0 8px", fontSize: "13px", lineHeight: "1.5" }}>
+                              SUNAT ha registrado una condición que impide el inicio de este procedimiento administrativo:
+                            </p>
+                            <ul style={{ margin: "0 0 8px", paddingLeft: "20px", fontSize: "12.5px", lineHeight: "1.6" }}>
+                              {estadoSunat !== "ACTIVO" && (
+                                <li><strong>Estado del Contribuyente:</strong> <span style={{ color: "#dc2626", fontWeight: "700" }}>{estadoSunat}</span> — Se requiere <span style={{ fontWeight: "700" }}>ACTIVO</span></li>
+                              )}
+                              {condicionSunat !== "HABIDO" && (
+                                <li><strong>Condición del Contribuyente:</strong> <span style={{ color: "#dc2626", fontWeight: "700" }}>{condicionSunat}</span> — Se requiere <span style={{ fontWeight: "700" }}>HABIDO</span></li>
+                              )}
+                            </ul>
+                            <p style={{ margin: 0, fontSize: "12px", color: "#991b1b", fontStyle: "italic" }}>
+                              El contribuyente debe regularizar su situación ante SUNAT antes de iniciar cualquier trámite municipal.
                             </p>
                           </div>
                         </div>
@@ -1148,33 +1261,60 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
                 {/* PASO 6: INSPECCIÓN */}
                 {pasoActual === 6 && (
-                  <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+                  <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1.5px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
                     <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>📅 Programación de Inspección Técnica</h4>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
                       <div>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>Fecha de Inspección (DD/MM/YYYY) *</label>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                          📅 Fecha de Inspección (Mínimo a partir de mañana) *
+                        </label>
                         <input
-                          type="text"
-                          placeholder="DD/MM/YYYY"
-                          value={fechaInspeccion}
-                          onChange={(e) => setFechaInspeccion(e.target.value)}
-                          style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px", fontWeight: "700" }}
+                          type="date"
+                          min={formatearFechaYYYYMMDD(obtenerFechaMananaObj())}
+                          value={
+                            fechaInspeccion.includes("/")
+                              ? fechaInspeccion.split("/").reverse().join("-")
+                              : fechaInspeccion
+                          }
+                          onChange={(e) => {
+                            const valYMD = e.target.value;
+                            if (!valYMD) return;
+                            const [y, m, d] = valYMD.split("-");
+                            setFechaInspeccion(`${d}/${m}/${y}`);
+                          }}
+                          style={{
+                            width: "100%",
+                            padding: "12px 16px",
+                            borderRadius: "10px",
+                            border: !esFechaPermitidaInspeccion(fechaInspeccion) ? "1.5px solid #dc2626" : "1.5px solid #cbd5e1",
+                            fontSize: "14.5px",
+                            fontWeight: "700",
+                            background: "white"
+                          }}
                         />
+                        {!esFechaPermitidaInspeccion(fechaInspeccion) && (
+                          <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "10px 14px", borderRadius: "10px", marginTop: "8px", fontSize: "12.5px" }}>
+                            ⚠️ <strong>Fecha no permitida:</strong> Las inspecciones deben programarse con al menos un día de anticipación. Seleccione una fecha a partir de mañana.
+                          </div>
+                        )}
                       </div>
 
                       <div>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>Rango Horario de Inspección *</label>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                          ⏰ Rango Horario Disponible para Inspector *
+                        </label>
                         <select
                           value={slotInspeccion}
+                          disabled={!esFechaPermitidaInspeccion(fechaInspeccion)}
                           onChange={(e) => setSlotInspeccion(e.target.value)}
-                          style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px" }}
+                          style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px", fontWeight: "700" }}
                         >
                           {TIME_SLOTS.map((slot) => {
                             const ocupado = inspectorElegido && esHorarioOcupado(inspectorElegido.uid, fechaInspeccion, slot.value);
                             return (
                               <option key={slot.value} value={slot.value} disabled={ocupado}>
-                                {slot.label} {ocupado ? " (Ocupado para este inspector)" : ""}
+                                {slot.label} {ocupado ? "❌ Ocupado" : "✅ Disponible"}
                               </option>
                             );
                           })}
@@ -1183,44 +1323,52 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     </div>
 
                     <div>
-                      <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "10px" }}>Seleccione Inspector Municipal Disponible *</label>
-                      <div style={{ display: "grid", gap: "10px" }}>
-                        {INSPECTORES_DEFAULT.map((insp) => {
-                          const cupos = obtenerConteoInspectorEnFecha(insp.uid, fechaInspeccion);
-                          const estaLleno = cupos >= 4;
-                          const esSel = inspectorElegido?.uid === insp.uid;
-                          return (
-                            <div
-                              key={insp.uid}
-                              onClick={() => {
-                                if (estaLleno) {
-                                  alert(`⚠️ El inspector ${insp.nombre} ha completado el máximo de 4 inspecciones.`);
-                                  return;
-                                }
-                                setInspectorElegido(insp);
-                              }}
-                              style={{
-                                padding: "14px 18px",
-                                borderRadius: "12px",
-                                border: esSel ? "2px solid #16a34a" : estaLleno ? "1px solid #fca5a5" : "1.5px solid #cbd5e1",
-                                background: esSel ? "#f0fdf4" : estaLleno ? "#fef2f2" : "white",
-                                cursor: estaLleno ? "not-allowed" : "pointer",
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center"
-                              }}
-                            >
+                      <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "10px" }}>
+                        👷‍♂️ Inspector Municipal Asignado (Máx 4 por día)
+                      </label>
+                      {inspectorElegido ? (() => {
+                        const cupos = obtenerConteoInspectorEnFecha(inspectorElegido.uid, fechaInspeccion);
+                        const estaLleno = cupos >= 4;
+                        return (
+                          <div style={{
+                            padding: "16px 20px", borderRadius: "12px",
+                            border: estaLleno ? "2px solid #fca5a5" : "2px solid #16a34a",
+                            background: estaLleno ? "#fef2f2" : "#f0fdf4",
+                            boxShadow: estaLleno ? "none" : "0 2px 8px rgba(22, 163, 74, 0.12)"
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                               <div>
-                                <strong style={{ color: esSel ? "#166534" : "#0f172a", fontSize: "14.5px" }}>{insp.nombre} {esSel && "✓"}</strong>
-                                <span style={{ display: "block", fontSize: "12px", color: "#64748b" }}>{insp.cargo}</span>
+                                <strong style={{ color: estaLleno ? "#991b1b" : "#166534", fontSize: "15px" }}>
+                                  {inspectorElegido.nombre}
+                                </strong>
+                                <span style={{ display: "block", fontSize: "12.5px", color: "#64748b", marginTop: "2px" }}>
+                                  {inspectorElegido.cargo}
+                                </span>
                               </div>
-                              <span style={{ background: estaLleno ? "#fee2e2" : "#dcfce7", color: estaLleno ? "#dc2626" : "#15803d", padding: "4px 12px", borderRadius: "20px", fontSize: "12.5px", fontWeight: "bold" }}>
-                                {estaLleno ? "🔴 Completo (4 de 4)" : `🟢 Disponible (${cupos} de 4)`}
+                              <span style={{
+                                padding: "5px 14px", borderRadius: "20px", fontSize: "12.5px", fontWeight: "800",
+                                background: estaLleno ? "#fee2e2" : "#dcfce7",
+                                color: estaLleno ? "#dc2626" : "#15803d",
+                                border: `1.5px solid ${estaLleno ? "#fca5a5" : "#bbf7d0"}`
+                              }}>
+                                {estaLleno ? "🔴 No disponible" : "🟢 Disponible"}
                               </span>
                             </div>
-                          );
-                        })}
-                      </div>
+                            <span style={{ fontSize: "13px", color: estaLleno ? "#991b1b" : "#15803d", fontWeight: "600" }}>
+                              Inspecciones programadas: {cupos}/4
+                            </span>
+                          </div>
+                        );
+                      })() : (
+                        <div style={{
+                          padding: "16px 20px", borderRadius: "12px", border: "1.5px solid #fca5a5",
+                          background: "#fef2f2", textAlign: "center"
+                        }}>
+                          <span style={{ color: "#991b1b", fontWeight: "700", fontSize: "14px" }}>
+                            ⚠️ No hay inspectores disponibles para esta fecha. Seleccione otra fecha.
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1297,6 +1445,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             alert("Este establecimiento no pertenece a la jurisdicción de la Municipalidad Provincial de Trujillo. Solo es posible registrar solicitudes para establecimientos ubicados en la provincia de Trujillo.");
                             return;
                           }
+                          if (!sunatPermiteContinuar) {
+                            alert(`🚫 No es posible continuar con el trámite.\n\nEl contribuyente tiene:\n• Estado: ${estadoSunat} (se requiere ACTIVO)\n• Condición: ${condicionSunat} (se requiere HABIDO)\n\nEl contribuyente debe regularizar su situación ante SUNAT.`);
+                            return;
+                          }
                         }
                         if (pasoActual === 4 && !paso4Completado) {
                           alert("⚠️ Debe adjuntar el archivo PDF del Plano del Local.");
@@ -1306,9 +1458,24 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           alert("⚠️ Debe seleccionar el método de pago y confirmar.");
                           return;
                         }
-                        if (pasoActual === 6 && !paso6Completado) {
-                          alert("⚠️ Debe seleccionar un inspector disponible para la visita.");
-                          return;
+                        if (pasoActual === 6) {
+                          if (!esFechaPermitidaInspeccion(fechaInspeccion)) {
+                            alert("Las inspecciones deben programarse con al menos un día de anticipación. Seleccione una fecha a partir de mañana.");
+                            return;
+                          }
+                          if (!inspectorElegido) {
+                            alert("⚠️ Seleccione un inspector municipal para la visita.");
+                            return;
+                          }
+                          const c = obtenerConteoInspectorEnFecha(inspectorElegido.uid, fechaInspeccion);
+                          if (c >= 4) {
+                            alert(`⚠️ El inspector ${inspectorElegido.nombre} ha alcanzado el límite máximo de 4 inspecciones programadas para el día ${fechaInspeccion}. Seleccione otro inspector.`);
+                            return;
+                          }
+                          if (esHorarioOcupado(inspectorElegido.uid, fechaInspeccion, slotInspeccion)) {
+                            alert("⚠️ El horario seleccionado ya está ocupado para este inspector. Seleccione otro horario.");
+                            return;
+                          }
                         }
                         setPasoActual((prev) => Math.min(7, prev + 1));
                       }}
@@ -1605,70 +1772,71 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
                 <div style={{ marginBottom: "12px" }}>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>
-                    Fecha de la Inspección (DD/MM/YYYY) *
+                    Fecha de la Inspección (Mínimo mañana) *
                   </label>
                   <input
-                    type="text"
-                    placeholder="DD/MM/YYYY"
-                    value={fechaInspeccion}
-                    onChange={(e) => setFechaInspeccion(e.target.value)}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
+                    type="date"
+                    min={formatearFechaYYYYMMDD(obtenerFechaMananaObj())}
+                    value={
+                      fechaInspeccion.includes("/")
+                        ? fechaInspeccion.split("/").reverse().join("-")
+                        : fechaInspeccion
+                    }
+                    onChange={(e) => {
+                      const valYMD = e.target.value;
+                      if (!valYMD) return;
+                      const [y, m, d] = valYMD.split("-");
+                      setFechaInspeccion(`${d}/${m}/${y}`);
+                    }}
+                    style={{
+                      width: "100%", padding: "8px 12px", borderRadius: "8px",
+                      border: fechaInspeccion && !esFechaPermitidaInspeccion(fechaInspeccion) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
+                      fontSize: "13.5px", fontWeight: "bold"
+                    }}
                   />
+                  {fechaInspeccion && !esFechaPermitidaInspeccion(fechaInspeccion) && (
+                    <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "8px 12px", borderRadius: "8px", marginTop: "6px", fontSize: "11.5px" }}>
+                      ⚠️ {MENSAJE_FECHA_INSPECCION}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ marginBottom: "12px" }}>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                    Seleccionar Inspector Asignado (Máx 4/día) *
+                    👷 Inspector Municipal Asignado (Máx 4/día)
                   </label>
-
-                  <div style={{ display: "grid", gap: "8px" }}>
-                    {INSPECTORES_DEFAULT.map((insp) => {
-                      const cupos = obtenerConteoInspectorEnFecha(insp.uid, fechaInspeccion);
-                      const estaLleno = cupos >= 4;
-                      const esSel = inspectorElegido?.uid === insp.uid;
-
-                      return (
-                        <div
-                          key={insp.uid}
-                          onClick={() => {
-                            if (estaLleno) {
-                              alert(`⚠️ El inspector ${insp.nombre} ha completado el máximo de 4 inspecciones para el día ${fechaInspeccion}. Elija otro inspector.`);
-                              return;
-                            }
-                            setInspectorElegido(insp);
-                          }}
-                          style={{
-                            display: "flex",
-                            justify: "space-between",
-                            alignItems: "center",
-                            padding: "10px 12px",
-                            borderRadius: "8px",
-                            border: esSel ? "2px solid #16a34a" : estaLleno ? "1px solid #fca5a5" : "1px solid #cbd5e1",
-                            background: esSel ? "#f0fdf4" : estaLleno ? "#fef2f2" : "white",
-                            cursor: estaLleno ? "not-allowed" : "pointer",
-                            fontSize: "13px"
-                          }}
-                        >
+                  {inspectorElegido ? (() => {
+                    const cupos = obtenerConteoInspectorEnFecha(inspectorElegido.uid, fechaInspeccion);
+                    const estaLleno = cupos >= 4;
+                    return (
+                      <div style={{
+                        padding: "12px 14px", borderRadius: "10px",
+                        border: estaLleno ? "1.5px solid #fca5a5" : "1.5px solid #16a34a",
+                        background: estaLleno ? "#fef2f2" : "#f0fdf4",
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <div>
-                            <strong style={{ color: esSel ? "#166534" : "#1e293b" }}>{insp.nombre} {esSel && "✓"}</strong>
-                            <div style={{ fontSize: "11.5px", color: "#64748b" }}>{insp.cargo}</div>
+                            <strong style={{ color: estaLleno ? "#991b1b" : "#166534", fontSize: "13.5px" }}>{inspectorElegido.nombre}</strong>
+                            <span style={{ display: "block", fontSize: "11.5px", color: "#64748b" }}>{inspectorElegido.cargo}</span>
                           </div>
-                          <span
-                            style={{
-                              fontSize: "11.5px",
-                              fontWeight: "bold",
-                              padding: "3px 8px",
-                              borderRadius: "4px",
-                              background: estaLleno ? "#fee2e2" : "#dcfce7",
-                              color: estaLleno ? "#dc2626" : "#15803d"
-                            }}
-                          >
-                            {estaLleno ? "🔴 4/4 Lleno" : `🟢 ${cupos}/4 Cupos`}
+                          <span style={{
+                            padding: "3px 10px", borderRadius: "14px", fontSize: "11.5px", fontWeight: "800",
+                            background: estaLleno ? "#fee2e2" : "#dcfce7",
+                            color: estaLleno ? "#dc2626" : "#15803d",
+                          }}>
+                            {estaLleno ? "🔴 No disponible" : "🟢 Disponible"}
                           </span>
                         </div>
-                      );
-                    })}
-                  </div>
+                        <span style={{ fontSize: "12px", color: estaLleno ? "#991b1b" : "#15803d", fontWeight: "600", marginTop: "4px", display: "block" }}>
+                          Inspecciones: {cupos}/4
+                        </span>
+                      </div>
+                    );
+                  })() : (
+                    <div style={{ padding: "12px 14px", borderRadius: "10px", border: "1.5px solid #fca5a5", background: "#fef2f2", textAlign: "center" }}>
+                      <span style={{ color: "#991b1b", fontWeight: "700", fontSize: "13px" }}>⚠️ No hay inspectores disponibles para esta fecha.</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -1878,7 +2046,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                   <h4 style={{ margin: 0, color: "#166534", fontSize: "14.5px" }}>🏢 2. Establecimiento Comercial (Consulta SUNAT Obligatoria)</h4>
                   <span style={{ background: rucValidado ? "#dcfce7" : "#fef3c7", color: rucValidado ? "#15803d" : "#b45309", padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" }}>
-                    {rucValidado ? `✓ SUNAT Validado (${estadoSunat || "ACTIVO"} - ${condicionSunat || "HABIDO"})` : "🔒 Consulta SUNAT Requerida"}
+                    {rucValidado
+                      ? `✓ SUNAT: ${estadoSunat || "?"} / ${condicionSunat || "?"} ${sunatPermiteContinuar ? "(Válido)" : "(NO cumple)"}`
+                      : "🔒 Consulta SUNAT Requerida"}
                   </span>
                 </div>
 
@@ -1974,8 +2144,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       type="text"
                       readOnly
                       placeholder="🔒 Se autocompleta consultando SUNAT"
-                      value={estadoSunat ? `✓ ${estadoSunat}` : ""}
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#15803d" }}
+                      value={estadoSunat ? `${estadoSunat === "ACTIVO" ? "✓" : "✗"} ${estadoSunat}` : ""}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: estadoSunat === "ACTIVO" ? "#15803d" : "#dc2626" }}
                     />
                   </div>
                   <div>
@@ -1984,8 +2154,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       type="text"
                       readOnly
                       placeholder="🔒 Se autocompleta consultando SUNAT"
-                      value={condicionSunat ? `✓ ${condicionSunat}` : ""}
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#15803d" }}
+                      value={condicionSunat ? `${condicionSunat === "HABIDO" ? "✓" : "✗"} ${condicionSunat}` : ""}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: condicionSunat === "HABIDO" ? "#15803d" : "#dc2626" }}
                     />
                   </div>
                 </div>
@@ -2044,54 +2214,69 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Fecha de Inspección (DD/MM/YYYY) *</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Fecha de Inspección (Mínimo mañana) *</label>
                     <input
-                      type="text"
-                      placeholder="DD/MM/YYYY"
-                      value={fechaInspeccion}
-                      onChange={(e) => setFechaInspeccion(e.target.value)}
-                      required
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
+                      type="date"
+                      min={formatearFechaYYYYMMDD(obtenerFechaMinimaInspeccion())}
+                      value={
+                        fechaInspeccion.includes("/")
+                          ? fechaInspeccion.split("/").reverse().join("-")
+                          : fechaInspeccion
+                      }
+                      onChange={(e) => {
+                        const valYMD = e.target.value;
+                        if (!valYMD) return;
+                        const [y, m, d] = valYMD.split("-");
+                        setFechaInspeccion(`${d}/${m}/${y}`);
+                      }}
+                      style={{
+                        width: "100%", padding: "8px 12px", borderRadius: "8px",
+                        border: fechaInspeccion && !esFechaPermitidaInspeccion(fechaInspeccion) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
+                        fontSize: "13.5px", fontWeight: "bold"
+                      }}
                     />
+                    {fechaInspeccion && !esFechaPermitidaInspeccion(fechaInspeccion) && (
+                      <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "8px 12px", borderRadius: "8px", marginTop: "6px", fontSize: "11.5px" }}>
+                        ⚠️ {MENSAJE_FECHA_INSPECCION}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div style={{ marginBottom: "12px" }}>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>Seleccionar Inspector Asignado (Máx 4/día) *</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                    {INSPECTORES_DEFAULT.map((insp) => {
-                      const cupos = obtenerConteoInspectorEnFecha(insp.uid, fechaInspeccion);
-                      const estaLleno = cupos >= 4;
-                      const esSel = inspectorElegido?.uid === insp.uid;
-
-                      return (
-                        <div
-                          key={insp.uid}
-                          onClick={() => {
-                            if (estaLleno) {
-                              alert(`⚠️ El inspector ${insp.nombre} ha completado el máximo de 4 inspecciones para el día ${fechaInspeccion}. Elija otro inspector.`);
-                              return;
-                            }
-                            setInspectorElegido(insp);
-                          }}
-                          style={{
-                            padding: "8px 10px",
-                            borderRadius: "8px",
-                            border: esSel ? "2px solid #16a34a" : estaLleno ? "1px solid #fca5a5" : "1px solid #cbd5e1",
-                            background: esSel ? "#f0fdf4" : estaLleno ? "#fef2f2" : "white",
-                            cursor: estaLleno ? "not-allowed" : "pointer",
-                            fontSize: "12.5px"
-                          }}
-                        >
-                          <strong style={{ color: esSel ? "#166534" : "#1e293b", display: "block" }}>{insp.nombre} {esSel && "✓"}</strong>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", marginTop: "2px" }}>
-                            <span style={{ color: "#64748b" }}>{insp.cargo}</span>
-                            <span style={{ fontWeight: "bold", color: estaLleno ? "#dc2626" : "#15803d" }}>{estaLleno ? "4/4 Lleno" : `${cupos}/4 Cupos`}</span>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>👷 Inspector Municipal Asignado (Máx 4/día)</label>
+                  {inspectorElegido ? (() => {
+                    const cupos = obtenerConteoInspectorEnFecha(inspectorElegido.uid, fechaInspeccion);
+                    const estaLleno = cupos >= 4;
+                    return (
+                      <div style={{
+                        padding: "12px 14px", borderRadius: "10px",
+                        border: estaLleno ? "1.5px solid #fca5a5" : "1.5px solid #16a34a",
+                        background: estaLleno ? "#fef2f2" : "#f0fdf4",
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <strong style={{ color: estaLleno ? "#991b1b" : "#166534", fontSize: "13.5px" }}>{inspectorElegido.nombre}</strong>
+                            <span style={{ display: "block", fontSize: "11.5px", color: "#64748b" }}>{inspectorElegido.cargo}</span>
                           </div>
+                          <span style={{
+                            padding: "3px 10px", borderRadius: "14px", fontSize: "11.5px", fontWeight: "800",
+                            background: estaLleno ? "#fee2e2" : "#dcfce7",
+                            color: estaLleno ? "#dc2626" : "#15803d",
+                          }}>
+                            {estaLleno ? "🔴 No disponible" : "🟢 Disponible"}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
+                        <span style={{ fontSize: "12px", color: estaLleno ? "#991b1b" : "#15803d", fontWeight: "600", marginTop: "4px", display: "block" }}>
+                          Inspecciones: {cupos}/4
+                        </span>
+                      </div>
+                    );
+                  })() : (
+                    <div style={{ padding: "12px 14px", borderRadius: "10px", border: "1.5px solid #fca5a5", background: "#fef2f2", textAlign: "center" }}>
+                      <span style={{ color: "#991b1b", fontWeight: "700", fontSize: "13px" }}>⚠️ No hay inspectores disponibles para esta fecha.</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>

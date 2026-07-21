@@ -79,3 +79,36 @@ export const calcularFecha30DiasMas = (fechaBaseStr) => {
 
 export const HORA_INICIO = "08:00";
 export const HORA_FIN = "18:00";
+
+export const MENSAJE_FECHA_INSPECCION = "Las inspecciones deben programarse con al menos un día de anticipación. Seleccione una fecha a partir de mañana.";
+
+export const esFechaValidaParaInspeccion = (fechaStr) => {
+  if (!fechaStr) return false;
+  let fechaObj;
+  if (fechaStr.includes("-")) {
+    const [y, m, d] = fechaStr.split("-").map(Number);
+    fechaObj = new Date(y, m - 1, d);
+  } else if (fechaStr.includes("/")) {
+    const [d, m, y] = fechaStr.split("/").map(Number);
+    fechaObj = new Date(y, m - 1, d);
+  } else {
+    fechaObj = new Date(fechaStr);
+  }
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  fechaObj.setHours(0, 0, 0, 0);
+  return fechaObj > hoy;
+};
+
+export const obtenerFechaMinimaInspeccion = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d;
+};
+
+export const formatearFechaYYYYMMDD = (d) => {
+  const dia = String(d.getDate()).padStart(2, "0");
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const anio = d.getFullYear();
+  return `${anio}-${mes}-${dia}`;
+};

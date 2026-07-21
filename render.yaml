@@ -2,5 +2,5 @@ services:
   - type: web
     name: web-municipal
     env: node
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
     startCommand: node backend/server.js

@@ -1,0 +1,19 @@
+{
+  "name": "webmunicipal-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup-users": "node scripts/setup-users.js"
+  },
+  "dependencies": {
+    "axios": "^1.16.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "firebase": "^12.13.0",
+    "nodemailer": "^9.0.3"
+  },
+  "devDependencies": {
+    "firebase-admin": "^14.2.0"
+  }
+}

@@ -11,6 +11,10 @@ export const normalizarRol = (rolRaw, email = "") => {
     if (emailLow.includes("cajer")) return "cajero";
     if (emailLow.includes("inspector") || emailLow.includes("insp")) return "inspector";
     if (emailLow.includes("admin")) return "administrador";
+    if (emailLow.includes("func")) return "administrador";
+    if (emailLow === "alessandropaul19@gmail.com") return "cajero";
+    if (emailLow === "arodriguezr1020@gmail.com") return "inspector";
+    if (emailLow === "medicitasapp01@gmail.com") return "administrador";
     return "cajero";
   }
 
@@ -97,6 +101,12 @@ export const AuthProvider = ({ children }) => {
               : emailLow.includes("inspector")
               ? "Inspector Municipal"
               : emailLow.includes("admin")
+              ? "Administrador General"
+              : emailLow === "alessandropaul19@gmail.com"
+              ? "Cajero Municipal"
+              : emailLow === "arodriguezr1020@gmail.com"
+              ? "Inspector Municipal"
+              : emailLow === "medicitasapp01@gmail.com"
               ? "Administrador General"
               : "Usuario Solicitante";
 

@@ -10,6 +10,10 @@ import {
   formatearFechaLocal,
   TIME_SLOTS,
   esHorarioPasado,
+  esFechaValidaParaInspeccion,
+  MENSAJE_FECHA_INSPECCION,
+  obtenerFechaMinimaInspeccion,
+  formatearFechaYYYYMMDD,
 } from "../config/inspeccionConfig";
 
 function PanelInspector({ seccion }) {
@@ -182,6 +186,10 @@ function PanelInspector({ seccion }) {
     if (!solicitudAtencion) return;
     if (!fechaVisita || !horaVisita) {
       alert("Seleccione fecha y hora de la inspección.");
+      return;
+    }
+    if (!esFechaValidaParaInspeccion(fechaVisita)) {
+      alert(MENSAJE_FECHA_INSPECCION);
       return;
     }
     setProcesando(true);
@@ -673,15 +681,33 @@ function PanelInspector({ seccion }) {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
                     <div>
                       <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                        Fecha de la Visita *
+                        Fecha de la Visita (Mínimo mañana) *
                       </label>
                       <input
-                        type="text"
-                        placeholder="DD/MM/YYYY (Ej. 25/07/2026)"
-                        value={fechaVisita}
-                        onChange={(e) => setFechaVisita(e.target.value)}
-                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                        type="date"
+                        min={formatearFechaYYYYMMDD(obtenerFechaMinimaInspeccion())}
+                        value={
+                          fechaVisita && fechaVisita.includes("/")
+                            ? fechaVisita.split("/").reverse().join("-")
+                            : fechaVisita
+                        }
+                        onChange={(e) => {
+                          const valYMD = e.target.value;
+                          if (!valYMD) return;
+                          const [y, m, d] = valYMD.split("-");
+                          setFechaVisita(`${d}/${m}/${y}`);
+                        }}
+                        style={{
+                          width: "100%", padding: "10px", borderRadius: "8px",
+                          border: fechaVisita && !esFechaValidaParaInspeccion(fechaVisita) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
+                          fontSize: "14px"
+                        }}
                       />
+                      {fechaVisita && !esFechaValidaParaInspeccion(fechaVisita) && (
+                        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "8px 12px", borderRadius: "8px", marginTop: "6px", fontSize: "12px" }}>
+                          ⚠️ {MENSAJE_FECHA_INSPECCION}
+                        </div>
+                      )}
                     </div>
 
                     <div>

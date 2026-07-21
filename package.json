@@ -4,24 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "start": "node backend/server.js"
-  },
-  "dependencies": {
-    "axios": "^1.16.1",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "firebase": "^12.13.0",
-    "jspdf": "^4.2.1",
-    "nodemailer": "^9.0.3",
-    "qrcode": "^1.5.4",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
-  },
-  "devDependencies": {
-    "vite": "^8.0.0"
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "node backend/server.js",
+    "setup-users": "node backend/scripts/setup-users.js",
+    "install:all": "cd frontend && npm install && cd ../backend && npm install"
   }
 }

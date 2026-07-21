@@ -6,9 +6,7 @@ import { db } from "./firebase";
 import LandingPage from "./components/LandingPage";
 import Login from "./components/Login";
 import Sidebar from "./components/Sidebar";
-import PanelNegocio from "./components/PanelNegocio";
 import PanelCajero from "./components/PanelCajero";
-import PanelFuncionario from "./components/PanelFuncionario";
 import PanelInspector from "./components/PanelInspector";
 import PanelAdmin from "./components/PanelAdmin";
 import PagoExitoso from "./components/PagoExitoso";
@@ -97,10 +95,7 @@ function App() {
     setSeccion("inicio");
   };
 
-  console.log("[App] pathname:", window.location.pathname, "cargando:", cargando, "usuario:", !!usuario);
-
   if (window.location.pathname.replace(/\/$/, "") === "/pago-exitoso" || window.location.pathname.startsWith("/pago-exitoso")) {
-    console.log("[App] Detectada ruta /pago-exitoso, renderizando PagoExitoso");
     return (
       <ErrorBoundary>
         <PagoExitoso onRedirect={(s) => {
@@ -182,14 +177,7 @@ function App() {
       }
     }
     if (rolNorm === "administrador") {
-      switch (seccionActiva) {
-        case "gestion-usuarios": return <GestionUsuarios usuarios={[]} onRecargar={() => {}} />;
-        case "gestion-roles": return <GestionRoles onRecargar={() => {}} />;
-        case "config-sistema": return <ConfigSistema onRecargar={() => {}} />;
-        case "reportes": return <ReportesConsolidados />;
-        case "auditoria": return <BitacoraAuditoria />;
-        default: return <PanelAdmin seccion={seccionActiva} cambiarSeccion={cambiarSeccion} />;
-      }
+      return <PanelAdmin seccion={seccionActiva} cambiarSeccion={cambiarSeccion} />;
     }
     return <PanelCajero seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
   };

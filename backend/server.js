@@ -3,7 +3,6 @@ import cors from "cors";
 import axios from "axios";
 import crypto from "crypto";
 import dotenv from "dotenv";
-import nodemailer from "nodemailer";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import fs from "fs";
@@ -25,7 +24,7 @@ const MUNICIPALIDAD_CONFIG = {
   sistemaNombre: "Sistema de Licencias v1.0"
 };
 
-const distPath = join(__dirname, "..", "dist");
+const distPath = join(__dirname, "..", "frontend", "dist");
 
 const app = express();
 
@@ -131,34 +130,10 @@ console.log("  - Últimos 4:", FLOW_SECRET_KEY.substring(FLOW_SECRET_KEY.length 
 console.log("  - Solo hex:", /^[0-9a-fA-F]+$/.test(FLOW_SECRET_KEY) ? "SÍ" : "NO");
 console.log("═══════════════════════════════════════════════");
 
-const SMTP_EMAIL = process.env.SMTP_EMAIL || "";
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD || "";
-
 console.log("=== SERVIDOR MUNICIPAL ===");
 console.log("PORT:", PORT);
-console.log("SMTP EMAIL:", SMTP_EMAIL ? "Configurado" : "No configurado");
 console.log("DIST path:", distPath);
 console.log("DIST exists:", fs.existsSync(distPath));
-
-const transporter = SMTP_EMAIL && SMTP_PASSWORD
-  ? nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      auth: {
-        user: SMTP_EMAIL,
-        pass: SMTP_PASSWORD,
-      },
-    })
-  : null;
-
-if (transporter) {
-  transporter.verify().then(() => {
-    console.log("SMTP: Conexion verificada correctamente");
-  }).catch((err) => {
-    console.error("SMTP: Error de conexion:", err.message);
-  });
-}
 
 /* =========================
    API ROUTES
@@ -186,6 +161,16 @@ app.post("/api/solicitudes", verificarToken, async (req, res) => {
   console.log("=== ENDPOINT POST /api/solicitudes ===");
   try {
     const solicitud = req.body;
+
+    const estadoSunat = (solicitud.estadoSunat || "").toUpperCase().trim();
+    const condicionSunat = (solicitud.condicionSunat || "").toUpperCase().trim();
+    if (estadoSunat && condicionSunat && (estadoSunat !== "ACTIVO" || condicionSunat !== "HABIDO")) {
+      return res.status(400).json({
+        error: "Solicitud bloqueada por SUNAT",
+        detalle: `El contribuyente tiene Estado="${estadoSunat}" y Condición="${condicionSunat}". Se requiere Estado=ACTIVO y Condición=HABIDO.`,
+      });
+    }
+
     const id = generarIdExpediente();
     const archivosPdfRaw = solicitud.archivosPdf || [];
     const archivosPdf = archivosPdfRaw.map((pdf, idx) => ({
@@ -331,7 +316,6 @@ app.post("/api/solicitudes", verificarToken, async (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    smtp: SMTP_EMAIL ? "configurado" : "no configurado",
     decolecta: TOKEN_DECOLECTA ? "configurado" : "no configurado",
     timestamp: new Date().toISOString(),
   });
@@ -766,18 +750,13 @@ app.post("/api/pagos/flow/callback", express.urlencoded({ extended: false }), as
             leida: false,
           });
 
-          if (correoUsuario && transporter) {
-            transporter.sendMail({
-              from: `"${MUNICIPALIDAD_CONFIG.nombre}" <${SMTP_EMAIL}>`,
-              to: correoUsuario,
-              subject: "Pago confirmado - Solicitud municipal",
-              html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#1e293b;">
+          if (correoUsuario) {
+            emailProvider.sendEmail(correoUsuario, "Pago confirmado - Solicitud municipal", "Tu pago ha sido procesado exitosamente a través de Flow.", `<div style="font-family:Arial,sans-serif;padding:20px;color:#1e293b;">
                 <h2 style="color:#0f766e;">Pago confirmado</h2>
                 <p>Tu pago de <strong>S/${MONTO_TRAMITE.toFixed(2)}</strong> para la solicitud <strong>EXP-${paymentData.commerceOrder}</strong> ha sido procesado exitosamente a través de Flow.</p>
                 <p>Puedes continuar con tu trámite desde tu panel de usuario.</p>
                 <p style="color:#64748b;font-size:12px;margin-top:20px;">${MUNICIPALIDAD_CONFIG.nombre}</p>
-              </div>`,
-            }).catch((e) => console.error("[FLOW] Error enviando correo:", e.message));
+              </div>`).catch((e) => console.error("[FLOW] Error enviando correo:", e.message));
           }
         }
       }
@@ -815,15 +794,7 @@ app.post("/api/email-change/enviar-codigo-actual", verificarToken, async (req, r
 
   console.log(`[CAMBIO CORREO] OTP para correo actual ${correoActual}: ${codigo}`);
 
-  if (!transporter) {
-    return res.json({ success: true, mensaje: "Código enviado (simulado en consola)." });
-  }
-
-  const mailOptions = {
-    from: `"Web Municipal" <${SMTP_EMAIL}>`,
-    to: correoActual,
-    subject: "Verificación para cambio de correo",
-    html: `
+  const htmlBody = `
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e3a8a;">
         <h2>Verificación para cambio de correo electrónico</h2>
         <p>Has solicitado cambiar el correo electrónico de tu cuenta en la Web Municipal.</p>
@@ -834,11 +805,10 @@ app.post("/api/email-change/enviar-codigo-actual", verificarToken, async (req, r
         <p>Este código expira en 5 minutos y es de un solo uso.</p>
         <p>Si no solicitaste este cambio, puedes ignorar este mensaje.</p>
       </div>
-    `
-  };
+    `;
 
   try {
-    await transporter.sendMail(mailOptions);
+    await emailProvider.sendEmail(correoActual, "Verificación para cambio de correo", `Tu código de verificación es: ${codigo}`, htmlBody);
     res.json({ success: true, mensaje: "Código enviado correctamente." });
   } catch (err) {
     console.error("[CAMBIO CORREO] Error enviando mail a correo actual:", err);
@@ -905,15 +875,7 @@ app.post("/api/email-change/enviar-codigo-nuevo", verificarToken, async (req, re
 
   console.log(`[CAMBIO CORREO] OTP para correo nuevo ${correoNuevo}: ${codigo}`);
 
-  if (!transporter) {
-    return res.json({ success: true, mensaje: "Código enviado (simulado en consola)." });
-  }
-
-  const mailOptions = {
-    from: `"Web Municipal" <${SMTP_EMAIL}>`,
-    to: correoNuevo,
-    subject: "Confirmación de nuevo correo",
-    html: `
+  const htmlBody = `
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e3a8a;">
         <h2>Confirmación de nuevo correo electrónico</h2>
         <p>Estás confirmando este correo como tu nueva dirección de correo en la Web Municipal.</p>
@@ -923,11 +885,10 @@ app.post("/api/email-change/enviar-codigo-nuevo", verificarToken, async (req, re
         </div>
         <p>Este código expira en 5 minutos y es de un solo uso.</p>
       </div>
-    `
-  };
+    `;
 
   try {
-    await transporter.sendMail(mailOptions);
+    await emailProvider.sendEmail(correoNuevo, "Confirmación de nuevo correo", `Tu código de confirmación es: ${codigo}`, htmlBody);
     res.json({ success: true, mensaje: "Código enviado al nuevo correo correctamente." });
   } catch (err) {
     console.error("[CAMBIO CORREO] Error enviando mail a correo nuevo:", err);
@@ -1003,39 +964,21 @@ app.post("/api/email/enviar-notificacion", verificarToken, async (req, res) => {
 });
 
 app.post("/api/enviar-codigo", async (req, res) => {
-  console.log("=== ENDPOINT /api/enviar-codigo ===");
-  console.log("Body recibido:", JSON.stringify(req.body));
-
   try {
     const { correo, codigo, nombre } = req.body;
 
     if (!correo || !codigo) {
-      console.error("Faltan parámetros:", { correo, codigo });
       return res.status(400).json({ error: "Faltan correo o código" });
     }
 
     const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$/;
     if (nombre && !nameRegex.test(nombre)) {
-      console.error("Nombre contiene caracteres inválidos:", nombre);
       return res.status(400).json({ error: "Los nombres y apellidos solo pueden contener letras." });
     }
 
     const nombreUsuario = nombre || "Ciudadano";
-    console.log("1. Parámetros OK - Email:", correo, "- Código:", codigo, "- Nombre:", nombreUsuario);
 
-    if (!transporter) {
-      console.error("2. SMTP no configurado - transporter es null");
-      return res.status(500).json({ error: "Servicio de correo no configurado" });
-    }
-
-    console.log("2. Transporter SMTP disponible");
-
-    const mailOptions = {
-      from: `"Web Municipal" <${SMTP_EMAIL}>`,
-      to: correo,
-      subject: "Código de verificación para crear tu cuenta",
-      text: `Hola ${nombreUsuario},\n\nTu código de verificación es:\n\n${codigo}\n\nEste código tiene una duración limitada.\n\nNo compartas este código con nadie.\n\nSi no solicitaste este código, puedes ignorar este mensaje.\n\nWeb Municipal.`,
-      html: `
+    const htmlBody = `
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
           <p style="font-size: 16px; margin-bottom: 16px; color: #0f172a;">Hola <strong>${nombreUsuario}</strong>,</p>
           <p style="font-size: 16px; margin-bottom: 16px; color: #334155;">Tu código de verificación es:</p>
@@ -1049,85 +992,16 @@ app.post("/api/enviar-codigo", async (req, res) => {
           </p>
           <p style="font-size: 14px; font-weight: bold; color: #1e3a8a; margin: 0;">Web Municipal.</p>
         </div>
-      `,
-    };
+      `;
 
-    console.log("3. Llamando a transporter.sendMail()...");
-    console.log("   From:", mailOptions.from);
-    console.log("   To:", mailOptions.to);
-
-    const result = await transporter.sendMail(mailOptions);
-
-    console.log("4. sendMail() respondió OK:");
-    console.log("   messageId:", result.messageId);
-    console.log("   response:", result.response);
-
+    await emailProvider.sendEmail(correo, "Código de verificación para crear tu cuenta", `Hola ${nombreUsuario}, tu código de verificación es: ${codigo}`, htmlBody);
     res.json({ mensaje: "Correo enviado correctamente" });
   } catch (error) {
-    console.error("=== ERROR ENVIANDO CORREO ===");
-    console.error("Mensaje:", error.message);
-    res.status(500).json({ error: "No se pudo enviar el correo de verificación", detalle: error.message });
-  }
-});
-
-app.post("/api/enviar-recuperacion", async (req, res) => {
-  console.log("=== ENDPOINT /api/enviar-recuperacion ===");
-
-  try {
-    const { correo, codigo, nombre } = req.body;
-
-    if (!correo || !codigo) {
-      return res.status(400).json({ error: "Faltan correo o código" });
-    }
-
-    const nombreUsuario = nombre || "Ciudadano";
-    console.log("1. Email destino:", correo, "- Código:", codigo, "- Nombre:", nombreUsuario);
-
-    if (!transporter) {
-      console.error("2. SMTP no configurado");
-      return res.status(500).json({ error: "Servicio de correo no configurado" });
-    }
-
-    console.log("2. Transporter SMTP disponible");
-
-    const mailOptions = {
-      from: `"Web Municipal" <${SMTP_EMAIL}>`,
-      to: correo,
-      subject: "Código para restablecer tu contraseña",
-      text: `Hola ${nombreUsuario},\n\nTu código para recuperar tu contraseña es:\n\n${codigo}\n\nEste código tiene una duración limitada.\n\nSi no realizaste esta solicitud, ignora este mensaje.\n\nWeb Municipal.`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-          <p style="font-size: 16px; margin-bottom: 16px; color: #0f172a;">Hola <strong>${nombreUsuario}</strong>,</p>
-          <p style="font-size: 16px; margin-bottom: 16px; color: #334155;">Tu código para recuperar tu contraseña es:</p>
-          <div style="font-size: 32px; font-weight: bold; color: #1e3a8a; letter-spacing: 4px; margin: 24px 0; background: #f1f5f9; padding: 16px; text-align: center; border-radius: 8px; border: 1px solid #cbd5e1;">
-            ${codigo}
-          </div>
-          <p style="font-size: 14px; color: #64748b; margin-bottom: 24px;">Este código tiene una duración limitada.</p>
-          <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-bottom: 8px;">
-            Si no realizaste esta solicitud, ignora este mensaje.
-          </p>
-          <p style="font-size: 14px; font-weight: bold; color: #1e3a8a; margin: 0;">Web Municipal.</p>
-        </div>
-      `,
-    };
-
-    console.log("3. Llamando a transporter.sendMail()...");
-    const result = await transporter.sendMail(mailOptions);
-
-    console.log("4. Correo de recuperación enviado:");
-    console.log("   messageId:", result.messageId);
-
-    res.json({ mensaje: "Correo de recuperación enviado correctamente" });
-  } catch (error) {
-    console.error("=== ERROR ENVIANDO RECUPERACIÓN ===");
-    console.error("Mensaje:", error.message);
-    res.status(500).json({ error: "No se pudo enviar el correo de recuperación", detalle: error.message });
+    res.status(500).json({ error: "No se pudo enviar el correo de verificación" });
   }
 });
 
 app.post("/api/comprobantes/enviar-correo", verificarToken, async (req, res) => {
-  console.log("=== ENDPOINT /api/comprobantes/enviar-correo ===");
-
   try {
     const { correo_usuario, codigo_unico, tipo_comprobante, monto_total, id_solicitud, fecha_emision, url_pdf, serie, numero } = req.body;
 
@@ -1135,18 +1009,10 @@ app.post("/api/comprobantes/enviar-correo", verificarToken, async (req, res) => 
       return res.status(400).json({ error: "Faltan parámetros obligatorios." });
     }
 
-    if (!transporter) {
-      return res.status(500).json({ error: "Servicio de correo no configurado." });
-    }
-
     const tipoLabel = tipo_comprobante === "boleta" ? "Boleta de Venta Electrónica" : "Factura Electrónica";
     const nombrePdf = `${tipo_comprobante === "boleta" ? "BOLETA" : "FACTURA"}_${serie || codigo_unico.split("-")[0]}_${numero || codigo_unico.split("-")[1]}.pdf`;
 
-    const mailOptions = {
-      from: `"${MUNICIPALIDAD_CONFIG.nombre}" <${SMTP_EMAIL}>`,
-      to: correo_usuario,
-      subject: `${tipoLabel} — ${codigo_unico} | Comprobante de pago municipal`,
-      html: `
+    const htmlBody = `
         <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
           <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: #1f3b57; border-radius: 10px;">
             <h1 style="color: white; font-size: 18px; margin: 0;">${MUNICIPALIDAD_CONFIG.nombre}</h1>
@@ -1197,17 +1063,13 @@ app.post("/api/comprobantes/enviar-correo", verificarToken, async (req, res) => 
             ${MUNICIPALIDAD_CONFIG.nombre} — ${MUNICIPALIDAD_CONFIG.sistemaNombre}
           </p>
         </div>
-      `,
-    };
+      `;
 
-    const result = await transporter.sendMail(mailOptions);
-    console.log("[COMPROBANTE] Correo enviado:", result.messageId);
+    await emailProvider.sendEmail(correo_usuario, `${tipoLabel} — ${codigo_unico} | Comprobante de pago municipal`, `${tipoLabel} - ${codigo_unico} - Monto: S/${Number(monto_total || 0).toFixed(2)}`, htmlBody);
 
     res.json({ mensaje: "Comprobante enviado por correo correctamente." });
   } catch (error) {
-    console.error("=== ERROR ENVIANDO COMPROBANTE POR CORREO ===");
-    console.error("Mensaje:", error.message);
-    res.status(500).json({ error: "No se pudo enviar el comprobante.", detalle: error.message });
+    res.status(500).json({ error: "No se pudo enviar el comprobante." });
   }
 });
 

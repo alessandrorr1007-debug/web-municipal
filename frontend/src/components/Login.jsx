@@ -4,8 +4,6 @@ import {
   registrarUsuario,
   enviarRecuperacion,
   guardarCodigoVerificacion,
-  verificarCodigoVerificacion,
-  cambiarContrasena,
 } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -25,11 +23,7 @@ function Login({ onVolver, modoInicial }) {
   const [cargando, setCargando] = useState(false);
   const [correoRecuperacion, setCorreoRecuperacion] = useState("");
   const [mostrarRecuperar, setMostrarRecuperar] = useState(false);
-  const [pasoRecuperacion, setPasoRecuperacion] = useState("correo");
-  const [codigoRecuperacion, setCodigoRecuperacion] = useState("");
-  const [errorRecuperacion, setErrorRecuperacion] = useState("");
-  const [nuevaContrasena, setNuevaContrasena] = useState("");
-  const [confirmarNuevaContrasena, setConfirmarNuevaContrasena] = useState("");
+  const [recuperacionEnviado, setRecuperacionEnviado] = useState(false);
 
   const [nombres, setNombres] = useState("");
   const [apellidos, setApellidos] = useState("");
@@ -198,65 +192,9 @@ function Login({ onVolver, modoInicial }) {
     setCargando(true);
     try {
       await enviarRecuperacion(correoRecuperacion.trim());
-      setPasoRecuperacion("verificar");
-      setTiempoRestante(300);
-      setCodigoRecuperacion("");
-      setErrorRecuperacion("");
+      setRecuperacionEnviado(true);
     } catch (err) {
-      console.error("[DEBUG] Error recuperación:", err.message);
-      setError(err.message.includes("no pertenece") ? err.message : `No se pudo enviar el código: ${err.message}`);
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const manejarVerificarRecuperacion = async (e) => {
-    e.preventDefault();
-    setErrorRecuperacion("");
-
-    if (!codigoRecuperacion || codigoRecuperacion.length !== 6) {
-      setErrorRecuperacion("Ingresa el código de 6 dígitos.");
-      return;
-    }
-
-    setCargando(true);
-    try {
-      const resultado = await verificarCodigoVerificacion(correoRecuperacion, codigoRecuperacion);
-      if (!resultado.valido) {
-        setErrorRecuperacion(resultado.mensaje);
-        setCargando(false);
-        return;
-      }
-      setPasoRecuperacion("enviando-reset");
-      setNuevaContrasena("");
-      setConfirmarNuevaContrasena("");
-      setErrorRecuperacion("");
-
-      try {
-        await cambiarContrasena(correoRecuperacion);
-        setPasoRecuperacion("exito-email");
-      } catch (err) {
-        console.error("[DEBUG] Error enviando enlace de restablecimiento:", err.message);
-        setErrorRecuperacion(err.message || "No se pudo enviar el enlace. Intenta de nuevo.");
-        setPasoRecuperacion("nueva-contrasena");
-      }
-    } catch (err) {
-      setErrorRecuperacion("Error al verificar el código.");
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const manejarCambiarContrasena = async (e) => {
-    e.preventDefault();
-    setErrorRecuperacion("");
-
-    try {
-      await cambiarContrasena(correoRecuperacion);
-      setPasoRecuperacion("exito-email");
-    } catch (err) {
-      console.error("[DEBUG] Error enviando enlace de restablecimiento:", err.message);
-      setErrorRecuperacion(err.message || "No se pudo enviar el enlace. Intenta de nuevo.");
+      setError(err.message || "No se pudo enviar el enlace. Intenta de nuevo.");
     } finally {
       setCargando(false);
     }
@@ -327,120 +265,33 @@ function Login({ onVolver, modoInicial }) {
         <div className="login-form-box" style={{ overflow: "auto", maxHeight: "600px" }}>
           {mostrarRecuperar ? (
             <div>
-              <button type="button" onClick={() => { setMostrarRecuperar(false); setError(""); setPasoRecuperacion("correo"); setNuevaContrasena(""); setConfirmarNuevaContrasena(""); }} style={{ background: "none", color: "#64748b", border: "none", cursor: "pointer", fontSize: "14px", marginBottom: "16px", padding: 0 }}>
+              <button type="button" onClick={() => { setMostrarRecuperar(false); setRecuperacionEnviado(false); setCorreoRecuperacion(""); setError(""); }} style={{ background: "none", color: "#64748b", border: "none", cursor: "pointer", fontSize: "14px", marginBottom: "16px", padding: 0 }}>
                 &#8592; Volver al inicio de sesión
               </button>
 
-              {pasoRecuperacion === "exito-email" ? (
+              {recuperacionEnviado ? (
                 <div style={{ textAlign: "center", padding: "20px 0" }}>
                   <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#f0fdf4", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "36px", border: "2px solid #bbf7d0" }}>&#9989;</div>
                   <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Correo enviado</h2>
                   <p style={{ margin: "0 0 24px", color: "#475569", fontSize: "14px", lineHeight: "1.6" }}>
-                    Se ha enviado un enlace de restablecimiento a <strong>{correoRecuperacion}</strong>. Revisa tu bandeja de entrada y sigue las instrucciones para crear tu nueva contraseña.
+                    Si el correo está registrado, recibirás un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.
                   </p>
-                  <button type="button" onClick={() => { setMostrarRecuperar(false); setPasoRecuperacion("correo"); setModo("login"); setError(""); }} className="primary-btn" style={{ padding: "14px 32px", fontSize: "15px" }}>
+                  <button type="button" onClick={() => { setMostrarRecuperar(false); setRecuperacionEnviado(false); setModo("login"); setError(""); }} className="primary-btn" style={{ padding: "14px 32px", fontSize: "15px" }}>
                     Volver al inicio de sesión
                   </button>
-                </div>
-              ) : pasoRecuperacion === "exito" ? (
-                <div style={{ textAlign: "center", padding: "20px 0" }}>
-                  <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#f0fdf4", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "36px", border: "2px solid #bbf7d0" }}>&#9989;</div>
-                  <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Contraseña actualizada</h2>
-                  <p style={{ margin: "0 0 24px", color: "#475569", fontSize: "14px", lineHeight: "1.6" }}>
-                    Tu contraseña fue cambiada correctamente. Ya puedes iniciar sesión con tu nueva contraseña.
-                  </p>
-                  <button type="button" onClick={() => { setMostrarRecuperar(false); setPasoRecuperacion("correo"); setModo("login"); setError(""); }} className="primary-btn" style={{ padding: "14px 32px", fontSize: "15px" }}>
-                    Iniciar sesión
-                  </button>
-                </div>
-              ) : pasoRecuperacion === "enviando-reset" ? (
-                <div style={{ textAlign: "center", padding: "40px 0" }}>
-                  <div className="spinner" style={{ margin: "0 auto 16px" }} />
-                  <p style={{ color: "#64748b", fontSize: "14px" }}>Enviando enlace de restablecimiento...</p>
-                </div>
-              ) : pasoRecuperacion === "nueva-contrasena" ? (
-                <div>
-                  <h2 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "20px" }}>Crear nueva contraseña</h2>
-                  <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "14px", lineHeight: "1.5" }}>
-                    Ingresa tu nueva contraseña para <strong style={{ color: "#1f3b57" }}>{correoRecuperacion}</strong>
-                  </p>
-                  <form onSubmit={manejarCambiarContrasena}>
-                    <label style={inputLabel}>Nueva contraseña</label>
-                    <input
-                      type="password"
-                      placeholder="Mínimo 8 caracteres"
-                      value={nuevaContrasena}
-                      onChange={(e) => setNuevaContrasena(e.target.value)}
-                      required
-                      minLength={8}
-                      autoFocus
-                    />
-                    <div style={{ marginTop: "6px", fontSize: "12px", color: "#64748b" }}>
-                      Debe contener al menos 8 caracteres, una letra y un número.
-                    </div>
-                    <label style={{ ...inputLabel, marginTop: "14px" }}>Confirmar nueva contraseña</label>
-                    <input
-                      type="password"
-                      placeholder="Repite tu nueva contraseña"
-                      value={confirmarNuevaContrasena}
-                      onChange={(e) => setConfirmarNuevaContrasena(e.target.value)}
-                      required
-                      minLength={8}
-                    />
-                    {errorRecuperacion && <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", marginTop: "12px" }}>&#9888; {errorRecuperacion}</div>}
-                    <button className="primary-btn" type="submit" disabled={cargando} style={{ opacity: cargando ? 0.7 : 1, padding: "15px", fontSize: "15px", marginTop: "16px" }}>
-                      {cargando ? "Cambiando contraseña..." : "Cambiar contraseña"}
-                    </button>
-                  </form>
-                </div>
-              ) : pasoRecuperacion === "verificar" ? (
-                <div>
-                  <h2 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "20px" }}>Verifica tu correo</h2>
-                  <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "14px", lineHeight: "1.5" }}>
-                    Enviamos un código de verificación a <strong style={{ color: "#1f3b57" }}>{correoRecuperacion}</strong>
-                  </p>
-                  <form onSubmit={manejarVerificarRecuperacion}>
-                    <label style={inputLabel}>Código de verificación</label>
-                    <input
-                      type="text"
-                      placeholder="Ej: 123456"
-                      value={codigoRecuperacion}
-                      onChange={(e) => setCodigoRecuperacion(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      maxLength="6"
-                      style={{ textAlign: "center", fontSize: "20px", letterSpacing: "8px", fontWeight: 700 }}
-                      autoFocus
-                      required
-                    />
-                    {tiempoRestante > 0 ? (
-                      <p style={{ margin: "8px 0 0", fontSize: "13px", color: "#64748b", textAlign: "center" }}>
-                        El código expira en <strong style={{ color: tiempoRestante <= 60 ? "#dc2626" : "#2563eb" }}>{minutos}:{segundos.toString().padStart(2, "0")}</strong>
-                      </p>
-                    ) : (
-                      <p style={{ margin: "8px 0 0", fontSize: "13px", color: "#dc2626", textAlign: "center", fontWeight: 600 }}>El código ha expirado</p>
-                    )}
-                    {errorRecuperacion && <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", marginTop: "12px" }}>&#9888; {errorRecuperacion}</div>}
-                    <button className="primary-btn" type="submit" disabled={cargando} style={{ opacity: cargando ? 0.7 : 1, padding: "15px", fontSize: "15px", marginTop: "16px" }}>
-                      {cargando ? "Verificando..." : "Verificar código"}
-                    </button>
-                  </form>
-                  <div style={{ marginTop: "16px", textAlign: "center" }}>
-                    <button type="button" onClick={manejarRecuperar} disabled={tiempoRestante > 0} style={{ background: "none", border: "none", color: tiempoRestante > 0 ? "#94a3b8" : "#2563eb", fontSize: "13px", cursor: tiempoRestante > 0 ? "default" : "pointer", fontWeight: 600 }}>
-                      Reenviar código
-                    </button>
-                  </div>
                 </div>
               ) : (
                 <div>
                   <h2 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "20px" }}>Recuperar contraseña</h2>
                   <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "14px" }}>
-                    Ingresa tu correo electrónico y te enviaremos un código de verificación.
+                    Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
                   </p>
                   <form onSubmit={manejarRecuperar}>
                     <label style={inputLabel}>Correo electrónico</label>
-                    <input type="email" placeholder="tu@correo.com" value={correoRecuperacion} onChange={(e) => setCorreoRecuperacion(e.target.value)} required />
+                    <input type="email" placeholder="tu@correo.com" value={correoRecuperacion} onChange={(e) => setCorreoRecuperacion(e.target.value)} required autoFocus />
                     {error && <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", marginTop: "12px" }}>&#9888; {error}</div>}
-                    <button type="submit" disabled={cargando} className="primary-btn" style={{ marginTop: "16px", padding: "14px" }}>
-                      {cargando ? "Enviando..." : "Enviar código de verificación"}
+                    <button type="submit" disabled={cargando} className="primary-btn" style={{ marginTop: "16px", padding: "14px", opacity: cargando ? 0.7 : 1 }}>
+                      {cargando ? "Enviando..." : "Enviar enlace de recuperación"}
                     </button>
                   </form>
                 </div>
@@ -640,6 +491,31 @@ function Login({ onVolver, modoInicial }) {
                             required
                             minLength={6}
                           />
+                        </div>
+                        <div style={{ textAlign: "right", marginTop: "-4px" }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMostrarRecuperar(true);
+                              setPasoRecuperacion("correo");
+                              setCorreoRecuperacion("");
+                              setError("");
+                              setErrorRecuperacion("");
+                            }}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "#2563eb",
+                              fontSize: "13px",
+                              cursor: "pointer",
+                              fontWeight: 600,
+                              padding: 0,
+                              textDecoration: "underline",
+                              textUnderlineOffset: "2px",
+                            }}
+                          >
+                            ¿Olvidaste tu contraseña?
+                          </button>
                         </div>
                       </div>
                     )}

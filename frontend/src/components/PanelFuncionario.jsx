@@ -29,6 +29,10 @@ import {
   obtenerCapacidadColor,
   formatearFechaLocal,
   esHorarioPasado,
+  esFechaValidaParaInspeccion,
+  MENSAJE_FECHA_INSPECCION,
+  obtenerFechaMinimaInspeccion,
+  formatearFechaYYYYMMDD,
 } from "../config/inspeccionConfig";
 import { obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
 
@@ -105,7 +109,7 @@ function CalendarioInspeccion({ fechaSeleccionada, onSelectFecha, capacidades })
           }
 
           const fechaStr = formatearFechaLocal(item.fecha);
-          const esPasado = item.fecha < hoy;
+          const esPasado = item.fecha <= hoy;
           const esFinDeSemana = !DIAS_LABORABLES.includes(item.fecha.getDay());
           const deshabilitado = esPasado || esFinDeSemana;
           const capacidad = capacidades[fechaStr] || 0;
@@ -149,10 +153,10 @@ function CalendarioInspeccion({ fechaSeleccionada, onSelectFecha, capacidades })
           <span className="leyenda-dot disp" /> Disponible
         </div>
         <div className="leyenda-item">
-          <span className="leyenda-dot casi" /> Casi lleno (4/5)
+          <span className="leyenda-dot casi" /> Casi lleno (3/4)
         </div>
         <div className="leyenda-item">
-          <span className="leyenda-dot comp" /> Completo (5/5)
+          <span className="leyenda-dot comp" /> Completo (4/4)
         </div>
       </div>
     </div>
@@ -701,6 +705,8 @@ function FormularioSolicitudPresencial({ onSolicitudCreada, usuarioFuncionario }
     montoPagado: 3,
     estadoPago: "Pendiente",
     metodoPago: "Pago presencial en caja municipal",
+    estadoSunat: "",
+    condicionSunat: "",
   });
 
   const [buscandoDni, setBuscandoDni] = useState(false);
@@ -749,6 +755,8 @@ function FormularioSolicitudPresencial({ onSolicitudCreada, usuarioFuncionario }
     setBuscandoRuc(true);
     try {
       const data = await consultarRuc(form.ruc.trim());
+      const sunatEstado = (data.estado || "").toUpperCase().trim();
+      const sunatCondicion = (data.condicion || "").toUpperCase().trim();
       setForm((prev) => ({
         ...prev,
         razonSocial: data.nombreNegocio || data.razon_social || "",
@@ -758,8 +766,16 @@ function FormularioSolicitudPresencial({ onSolicitudCreada, usuarioFuncionario }
         provincia: data.provincia || "Trujillo",
         distrito: data.distrito || "Trujillo",
         giro: data.giroComercial || data.actividad_economica || "Comercio",
+        estadoSunat: sunatEstado,
+        condicionSunat: sunatCondicion,
       }));
-      setSuccessRuc("✓ Contribuyente verificado en SUNAT.");
+      if (sunatEstado !== "ACTIVO" || sunatCondicion !== "HABIDO") {
+        setErrorRuc(`🚫 SUNAT: Estado="${sunatEstado}" Condición="${sunatCondicion}". Se requiere Estado=ACTIVO y Condición=HABIDO.`);
+        setSuccessRuc("");
+      } else {
+        setSuccessRuc("✓ Contribuyente verificado en SUNAT.");
+        setErrorRuc("");
+      }
     } catch (err) {
       setErrorRuc(err.message || "No se pudo consultar el RUC.");
     } finally {
@@ -797,6 +813,10 @@ function FormularioSolicitudPresencial({ onSolicitudCreada, usuarioFuncionario }
       alert("Por favor consulte y complete los datos del establecimiento (RUC, Nombre y Dirección).");
       return;
     }
+    if (form.estadoSunat !== "ACTIVO" || form.condicionSunat !== "HABIDO") {
+      alert(`🚫 No es posible registrar el expediente.\n\nEl contribuyente tiene:\n• Estado: ${form.estadoSunat || "No consultado"} (se requiere ACTIVO)\n• Condición: ${form.condicionSunat || "No consultado"} (se requiere HABIDO)\n\nEl contribuyente debe regularizar su situación ante SUNAT.`);
+      return;
+    }
 
     setGuardando(true);
     try {
@@ -829,6 +849,8 @@ function FormularioSolicitudPresencial({ onSolicitudCreada, usuarioFuncionario }
         razonSocial: form.razonSocial.trim(),
         direccion: form.direccion.trim(),
         giro: form.giro || "Comercio general",
+        estadoSunat: form.estadoSunat || "",
+        condicionSunat: form.condicionSunat || "",
         departamento: form.departamento,
         provincia: form.provincia,
         distrito: form.distrito,
@@ -1240,6 +1262,18 @@ function PanelFuncionario({ seccion }) {
     }).length;
   }, [solicitudes]);
 
+  const esHorarioOcupadoEnFecha = useCallback((fechaStr, inspectorUid, slotValue) => {
+    if (!fechaStr || !inspectorUid || !slotValue) return false;
+    return solicitudes.some((s) => {
+      const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
+      const esMismo = u === inspectorUid || u.includes(inspectorUid);
+      const esFecha = s.fechaVisitaInspector === fechaStr;
+      const esSlot = (s.horaVisitaInspector === slotValue || (s.horaVisitaLabel || "").includes(slotValue));
+      const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
+      return esMismo && esFecha && esSlot && noCerrado;
+    });
+  }, [solicitudes]);
+
   const solicitudesPendientesAsignacion = useMemo(() => {
     return solicitudes.filter((s) => {
       const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
@@ -1264,6 +1298,11 @@ function PanelFuncionario({ seccion }) {
   const ejecutarAsignacionInspector = async () => {
     if (!solicitudAsignarModal || !inspectorElegidoModal || !fechaAsignacionModal || !slotAsignarModal) {
       alert("Por favor seleccione la fecha, el inspector y el horario de inspección.");
+      return;
+    }
+
+    if (!esFechaValidaParaInspeccion(fechaAsignacionModal)) {
+      alert(MENSAJE_FECHA_INSPECCION);
       return;
     }
 
@@ -1390,6 +1429,27 @@ function PanelFuncionario({ seccion }) {
     cargarInspectores();
   }, []);
 
+  // AUTO-ASIGNAR INSPECTOR Y HORARIO CUANDO CAMBIA LA FECHA EN EL MODAL DE ASIGNACIÓN
+  useEffect(() => {
+    if (!solicitudAsignarModal || !fechaAsignacionModal) return;
+    if (!esFechaValidaParaInspeccion(fechaAsignacionModal)) return;
+
+    const primerDisponible = INSPECTORES_DEFAULT.find((insp) => {
+      const c = obtenerConteoAsignaciones(insp.uid, fechaAsignacionModal);
+      return c < 4;
+    }) || null;
+
+    if (primerDisponible) {
+      setInspectorElegidoModal(primerDisponible);
+      const primerSlotLibre = TIME_SLOTS.find(
+        (s) => !esHorarioOcupadoEnFecha(fechaAsignacionModal, primerDisponible.uid, s.value)
+      );
+      if (primerSlotLibre) setSlotAsignarModal(primerSlotLibre.value);
+    } else {
+      setInspectorElegidoModal(null);
+    }
+  }, [fechaAsignacionModal, solicitudAsignarModal, solicitudes]);
+
   const cargarCapacidadesMes = useCallback(async (anio, mes) => {
     setCargandoCapacidad(true);
     const nuevas = {};
@@ -1399,7 +1459,7 @@ function PanelFuncionario({ seccion }) {
 
     for (let d = 1; d <= diasEnMes; d++) {
       const fecha = new Date(anio, mes, d);
-      if (fecha < hoy) continue;
+      if (fecha <= hoy) continue;
       if (!DIAS_LABORABLES.includes(fecha.getDay())) continue;
       const fechaStr = formatearFechaLocal(fecha);
       try {
@@ -1608,6 +1668,10 @@ function PanelFuncionario({ seccion }) {
     if (!solicitudAgendar) return;
     if (!fechaSeleccionada) {
       alert("Debe seleccionar una fecha del calendario.");
+      return;
+    }
+    if (!esFechaValidaParaInspeccion(fechaSeleccionada)) {
+      alert(MENSAJE_FECHA_INSPECCION);
       return;
     }
     if (!slotSeleccionado) {
@@ -2204,7 +2268,7 @@ function PanelFuncionario({ seccion }) {
                             type="button"
                             onClick={() => {
                               setSolicitudAsignarModal(sol);
-                              setFechaAsignacionModal(formatearFechaLocal(new Date()));
+                              setFechaAsignacionModal(formatearFechaLocal(obtenerFechaMinimaInspeccion()));
                               setInspectorElegidoModal(null);
                             }}
                             style={{
@@ -2368,7 +2432,7 @@ function PanelFuncionario({ seccion }) {
                             type="button"
                             onClick={() => {
                               setSolicitudAsignarModal(sol);
-                              setFechaAsignacionModal(sol.fechaVisitaInspector || formatearFechaLocal(new Date()));
+                              setFechaAsignacionModal(sol.fechaVisitaInspector || formatearFechaLocal(obtenerFechaMinimaInspeccion()));
                               setInspectorElegidoModal(null);
                             }}
                             style={{
@@ -2951,78 +3015,73 @@ function PanelFuncionario({ seccion }) {
               {/* PASO 1: SELECCIONAR FECHA */}
               <div style={{ marginBottom: "20px" }}>
                 <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#1e293b", marginBottom: "6px" }}>
-                  1. Fecha de Inspección Técnica (DD/MM/YYYY):
+                  1. Fecha de Inspección Técnica (Mínimo mañana) *
                 </label>
                 <input
-                  type="text"
-                  placeholder="DD/MM/YYYY"
-                  value={fechaAsignacionModal}
-                  onChange={(e) => setFechaAsignacionModal(e.target.value)}
-                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold" }}
+                  type="date"
+                  min={formatearFechaYYYYMMDD(obtenerFechaMinimaInspeccion())}
+                  value={
+                    fechaAsignacionModal && fechaAsignacionModal.includes("/")
+                      ? fechaAsignacionModal.split("/").reverse().join("-")
+                      : fechaAsignacionModal
+                  }
+                  onChange={(e) => {
+                    const valYMD = e.target.value;
+                    if (!valYMD) return;
+                    const [y, m, d] = valYMD.split("-");
+                    setFechaAsignacionModal(`${d}/${m}/${y}`);
+                  }}
+                  style={{
+                    width: "100%", padding: "10px 14px", borderRadius: "8px",
+                    border: fechaAsignacionModal && !esFechaValidaParaInspeccion(fechaAsignacionModal) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
+                    fontSize: "14px", fontWeight: "bold"
+                  }}
                 />
+                {fechaAsignacionModal && !esFechaValidaParaInspeccion(fechaAsignacionModal) && (
+                  <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "10px 14px", borderRadius: "10px", marginTop: "8px", fontSize: "12.5px" }}>
+                    ⚠️ {MENSAJE_FECHA_INSPECCION}
+                  </div>
+                )}
               </div>
 
-              {/* PASO 2: SELECCIONAR INSPECTOR (DISPONIBILIDAD CON LÍMITE DE 4/DÍA) */}
+              {/* PASO 2: INSPECTOR ASIGNADO AUTOMÁTICAMENTE */}
               <div style={{ marginBottom: "20px" }}>
                 <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#1e293b", marginBottom: "8px" }}>
-                  2. Seleccionar Inspector (Verifique Cupos para el {fechaAsignacionModal}):
+                  2. Inspector Asignado para el {fechaAsignacionModal}:
                 </label>
-
-                <div style={{ display: "grid", gap: "10px" }}>
-                  {INSPECTORES_DEFAULT.map((insp) => {
-                    const cuposUsados = obtenerConteoAsignaciones(insp.uid, fechaAsignacionModal);
-                    const estaLleno = cuposUsados >= 4;
-                    const esSeleccionado = inspectorElegidoModal?.uid === insp.uid;
-
-                    return (
-                      <div
-                        key={insp.uid}
-                        onClick={() => {
-                          if (estaLleno) {
-                            alert(`⚠️ El inspector ${insp.nombre} ha completado el máximo de 4 inspecciones para el día ${fechaAsignacionModal}. Elija otro inspector.`);
-                            return;
-                          }
-                          setInspectorElegidoModal(insp);
-                        }}
-                        style={{
-                          display: "flex",
-                          justify: "space-between",
-                          alignItems: "center",
-                          padding: "12px 16px",
-                          borderRadius: "10px",
-                          border: esSeleccionado ? "2px solid #0f766e" : estaLleno ? "1px solid #fca5a5" : "1px solid #cbd5e1",
-                          background: esSeleccionado ? "#f0fdf4" : estaLleno ? "#fef2f2" : "white",
-                          cursor: estaLleno ? "not-allowed" : "pointer",
-                          opacity: estaLleno ? 0.7 : 1,
-                          transition: "all 0.2s"
-                        }}
-                      >
+                {inspectorElegidoModal ? (() => {
+                  const cuposUsados = obtenerConteoAsignaciones(inspectorElegidoModal.uid, fechaAsignacionModal);
+                  const estaLleno = cuposUsados >= 4;
+                  return (
+                    <div style={{
+                      padding: "14px 18px", borderRadius: "10px",
+                      border: estaLleno ? "1.5px solid #fca5a5" : "2px solid #0f766e",
+                      background: estaLleno ? "#fef2f2" : "#f0fdf4",
+                      opacity: estaLleno ? 0.7 : 1,
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                         <div>
-                          <div style={{ fontWeight: "bold", color: esSeleccionado ? "#0f766e" : "#1e293b", fontSize: "14px" }}>
-                            {insp.nombre} {esSeleccionado && "✓ (Seleccionado)"}
+                          <div style={{ fontWeight: "bold", color: estaLleno ? "#991b1b" : "#0f766e", fontSize: "14px" }}>
+                            {inspectorElegidoModal.nombre}
                           </div>
-                          <small style={{ color: "#64748b" }}>{insp.cargo} — {insp.correo}</small>
+                          <small style={{ color: "#64748b" }}>{inspectorElegidoModal.cargo} — {inspectorElegidoModal.correo}</small>
                         </div>
-
-                        <div>
-                          <span
-                            style={{
-                              padding: "4px 10px",
-                              borderRadius: "6px",
-                              fontSize: "12px",
-                              fontWeight: "bold",
-                              background: estaLleno ? "#fee2e2" : "#dcfce7",
-                              color: estaLleno ? "#991b1b" : "#166534",
-                              border: estaLleno ? "1px solid #fca5a5" : "1px solid #86efac"
-                            }}
-                          >
-                            {estaLleno ? "🔴 4/4 Lleno (Sin cupos)" : `🟢 ${cuposUsados}/4 Cupos (${4 - cuposUsados} disp.)`}
-                          </span>
-                        </div>
+                        <span style={{
+                          padding: "4px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold",
+                          background: estaLleno ? "#fee2e2" : "#dcfce7",
+                          color: estaLleno ? "#991b1b" : "#166534",
+                          border: `1px solid ${estaLleno ? "#fca5a5" : "#86efac"}`
+                        }}>
+                          {estaLleno ? "🔴 4/4 Lleno (Sin cupos)" : `🟢 ${cuposUsados}/4 Cupos (${4 - cuposUsados} disp.)`}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })() : (
+                  <div style={{ padding: "14px 18px", borderRadius: "10px", border: "1.5px solid #fca5a5", background: "#fef2f2", textAlign: "center" }}>
+                    <span style={{ color: "#991b1b", fontWeight: "700", fontSize: "13px" }}>⚠️ No hay inspectores disponibles para esta fecha. Seleccione otra fecha.</span>
+                  </div>
+                )}
               </div>
 
               {/* PASO 3: SELECCIONAR HORARIO */}

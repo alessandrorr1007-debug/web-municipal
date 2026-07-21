@@ -65,11 +65,9 @@ export const registrarUsuario = async (datos) => {
 export const iniciarSesion = async (correo, password) => {
   const correoNorm = (correo || "").toLowerCase().trim();
   const demoAccounts = {
-    "cajero@gmail.com": { uid: "CAJERO-001", correo: "cajero@gmail.com", nombre: "Cajero Municipal", rol: "cajero", password: "cajero" },
-    "cajero@munitrujillo.gob.pe": { uid: "CAJERO-001", correo: "cajero@munitrujillo.gob.pe", nombre: "Cajero Municipal", rol: "cajero", password: "cajero" },
-    "funcionario@munitrujillo.gob.pe": { uid: "FUNC-001", correo: "funcionario@munitrujillo.gob.pe", nombre: "Funcionario Licencias", rol: "funcionario", password: "funcionario" },
-    "inspector@munitrujillo.gob.pe": { uid: "INSP-001", correo: "inspector@munitrujillo.gob.pe", nombre: "Inspector Carlos Ramírez", rol: "inspector", password: "inspector" },
-    "admin@munitrujillo.gob.pe": { uid: "ADMIN-001", correo: "admin@munitrujillo.gob.pe", nombre: "Administrador General", rol: "administrador", password: "admin" },
+    "alessandropaul19@gmail.com": { uid: "CAJERO-001", correo: "alessandropaul19@gmail.com", nombre: "Cajero Municipal", rol: "cajero", password: "cajeroprueba" },
+    "arodriguezr1020@gmail.com": { uid: "INSP-001", correo: "arodriguezr1020@gmail.com", nombre: "Inspector Municipal", rol: "inspector", password: "inspectorprueba" },
+    "medicitasapp01@gmail.com": { uid: "ADMIN-001", correo: "medicitasapp01@gmail.com", nombre: "Administrador General", rol: "administrador", password: "admin321" },
   };
 
   try {
@@ -221,56 +219,21 @@ export const verificarCodigoVerificacion = async (correo, codigoIngresado) => {
 };
 
 export const enviarRecuperacion = async (correo) => {
-  const qUser = query(collection(db, "usuarios"), where("correo", "==", correo));
-  const snapUser = await getDocs(qUser);
-  if (snapUser.empty) {
-    throw new Error("El correo electrónico ingresado no pertenece a ninguna cuenta registrada.");
+  try {
+    await sendPasswordResetEmail(auth, correo);
+  } catch (err) {
+    const code = err?.code || "";
+    if (code === "auth/user-not-found") {
+      throw new Error("Si el correo está registrado, recibirás un enlace de recuperación.");
+    }
+    if (code === "auth/too-many-requests") {
+      throw new Error("Demasiados intentos. Espera unos minutos y vuelve a intentar.");
+    }
+    if (code === "auth/invalid-email") {
+      throw new Error("El correo electrónico no es válido.");
+    }
+    throw new Error("No se pudo enviar el enlace de recuperación. Intenta de nuevo.");
   }
-  const userDoc = snapUser.docs[0].data();
-  const nombre = userDoc.nombre || "Usuario";
-
-  const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-
-  console.log("[DEBUG] Recuperación - Código generado:", codigo, "para:", correo);
-
-  const q = query(collection(db, "codigos_verificacion"), where("correo", "==", correo));
-  const snapshot = await getDocs(q);
-  for (const d of snapshot.docs) {
-    await deleteDoc(doc(db, "codigos_verificacion", d.id));
-  }
-
-  await addDoc(collection(db, "codigos_verificacion"), {
-    correo,
-    codigo,
-    expiracion: Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000)),
-    usado: false,
-  });
-
-  console.log("[DEBUG] Código de recuperación guardado en Firestore");
-
-  const url = `${API_URL}/api/enviar-recuperacion`;
-  console.log("[DEBUG] Llamando a:", url);
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ correo, codigo, nombre }),
-  });
-
-  console.log("[DEBUG] Status HTTP:", response.status);
-  const texto = await response.text();
-  console.log("[DEBUG] Respuesta:", texto);
-
-  if (!response.ok) {
-    throw new Error(`Error ${response.status}: ${texto}`);
-  }
-
-  return codigo;
-};
-
-export const cambiarContrasena = async (correo) => {
-  await sendPasswordResetEmail(auth, correo);
-  return { mensaje: "Se ha enviado un enlace para restablecer tu contraseña a tu correo electrónico." };
 };
 
 export const actualizarPreferenciasNotificaciones = async (uid, recibir_correos) => {
