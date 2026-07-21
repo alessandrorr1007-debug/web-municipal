@@ -33,7 +33,6 @@ function PanelInspector({ seccion }) {
   const [evidencias, setEvidencias] = useState([]);
   const [fechaVisita, setFechaVisita] = useState("");
   const [horaVisita, setHoraVisita] = useState("10:00");
-  const [filtroFechaVisita, setFiltroFechaVisita] = useState("hoy");
   const [procesando, setProcesando] = useState(false);
 
   const cargarSolicitudes = async () => {
@@ -131,7 +130,7 @@ function PanelInspector({ seccion }) {
     return true;
   }, [usuario]);
 
-  // CLASIFICACIÓN DE EXPEDIENTES RECIBIDOS Y ASIGNADOS AL INSPECTOR ACTIVO
+  // CLASIFICACIÓN DE EXPEDIENTES PROGRAMADOS STRICTAMENTE PARA HOY
   const inspeccionesPendientes = useMemo(() => {
     const hoyNorm = normalizarFechaString(formatearFechaLocal(new Date()));
 
@@ -139,21 +138,13 @@ function PanelInspector({ seccion }) {
       if (!esExpedienteDeEsteInspector(s)) return false;
 
       const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
-      // Solo mostrar expedientes que aún NO han sido evaluados (no aprobados ni desaprobados)
+      // Solo mostrar expedientes que aún NO han sido evaluados
       if (e.includes("aprobado") || e.includes("rechazado")) return false;
 
       const fechaSolNorm = normalizarFechaString(s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "");
-
-      if (filtroFechaVisita === "hoy") {
-        return !fechaSolNorm || fechaSolNorm === hoyNorm;
-      }
-      if (filtroFechaVisita === "proximas") {
-        return !fechaSolNorm || fechaSolNorm >= hoyNorm;
-      }
-      // "todas"
-      return true;
+      return fechaSolNorm === hoyNorm;
     });
-  }, [solicitudes, esExpedienteDeEsteInspector, filtroFechaVisita]);
+  }, [solicitudes, esExpedienteDeEsteInspector]);
 
   const inspeccionesFinalizadas = useMemo(() => {
     return solicitudes.filter((s) => {
@@ -492,9 +483,9 @@ function PanelInspector({ seccion }) {
 
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "20px" }}>
         <div className="stat-card" style={{ background: !esHistorial ? "#fef3c7" : "white" }}>
-          <span>Inspecciones Programadas</span>
+          <span>Inspecciones Para Hoy</span>
           <strong style={{ color: "#d97706" }}>{inspeccionesPendientes.length}</strong>
-          <small>Asignadas y pendientes</small>
+          <small>Programadas para hoy</small>
         </div>
         <div className="stat-card" style={{ background: esHistorial ? "#dcfce7" : "white" }}>
           <span>Inspecciones Evaluadas</span>
@@ -514,7 +505,7 @@ function PanelInspector({ seccion }) {
             <h2>
               {esHistorial
                 ? "Registro Histórico de Inspecciones Evaluadas"
-                : "Visitas de Inspección Programadas"}
+                : "Visitas de Inspección Programadas para Hoy"}
             </h2>
             <p>
               {esHistorial
@@ -523,24 +514,6 @@ function PanelInspector({ seccion }) {
             </p>
           </div>
         </div>
-
-        {!esHistorial && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", background: "#f8fafc", padding: "14px 20px", borderRadius: "12px", border: "1.5px solid #cbd5e1" }}>
-            <div>
-              <span style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a", display: "block" }}>📅 Mostrar Inspecciones Programadas:</span>
-              <small style={{ color: "#64748b" }}>Seleccione la fecha o rango de inspecciones para visualizar en la lista de trabajo</small>
-            </div>
-            <select
-              value={filtroFechaVisita}
-              onChange={(e) => setFiltroFechaVisita(e.target.value)}
-              style={{ padding: "10px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "bold", background: "white", color: "#0f172a", cursor: "pointer" }}
-            >
-              <option value="todas">📋 Todas las Inspecciones Pendientes (Recomendado para Pruebas)</option>
-              <option value="hoy">📅 Solo Inspecciones de Hoy ({formatearFechaLocal(new Date())})</option>
-              <option value="proximas">🗓️ Próximas Inspecciones (Mañana y Futuras)</option>
-            </select>
-          </div>
-        )}
 
         {esHistorial && (
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
