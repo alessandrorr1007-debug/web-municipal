@@ -120,21 +120,8 @@ function PanelInspector({ seccion }) {
   const esHistorial = seccion === "historial" || seccion === "historial-inspecciones";
 
   const solicitudesFiltradas = useMemo(() => {
-    const listaBase = esHistorial ? inspeccionesFinalizadas : inspeccionesHoy;
-
-    if (!busqueda.trim()) return listaBase;
-
-    const q = busqueda.toLowerCase().trim();
-    return listaBase.filter((s) => {
-      const dni = (s.dniSolicitante || s.dni || "").toLowerCase();
-      const idExp = (s.id || "").toLowerCase();
-      const codExp = `exp-${idExp}`;
-      const ruc = (s.ruc || "").toLowerCase();
-      const nombreSol = [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante, s.nombreNegocio].filter(Boolean).join(" ").toLowerCase();
-
-      return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
-    });
-  }, [solicitudes, busqueda, esHistorial, inspeccionesHoy, inspeccionesFinalizadas]);
+    return esHistorial ? inspeccionesFinalizadas : inspeccionesHoy;
+  }, [esHistorial, inspeccionesHoy, inspeccionesFinalizadas]);
 
   // ABRIR MODAL DE ATENCIÓN DE INSPECCIÓN
   const abrirModalAtencion = (solicitud, tabInicial = "evaluacion") => {
@@ -374,16 +361,6 @@ function PanelInspector({ seccion }) {
                 : "Revisa los datos del establecimiento comercial, ubicación, teléfono de contacto y registra la evaluación técnica."}
             </p>
           </div>
-        </div>
-
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
-          <input
-            type="text"
-            placeholder="🔍 Buscar por código (EXP-XXXX), DNI, RUC o Nombre del establecimiento..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            style={{ flex: 1, minWidth: "240px", padding: "12px 18px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-          />
         </div>
 
         {solicitudesFiltradas.length === 0 ? (
