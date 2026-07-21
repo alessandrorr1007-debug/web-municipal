@@ -1,11 +1,8 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   obtenerSolicitudes,
   actualizarSolicitud,
-  contarInspeccionesEnFecha,
-  obtenerInspectores,
   guardarSolicitud,
-  obtenerHorariosOcupadosInspector,
 } from "../services/solicitudService";
 import { consultarDni } from "../services/dniService";
 import { consultarRuc } from "../services/rucService";
@@ -23,25 +20,10 @@ import {
   mapLegacyEstado,
 } from "../config/estadosSolicitud";
 import {
-  MAX_INSPECCIONES_POR_DIA,
-  TIME_SLOTS,
-  DIAS_LABORABLES,
-  obtenerCapacidadColor,
+  INSPECTORES_DEFAULT,
   formatearFechaLocal,
-  esHorarioPasado,
-  esFechaValidaParaInspeccion,
-  MENSAJE_FECHA_INSPECCION,
-  obtenerFechaMinimaInspeccion,
-  formatearFechaYYYYMMDD,
 } from "../config/inspeccionConfig";
 import { obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
-
-const INSPECTORES_DEFAULT = [
-  { uid: "INSP-001", nombre: "Inspector Carlos Ramírez", correo: "c.ramirez@munitrujillo.gob.pe", cargo: "Inspector de Defensa Civil" },
-  { uid: "INSP-002", nombre: "Inspectora Ana López", correo: "a.lopez@munitrujillo.gob.pe", cargo: "Inspectora de Seguridad Edil" },
-  { uid: "INSP-003", nombre: "Inspector Luis Mendoza", correo: "l.mendoza@munitrujillo.gob.pe", cargo: "Inspector de Licencias Comerciales" },
-  { uid: "INSP-004", nombre: "Inspectora María Torres", correo: "m.torres@munitrujillo.gob.pe", cargo: "Inspectora de Gestión Ambiental" },
-];
 
 const MOTIVOS_RECHAZO_DOCS = [
   "Documento faltante",
@@ -49,119 +31,6 @@ const MOTIVOS_RECHAZO_DOCS = [
   "Datos inconsistentes",
   "Otro",
 ];
-
-function CalendarioInspeccion({ fechaSeleccionada, onSelectFecha, capacidades }) {
-  const [mesActual, setMesActual] = useState(() => {
-    const hoy = new Date();
-    return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  });
-
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-
-  const anio = mesActual.getFullYear();
-  const mes = mesActual.getMonth();
-  const primerDia = new Date(anio, mes, 1).getDay();
-  const diasEnMes = new Date(anio, mes + 1, 0).getDate();
-
-  const diasCalendario = [];
-  for (let i = 0; i < primerDia; i++) {
-    diasCalendario.push({ dia: null, fecha: null });
-  }
-  for (let d = 1; d <= diasEnMes; d++) {
-    const fecha = new Date(anio, mes, d);
-    diasCalendario.push({ dia: d, fecha });
-  }
-
-  const meses = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-  ];
-  const diasSemana = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
-
-  const irMesAnterior = () => setMesActual(new Date(anio, mes - 1, 1));
-  const irMesSiguiente = () => setMesActual(new Date(anio, mes + 1, 1));
-
-  return (
-    <div className="calendario-inspeccion">
-      <div className="calendario-header">
-        <button type="button" onClick={irMesAnterior} className="calendario-nav">
-          &#8249;
-        </button>
-        <span className="calendario-titulo">
-          {meses[mes]} {anio}
-        </span>
-        <button type="button" onClick={irMesSiguiente} className="calendario-nav">
-          &#8250;
-        </button>
-      </div>
-
-      <div className="calendario-grid">
-        {diasSemana.map((d) => (
-          <div key={d} className="calendario-dia-header">
-            {d}
-          </div>
-        ))}
-
-        {diasCalendario.map((item, idx) => {
-          if (!item.dia) {
-            return <div key={`empty-${idx}`} className="calendario-dia vacio" />;
-          }
-
-          const fechaStr = formatearFechaLocal(item.fecha);
-          const esPasado = item.fecha <= hoy;
-          const esFinDeSemana = !DIAS_LABORABLES.includes(item.fecha.getDay());
-          const deshabilitado = esPasado || esFinDeSemana;
-          const capacidad = capacidades[fechaStr] || 0;
-          const colorCap = obtenerCapacidadColor(capacidad);
-          const esSeleccionada = fechaSeleccionada === fechaStr;
-          const esHoy =
-            item.fecha.getDate() === hoy.getDate() &&
-            item.fecha.getMonth() === hoy.getMonth() &&
-            item.fecha.getFullYear() === hoy.getFullYear();
-
-          let claseDia = "calendario-dia";
-          if (deshabilitado) claseDia += " deshabilitado";
-          if (esSeleccionada) claseDia += " seleccionado";
-          if (esHoy) claseDia += " hoy";
-          if (!deshabilitado && capacidad > 0) claseDia += ` capacidad-${colorCap}`;
-
-          return (
-            <button
-              key={idx}
-              type="button"
-              className={claseDia}
-              onClick={() => !deshabilitado && onSelectFecha(fechaStr)}
-              disabled={deshabilitado}
-            >
-              <span className="dia-numero">{item.dia}</span>
-              {!deshabilitado && capacidad > 0 && (
-                <span className={`dia-capacidad cap-${colorCap}`}>
-                  {capacidad}/{MAX_INSPECCIONES_POR_DIA}
-                </span>
-              )}
-              {!deshabilitado && capacidad === 0 && esHoy && (
-                <span className="dia-capacidad cap-hoy">Hoy</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="calendario-leyenda">
-        <div className="leyenda-item">
-          <span className="leyenda-dot disp" /> Disponible
-        </div>
-        <div className="leyenda-item">
-          <span className="leyenda-dot casi" /> Casi lleno (3/4)
-        </div>
-        <div className="leyenda-item">
-          <span className="leyenda-dot comp" /> Completo (4/4)
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function DetFieldValue({ label, value, mono }) {
   const val = value || "---";
@@ -1228,51 +1097,13 @@ function PanelFuncionario({ seccion }) {
   const [busqueda, setBusqueda] = useState("");
   const [solicitudDetalle, setSolicitudDetalle] = useState(null);
   const [solicitudRevisarDocs, setSolicitudRevisarDocs] = useState(null);
-  const [solicitudAgendar, setSolicitudAgendar] = useState(null);
-  const [slotSeleccionado, setSlotSeleccionado] = useState("");
-  const [fechaSeleccionada, setFechaSeleccionada] = useState("");
-  const [inspectoresLista, setInspectoresLista] = useState([]);
-  const [inspectorSeleccionadoUid, setInspectorSeleccionadoUid] = useState("");
-  const [notasInspector, setNotasInspector] = useState("");
-  const [horariosOcupados, setHorariosOcupados] = useState([]);
-  const [capacidades, setCapacidades] = useState({});
-  const [cargandoCapacidad, setCargandoCapacidad] = useState(false);
   const [modalAprobar, setModalAprobar] = useState(null);
   const [modalRechazar, setModalRechazar] = useState(null);
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [paso, setPaso] = useState(seccion || "solicitudes");
-
-  // ESTADOS Y LOGICA DE ASIGNACION DE INSPECTORES (MAX 4/DIA)
-  const [solicitudAsignarModal, setSolicitudAsignarModal] = useState(null);
-  const [fechaAsignacionModal, setFechaAsignacionModal] = useState(formatearFechaLocal(new Date()));
-  const [inspectorElegidoModal, setInspectorElegidoModal] = useState(null);
-  const [slotAsignarModal, setSlotAsignarModal] = useState("08:00");
+  const [modalInfoInspeccion, setModalInfoInspeccion] = useState(null);
   const [fechaAgendaConsulta, setFechaAgendaConsulta] = useState(formatearFechaLocal(new Date()));
-
-  // Conteo dinámico de asignaciones por inspector en una fecha específica (Máx 4/día)
-  const obtenerConteoAsignaciones = useCallback((inspectorUid, fechaStr) => {
-    if (!fechaStr || !inspectorUid) return 0;
-    return solicitudes.filter((s) => {
-      const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
-      const esInspector = u === inspectorUid || u.includes(inspectorUid);
-      const esMismaFecha = s.fechaVisitaInspector === fechaStr;
-      const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
-      return esInspector && esMismaFecha && noCerrado;
-    }).length;
-  }, [solicitudes]);
-
-  const esHorarioOcupadoEnFecha = useCallback((fechaStr, inspectorUid, slotValue) => {
-    if (!fechaStr || !inspectorUid || !slotValue) return false;
-    return solicitudes.some((s) => {
-      const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
-      const esMismo = u === inspectorUid || u.includes(inspectorUid);
-      const esFecha = s.fechaVisitaInspector === fechaStr;
-      const esSlot = (s.horaVisitaInspector === slotValue || (s.horaVisitaLabel || "").includes(slotValue));
-      const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
-      return esMismo && esFecha && esSlot && noCerrado;
-    });
-  }, [solicitudes]);
 
   const solicitudesPendientesAsignacion = useMemo(() => {
     return solicitudes.filter((s) => {
@@ -1294,103 +1125,6 @@ function PanelFuncionario({ seccion }) {
     });
   }, [solicitudes]);
 
-  // EJECUTAR ASIGNACIÓN O REASIGNACIÓN DE INSPECTOR
-  const ejecutarAsignacionInspector = async () => {
-    if (!solicitudAsignarModal || !inspectorElegidoModal || !fechaAsignacionModal || !slotAsignarModal) {
-      alert("Por favor seleccione la fecha, el inspector y el horario de inspección.");
-      return;
-    }
-
-    if (!esFechaValidaParaInspeccion(fechaAsignacionModal)) {
-      alert(MENSAJE_FECHA_INSPECCION);
-      return;
-    }
-
-    const cuposActuales = obtenerConteoAsignaciones(inspectorElegidoModal.uid || inspectorElegidoModal.nombre, fechaAsignacionModal);
-    if (cuposActuales >= 4) {
-      alert(`⚠️ El inspector ${inspectorElegidoModal.nombre} ya alcanzó el límite máximo de 4 inspecciones programadas para el día ${fechaAsignacionModal}. Seleccione otro inspector o cambie la fecha.`);
-      return;
-    }
-
-    setProcesando(true);
-    try {
-      const fechaHoraActual = new Date().toLocaleString("es-PE");
-      const nombreFuncionario = usuario?.nombre || usuario?.email || "Funcionario Municipal";
-      const slotObj = TIME_SLOTS.find((s) => s.value === slotAsignarModal);
-      const horaLabel = slotObj ? slotObj.label : `${slotAsignarModal} hrs`;
-
-      const esReasignacion = !!solicitudAsignarModal.inspectorUid;
-
-      const logEntrada = {
-        fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
-        hora: fechaHoraActual.split(",")[1]?.trim() || "",
-        funcionario: nombreFuncionario,
-        accion: esReasignacion ? "Reasignación de Inspector" : "Asignación Oficial de Inspector",
-        comentarios: `${esReasignacion ? "Reasignado" : "Asignado"} a ${inspectorElegidoModal.nombre} (${inspectorElegidoModal.cargo || "Inspector"}) para la fecha ${fechaAsignacionModal} a las ${horaLabel}. Asignado por ${nombreFuncionario}.`,
-      };
-
-      const cambios = {
-        inspectorUid: inspectorElegidoModal.uid || inspectorElegidoModal.id,
-        inspectorAsignadoUid: inspectorElegidoModal.uid || inspectorElegidoModal.id,
-        inspectorNombre: inspectorElegidoModal.nombre,
-        fechaVisitaInspector: fechaAsignacionModal,
-        horaVisitaInspector: slotAsignarModal,
-        horaVisitaLabel: horaLabel,
-        estado: "Inspección programada",
-        estadoNormalizado: "INSPECCION_PROGRAMADA",
-        estadoInspeccion: "Programada",
-        inspeccion: "Programada",
-        asignadoPorFuncionario: nombreFuncionario,
-        fechaHoraAsignacion: fechaHoraActual,
-        historialAcciones: [...(solicitudAsignarModal.historialAcciones || []), logEntrada],
-      };
-
-      await actualizarSolicitud(solicitudAsignarModal.id, cambios);
-
-      // Notificación al Ciudadano
-      await crearNotificacion(
-        solicitudAsignarModal.uidUsuario || "",
-        {
-          titulo: "Inspección Programada",
-          descripcion: `Su inspección técnica para el local EXP-${solicitudAsignarModal.id} fue programada para el ${fechaAsignacionModal} (${horaLabel}) con el ${inspectorElegidoModal.nombre}.`,
-          icono: "📅",
-        },
-        solicitudAsignarModal.correoUsuario || ""
-      );
-
-      // Notificación al Inspector Asignado
-      await crearNotificacion(
-        inspectorElegidoModal.uid || "INSPECTOR",
-        {
-          titulo: "Nueva Inspección Asignada",
-          descripcion: `Se le ha asignado el expediente EXP-${solicitudAsignarModal.id} (${solicitudAsignarModal.nombreNegocio}) para el ${fechaAsignacionModal} en el horario ${horaLabel}.`,
-          icono: "🔍",
-        },
-        ""
-      );
-
-      alert(`✅ Inspección asignada exitosamente a ${inspectorElegidoModal.nombre} para el ${fechaAsignacionModal}.`);
-      setSolicitudAsignarModal(null);
-      setInspectorElegidoModal(null);
-      await cargarSolicitudes();
-    } catch (err) {
-      console.error(err);
-      alert("Error al asignar inspector: " + err.message);
-    } finally {
-      setProcesando(false);
-    }
-  };
-
-  useEffect(() => {
-    if (fechaSeleccionada) {
-      obtenerHorariosOcupadosInspector(fechaSeleccionada, inspectorSeleccionadoUid).then((data) => {
-        setHorariosOcupados(data.map((item) => item.slot));
-      });
-    } else {
-      setHorariosOcupados([]);
-    }
-  }, [fechaSeleccionada, inspectorSeleccionadoUid]);
-
   useEffect(() => {
     if (seccion) {
       setPaso(seccion);
@@ -1410,73 +1144,9 @@ function PanelFuncionario({ seccion }) {
     }
   };
 
-  const cargarInspectores = async () => {
-    try {
-      const data = await obtenerInspectores();
-      if (data && data.length > 0) {
-        setInspectoresLista(data);
-      } else {
-        setInspectoresLista(INSPECTORES_DEFAULT);
-      }
-    } catch (err) {
-      console.error(err);
-      setInspectoresLista(INSPECTORES_DEFAULT);
-    }
-  };
-
   useEffect(() => {
     cargarSolicitudes();
-    cargarInspectores();
   }, []);
-
-  // AUTO-ASIGNAR INSPECTOR Y HORARIO CUANDO CAMBIA LA FECHA EN EL MODAL DE ASIGNACIÓN
-  useEffect(() => {
-    if (!solicitudAsignarModal || !fechaAsignacionModal) return;
-    if (!esFechaValidaParaInspeccion(fechaAsignacionModal)) return;
-
-    const primerDisponible = INSPECTORES_DEFAULT.find((insp) => {
-      const c = obtenerConteoAsignaciones(insp.uid, fechaAsignacionModal);
-      return c < 4;
-    }) || null;
-
-    if (primerDisponible) {
-      setInspectorElegidoModal(primerDisponible);
-      const primerSlotLibre = TIME_SLOTS.find(
-        (s) => !esHorarioOcupadoEnFecha(fechaAsignacionModal, primerDisponible.uid, s.value)
-      );
-      if (primerSlotLibre) setSlotAsignarModal(primerSlotLibre.value);
-    } else {
-      setInspectorElegidoModal(null);
-    }
-  }, [fechaAsignacionModal, solicitudAsignarModal, solicitudes]);
-
-  const cargarCapacidadesMes = useCallback(async (anio, mes) => {
-    setCargandoCapacidad(true);
-    const nuevas = {};
-    const diasEnMes = new Date(anio, mes + 1, 0).getDate();
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-
-    for (let d = 1; d <= diasEnMes; d++) {
-      const fecha = new Date(anio, mes, d);
-      if (fecha <= hoy) continue;
-      if (!DIAS_LABORABLES.includes(fecha.getDay())) continue;
-      const fechaStr = formatearFechaLocal(fecha);
-      try {
-        const count = await contarInspeccionesEnFecha(fechaStr);
-        nuevas[fechaStr] = count;
-      } catch {
-        nuevas[fechaStr] = 0;
-      }
-    }
-    setCapacidades(nuevas);
-    setCargandoCapacidad(false);
-  }, []);
-
-  useEffect(() => {
-    const hoy = new Date();
-    cargarCapacidadesMes(hoy.getFullYear(), hoy.getMonth());
-  }, [cargarCapacidadesMes]);
 
   const formatearFechaHora = () => {
     return new Date().toLocaleString("es-PE", {
@@ -1641,103 +1311,6 @@ function PanelFuncionario({ seccion }) {
     } catch (err) {
       console.error(err);
       alert("Error al rechazar documentos: " + err.message);
-    } finally {
-      setProcesando(false);
-    }
-  };
-
-  const abrirAgendarModal = (sol) => {
-    setSolicitudAgendar(sol);
-    setFechaSeleccionada("");
-    setSlotSeleccionado("");
-    setNotasInspector("");
-    if (inspectoresLista.length > 0) {
-      setInspectorSeleccionadoUid(inspectoresLista[0].uid || inspectoresLista[0].id || "");
-    }
-  };
-
-  const handleSelectFecha = (fechaStr) => {
-    setFechaSeleccionada(fechaStr);
-    const count = capacidades[fechaStr] || 0;
-    if (count >= MAX_INSPECCIONES_POR_DIA) {
-      setSlotSeleccionado("");
-    }
-  };
-
-  const agendarInspeccion = async () => {
-    if (!solicitudAgendar) return;
-    if (!fechaSeleccionada) {
-      alert("Debe seleccionar una fecha del calendario.");
-      return;
-    }
-    if (!esFechaValidaParaInspeccion(fechaSeleccionada)) {
-      alert(MENSAJE_FECHA_INSPECCION);
-      return;
-    }
-    if (!slotSeleccionado) {
-      alert("Debe seleccionar un horario de visita.");
-      return;
-    }
-
-    const count = capacidades[fechaSeleccionada] || 0;
-    if (count >= MAX_INSPECCIONES_POR_DIA) {
-      alert(`La fecha ${fechaSeleccionada} ya alcanzó el límite de ${MAX_INSPECCIONES_POR_DIA} inspecciones por día.`);
-      return;
-    }
-
-    const slot = TIME_SLOTS.find((t) => t.value === slotSeleccionado);
-    if (!slot) {
-      alert("Horario inválido.");
-      return;
-    }
-
-    const inspectorObj = inspectoresLista.find(i => (i.uid || i.id) === inspectorSeleccionadoUid) || inspectoresLista[0] || INSPECTORES_DEFAULT[0];
-    const nombreInspectorFinal = inspectorObj.nombre || inspectorObj.nombreCompleto || "Inspector Municipal";
-    const uidInspectorFinal = inspectorObj.uid || inspectorObj.id || "";
-
-    try {
-      setProcesando(true);
-
-      await actualizarSolicitud(solicitudAgendar.id, {
-        inspeccion: "Pendiente",
-        estado: "Pendiente de inspección",
-        estadoNormalizado: ESTADOS.INSPECCION_PROGRAMADA,
-        fechaVisitaInspector: fechaSeleccionada,
-        horaVisitaInspector: slotSeleccionado,
-        horaVisitaLabel: slot.label,
-        programadoPor: "funcionario",
-        nombreProgramador: usuario?.nombre || "Funcionario Municipal",
-        uidProgramador: usuario?.uid || "",
-        inspectorAsignado: nombreInspectorFinal,
-        inspectorAsignadoUid: uidInspectorFinal,
-        notasInspector: notasInspector.trim(),
-      });
-
-      const capacidadActual = count + 1;
-      setCapacidades((prev) => ({
-        ...prev,
-        [fechaSeleccionada]: capacidadActual,
-      }));
-
-      await crearNotificacion(
-        uidInspectorFinal,
-        {
-          titulo: "Nueva Inspección Asignada",
-          descripcion: `Se le ha asignado la inspección del expediente EXP-${solicitudAgendar.id} (${solicitudAgendar.nombreNegocio}) para el día ${fechaSeleccionada} a las ${slot.label}.`,
-          icono: "🔍",
-        },
-        inspectorObj.correo || ""
-      );
-
-      alert(`Inspección asignada con éxito a ${nombreInspectorFinal} para el ${fechaSeleccionada} a las ${slot.label}.`);
-      setSolicitudAgendar(null);
-      setFechaSeleccionada("");
-      setSlotSeleccionado("");
-      setNotasInspector("");
-      await cargarSolicitudes();
-    } catch (error) {
-      console.error(error);
-      alert("Error al asignar inspector: " + error.message);
     } finally {
       setProcesando(false);
     }
@@ -2266,11 +1839,7 @@ function PanelFuncionario({ seccion }) {
                         <td>
                           <button
                             type="button"
-                            onClick={() => {
-                              setSolicitudAsignarModal(sol);
-                              setFechaAsignacionModal(formatearFechaLocal(obtenerFechaMinimaInspeccion()));
-                              setInspectorElegidoModal(null);
-                            }}
+                            onClick={() => setModalInfoInspeccion(sol)}
                             style={{
                               background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)",
                               color: "white",
@@ -2282,7 +1851,7 @@ function PanelFuncionario({ seccion }) {
                               fontSize: "13px"
                             }}
                           >
-                            📅 Asignar Inspector
+                            📅 Ver Inspección
                           </button>
                         </td>
                       </tr>
@@ -2325,7 +1894,13 @@ function PanelFuncionario({ seccion }) {
             {/* GRID DE CARGA DE INSPECTORES */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
               {INSPECTORES_DEFAULT.map((insp) => {
-                const asignaciones = obtenerConteoAsignaciones(insp.uid, fechaAgendaConsulta);
+                const asignaciones = solicitudes.filter((s) => {
+                  const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
+                  const esInspector = u === insp.uid || u.includes(insp.uid);
+                  const esMismaFecha = s.fechaVisitaInspector === fechaAgendaConsulta;
+                  const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
+                  return esInspector && esMismaFecha && noCerrado;
+                }).length;
                 const porcentaje = Math.min((asignaciones / 4) * 100, 100);
                 const estaLleno = asignaciones >= 4;
 
@@ -2430,13 +2005,9 @@ function PanelFuncionario({ seccion }) {
                         <td>
                           <button
                             type="button"
-                            onClick={() => {
-                              setSolicitudAsignarModal(sol);
-                              setFechaAsignacionModal(sol.fechaVisitaInspector || formatearFechaLocal(obtenerFechaMinimaInspeccion()));
-                              setInspectorElegidoModal(null);
-                            }}
+                            onClick={() => setModalInfoInspeccion(sol)}
                             style={{
-                              background: "#f59e0b",
+                              background: "#0d9488",
                               color: "white",
                               border: "none",
                               padding: "6px 12px",
@@ -2446,7 +2017,7 @@ function PanelFuncionario({ seccion }) {
                               fontSize: "12.5px"
                             }}
                           >
-                            🔄 Reasignar
+                            📋 Ver Detalles
                           </button>
                         </td>
                       </tr>
@@ -2471,7 +2042,14 @@ function PanelFuncionario({ seccion }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginTop: "16px" }}>
             {INSPECTORES_DEFAULT.map((insp) => {
-              const asignacionesHoy = obtenerConteoAsignaciones(insp.uid, formatearFechaLocal(new Date()));
+              const fechaHoy = formatearFechaLocal(new Date());
+              const asignacionesHoy = solicitudes.filter((s) => {
+                const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
+                const esInspector = u === insp.uid || u.includes(insp.uid);
+                const esMismaFecha = s.fechaVisitaInspector === fechaHoy;
+                const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
+                return esInspector && esMismaFecha && noCerrado;
+              }).length;
               const estaLleno = asignacionesHoy >= 4;
 
               return (
@@ -2837,298 +2415,53 @@ function PanelFuncionario({ seccion }) {
         </div>
       )}
 
-      {/* MODAL ASIGNAR INSPECCIÓN */}
-      {solicitudAgendar && (
-        <div className="admin-form-modal" style={{ zIndex: 1000 }}>
-          <div className="admin-form-card" style={{ maxWidth: "560px", maxHeight: "85vh", overflowY: "auto" }}>
-            <div className="admin-form-header">
-              <h3>🔍 Asignar Inspección — EXP-{solicitudAgendar.id}</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setSolicitudAgendar(null);
-                  setFechaSeleccionada("");
-                  setSlotSeleccionado("");
-                }}
-              >
-                ✕
-              </button>
-            </div>
-            <div style={{ padding: "16px 0" }}>
-              <p style={{ margin: "0 0 16px", color: "#475569", fontSize: "14px" }}>
-                Establecimiento: <strong>{solicitudAgendar.nombreNegocio}</strong> (RUC: {solicitudAgendar.ruc})
-              </p>
-
-              {/* SELECCIÓN DE INSPECTOR */}
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                  Elegir Inspector *
-                </label>
-                <select
-                  value={inspectorSeleccionadoUid}
-                  onChange={(e) => setInspectorSeleccionadoUid(e.target.value)}
-                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                >
-                  {inspectoresLista.map((insp) => {
-                    const uidVal = insp.uid || insp.id;
-                    return (
-                      <option key={uidVal} value={uidVal}>
-                        {insp.nombre || insp.nombreCompleto} {insp.cargo ? `(${insp.cargo})` : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              {/* SELECCIÓN DE FECHA */}
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                Elegir Fecha de Inspección * (Máx 5 por día)
-              </label>
-              <CalendarioInspeccion
-                fechaSeleccionada={fechaSeleccionada}
-                onSelectFecha={handleSelectFecha}
-                capacidades={capacidades}
-              />
-
-              {/* SELECCIÓN DE HORARIO */}
-              {fechaSeleccionada && (
-                <div style={{ marginTop: "16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                    <label style={{ fontSize: "13px", fontWeight: "bold", color: "#334155" }}>
-                      Capacidad del Día:{" "}
-                      <span style={{ color: (capacidades[fechaSeleccionada] || 0) >= MAX_INSPECCIONES_POR_DIA ? "#dc2626" : "#16a34a", fontSize: "15px" }}>
-                        {capacidades[fechaSeleccionada] || 0}/{MAX_INSPECCIONES_POR_DIA}
-                      </span>
-                    </label>
-                  </div>
-
-                  {(capacidades[fechaSeleccionada] || 0) >= MAX_INSPECCIONES_POR_DIA ? (
-                    <div style={{ padding: "12px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#991b1b", fontSize: "13.5px" }}>
-                      Día sin disponibilidad. Elija otra fecha.
-                    </div>
-                  ) : (
-                    <div>
-                      <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                        Elegir Horario Disponible *
-                      </label>
-                      <div className="time-slots-grid">
-                        {TIME_SLOTS.map((slot) => {
-                          const esPasado = esHorarioPasado(fechaSeleccionada, slot.value);
-                          const esOcupado = horariosOcupados.includes(slot.value);
-                          const deshabilitado = esPasado || esOcupado;
-
-                          let estadoTag = "";
-                          if (esOcupado) estadoTag = " 🔒 (Ocupado)";
-                          else if (esPasado) estadoTag = " ❌ (Hora pasada)";
-
-                          return (
-                            <button
-                              key={slot.value}
-                              type="button"
-                              className={`time-slot ${slotSeleccionado === slot.value ? "seleccionado" : ""} ${deshabilitado ? "deshabilitado" : ""}`}
-                              onClick={() => !deshabilitado && setSlotSeleccionado(slot.value)}
-                              disabled={deshabilitado}
-                              style={deshabilitado ? { opacity: 0.5, cursor: "not-allowed", background: "#f1f5f9" } : {}}
-                            >
-                              {slot.label}{estadoTag}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* NOTAS AL INSPECTOR */}
-              <div style={{ marginTop: "16px" }}>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                  Indicaciones / Observaciones para el Inspector
-                </label>
-                <textarea
-                  value={notasInspector}
-                  onChange={(e) => setNotasInspector(e.target.value)}
-                  rows="2"
-                  placeholder="Verificar certificado de salubridad y aforo..."
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
-                />
-              </div>
-            </div>
-
-            <div className="admin-form-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  setSolicitudAgendar(null);
-                  setFechaSeleccionada("");
-                  setSlotSeleccionado("");
-                }}
-                disabled={procesando}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={agendarInspeccion}
-                disabled={procesando || !fechaSeleccionada || !slotSeleccionado}
-                style={{ background: "#0f766e" }}
-              >
-                {procesando ? "Asignando..." : "🚀 Asignar Inspección"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE ASIGNACIÓN MANUAL DE INSPECTOR CON LÍMITE DE 4 CUPOS POR DÍA */}
-      {solicitudAsignarModal && (
+      {/* MODAL INFORMACIÓN INSPECCIÓN — SOLO LECTURA */}
+      {modalInfoInspeccion && (
         <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.7)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999 }}>
-          <div className="modal-content" style={{ maxWidth: "680px", width: "90%", background: "white", borderRadius: "14px", overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" }}>
-            <div className="modal-header" style={{ background: "linear-gradient(135deg, #0f766e 0%, #1e293b 100%)", color: "white", padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="modal-content" style={{ maxWidth: "580px", width: "90%", background: "white", borderRadius: "14px", overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" }}>
+            <div style={{ background: "linear-gradient(135deg, #0f766e 0%, #1e293b 100%)", color: "white", padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h3 style={{ margin: 0, fontSize: "18px" }}>
-                📅 Asignación Manual de Inspector — EXP-{solicitudAsignarModal.id}
+                📅 Detalle de Inspección — EXP-{modalInfoInspeccion.id}
               </h3>
-              <button
-                type="button"
-                className="btn-cerrar"
-                onClick={() => setSolicitudAsignarModal(null)}
-                style={{ color: "white", background: "none", border: "none", fontSize: "20px", cursor: "pointer" }}
-              >
-                ✕
-              </button>
+              <button type="button" onClick={() => setModalInfoInspeccion(null)} style={{ color: "white", background: "none", border: "none", fontSize: "20px", cursor: "pointer" }}>✕</button>
             </div>
-
             <div style={{ padding: "24px" }}>
-              {/* DATOS DE LA SOLICITUD */}
+              <div style={{ background: "#f0fdf4", border: "1px solid #a7f3d0", borderRadius: "8px", padding: "8px 12px", marginBottom: "16px", fontSize: "12px", color: "#065f46", display: "flex", alignItems: "center", gap: "6px" }}>
+                🔒 Asignación automática — Solo lectura
+              </div>
+
               <div style={{ background: "#f8fafc", padding: "14px 18px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "13.5px" }}>
-                  <div><strong>Establecimiento:</strong> {solicitudAsignarModal.nombreNegocio}</div>
-                  <div><strong>RUC:</strong> {solicitudAsignarModal.ruc}</div>
-                  <div><strong>Solicitante:</strong> {solicitudAsignarModal.nombresSolicitante} {solicitudAsignarModal.apellidosSolicitante}</div>
-                  <div><strong>DNI:</strong> {solicitudAsignarModal.dniSolicitante || solicitudAsignarModal.dni}</div>
-                  <div><strong>Giro Comercial:</strong> {solicitudAsignarModal.giro || "General"}</div>
-                  <div><strong>Dirección:</strong> {solicitudAsignarModal.direccion}</div>
+                  <div><strong>Establecimiento:</strong> {modalInfoInspeccion.nombreNegocio}</div>
+                  <div><strong>RUC:</strong> {modalInfoInspeccion.ruc}</div>
+                  <div><strong>Solicitante:</strong> {modalInfoInspeccion.nombresSolicitante} {modalInfoInspeccion.apellidosSolicitante}</div>
+                  <div><strong>DNI:</strong> {modalInfoInspeccion.dniSolicitante || modalInfoInspeccion.dni}</div>
+                  <div><strong>Giro Comercial:</strong> {modalInfoInspeccion.giro || "General"}</div>
+                  <div><strong>Dirección:</strong> {modalInfoInspeccion.direccion}</div>
                 </div>
               </div>
 
-              {/* PASO 1: SELECCIONAR FECHA */}
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#1e293b", marginBottom: "6px" }}>
-                  1. Fecha de Inspección Técnica (Mínimo mañana) *
-                </label>
-                <input
-                  type="date"
-                  min={formatearFechaYYYYMMDD(obtenerFechaMinimaInspeccion())}
-                  value={
-                    fechaAsignacionModal && fechaAsignacionModal.includes("/")
-                      ? fechaAsignacionModal.split("/").reverse().join("-")
-                      : fechaAsignacionModal
-                  }
-                  onChange={(e) => {
-                    const valYMD = e.target.value;
-                    if (!valYMD) return;
-                    const [y, m, d] = valYMD.split("-");
-                    setFechaAsignacionModal(`${d}/${m}/${y}`);
-                  }}
-                  style={{
-                    width: "100%", padding: "10px 14px", borderRadius: "8px",
-                    border: fechaAsignacionModal && !esFechaValidaParaInspeccion(fechaAsignacionModal) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
-                    fontSize: "14px", fontWeight: "bold"
-                  }}
-                />
-                {fechaAsignacionModal && !esFechaValidaParaInspeccion(fechaAsignacionModal) && (
-                  <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "10px 14px", borderRadius: "10px", marginTop: "8px", fontSize: "12.5px" }}>
-                    ⚠️ {MENSAJE_FECHA_INSPECCION}
-                  </div>
-                )}
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Fecha de Inspección</label>
+                <input type="text" value={modalInfoInspeccion.fechaVisitaInspector || "No programada"} readOnly style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13.5px", fontWeight: "bold", background: "#f9fafb", cursor: "not-allowed" }} />
               </div>
-
-              {/* PASO 2: INSPECTOR ASIGNADO AUTOMÁTICAMENTE */}
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#1e293b", marginBottom: "8px" }}>
-                  2. Inspector Asignado para el {fechaAsignacionModal}:
-                </label>
-                {inspectorElegidoModal ? (() => {
-                  const cuposUsados = obtenerConteoAsignaciones(inspectorElegidoModal.uid, fechaAsignacionModal);
-                  const estaLleno = cuposUsados >= 4;
-                  return (
-                    <div style={{
-                      padding: "14px 18px", borderRadius: "10px",
-                      border: estaLleno ? "1.5px solid #fca5a5" : "2px solid #0f766e",
-                      background: estaLleno ? "#fef2f2" : "#f0fdf4",
-                      opacity: estaLleno ? 0.7 : 1,
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                        <div>
-                          <div style={{ fontWeight: "bold", color: estaLleno ? "#991b1b" : "#0f766e", fontSize: "14px" }}>
-                            {inspectorElegidoModal.nombre}
-                          </div>
-                          <small style={{ color: "#64748b" }}>{inspectorElegidoModal.cargo} — {inspectorElegidoModal.correo}</small>
-                        </div>
-                        <span style={{
-                          padding: "4px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold",
-                          background: estaLleno ? "#fee2e2" : "#dcfce7",
-                          color: estaLleno ? "#991b1b" : "#166534",
-                          border: `1px solid ${estaLleno ? "#fca5a5" : "#86efac"}`
-                        }}>
-                          {estaLleno ? "🔴 4/4 Lleno (Sin cupos)" : `🟢 ${cuposUsados}/4 Cupos (${4 - cuposUsados} disp.)`}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })() : (
-                  <div style={{ padding: "14px 18px", borderRadius: "10px", border: "1.5px solid #fca5a5", background: "#fef2f2", textAlign: "center" }}>
-                    <span style={{ color: "#991b1b", fontWeight: "700", fontSize: "13px" }}>⚠️ No hay inspectores disponibles para esta fecha. Seleccione otra fecha.</span>
-                  </div>
-                )}
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Horario</label>
+                <input type="text" value={modalInfoInspeccion.horaVisitaLabel || modalInfoInspeccion.horaVisitaInspector || "No definido"} readOnly style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13.5px", fontWeight: "bold", background: "#f9fafb", cursor: "not-allowed" }} />
               </div>
-
-              {/* PASO 3: SELECCIONAR HORARIO */}
-              <div style={{ marginBottom: "24px" }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#1e293b", marginBottom: "6px" }}>
-                  3. Seleccionar Rango Horario:
-                </label>
-                <select
-                  value={slotAsignarModal}
-                  onChange={(e) => setSlotAsignarModal(e.target.value)}
-                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                >
-                  {TIME_SLOTS.map((slot) => (
-                    <option key={slot.value} value={slot.value}>
-                      {slot.label}
-                    </option>
-                  ))}
-                </select>
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Inspector Asignado</label>
+                <input type="text" value={modalInfoInspeccion.inspectorNombre || "Sin asignar"} readOnly style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13.5px", fontWeight: "bold", background: "#f9fafb", cursor: "not-allowed" }} />
               </div>
-
-              {/* BOTONES DE ACCIÓN */}
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
-                <button
-                  type="button"
-                  onClick={() => setSolicitudAsignarModal(null)}
-                  style={{ padding: "10px 18px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "white", cursor: "pointer", fontWeight: "bold" }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={ejecutarAsignacionInspector}
-                  disabled={procesando || !inspectorElegidoModal || !fechaAsignacionModal}
-                  style={{
-                    padding: "10px 20px",
-                    borderRadius: "8px",
-                    border: "none",
-                    background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)",
-                    color: "white",
-                    fontWeight: "bold",
-                    cursor: (!inspectorElegidoModal || procesando) ? "not-allowed" : "pointer",
-                    opacity: (!inspectorElegidoModal || procesando) ? 0.6 : 1
-                  }}
-                >
-                  {procesando ? "Procesando..." : "🚀 Confirmar Asignación Oficial"}
-                </button>
+              <div>
+                <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Estado de Inspección</label>
+                <input type="text" value={modalInfoInspeccion.estadoInspeccion || modalInfoInspeccion.inspeccion || "Pendiente"} readOnly style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13.5px", fontWeight: "bold", background: "#f9fafb", cursor: "not-allowed" }} />
               </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 24px 20px" }}>
+              <button type="button" onClick={() => setModalInfoInspeccion(null)} style={{ padding: "10px 18px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "white", cursor: "pointer", fontWeight: "bold" }}>
+                Cerrar
+              </button>
             </div>
           </div>
         </div>

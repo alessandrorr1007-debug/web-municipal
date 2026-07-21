@@ -1,6 +1,6 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 
-import { getAuth, setPersistence, browserLocalPersistence, onAuthStateChanged } from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword } from "firebase/auth";
 
 import { getFirestore } from "firebase/firestore";
 
@@ -25,6 +25,18 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
 export const db = getFirestore(app);
 
 export const storage = getStorage(app);
+
+export const crearUsuarioEnFirebaseAuthentication = async (correo, password) => {
+  const secondaryAppName = "SecondaryAppForUserCreation";
+  const existingApps = getApps();
+  let secondaryApp = existingApps.find((a) => a.name === secondaryAppName);
+  if (!secondaryApp) {
+    secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  }
+  const secondaryAuth = getAuth(secondaryApp);
+  const userCredential = await createUserWithEmailAndPassword(secondaryAuth, correo, password);
+  return userCredential.user;
+};
 
 export const getIdToken = async () => {
   const user = auth.currentUser;

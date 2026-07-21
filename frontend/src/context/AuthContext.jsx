@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }) => {
   const [usuario, setUsuario] = useState(null);
   const [cargando, setCargando] = useState(true);
 
-  const handleUserRemoval = async () => {
+  const handleUserRemoval = async (showAlert = false) => {
     try {
       await signOut(auth);
     } catch (e) {
@@ -40,6 +40,9 @@ export const AuthProvider = ({ children }) => {
     localStorage.clear();
     sessionStorage.clear();
     setUsuario(null);
+    if (showAlert) {
+      alert("⚠️ Esta cuenta está inhabilitada. Contacte al administrador del sistema.");
+    }
   };
 
   useEffect(() => {
@@ -48,36 +51,45 @@ export const AuthProvider = ({ children }) => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       try {
         if (user) {
+          const emailLow = (user.email || "").toLowerCase();
           const ref = doc(db, "usuarios", user.uid);
-          const snap = await getDoc(ref);
+          let snap = await getDoc(ref);
+          let docData = snap.exists() ? snap.data() : null;
 
-          if (snap.exists()) {
-            const data = snap.data();
+          if (!docData && emailLow) {
+            const q = query(collection(db, "usuarios"), where("correo", "==", emailLow));
+            const snapQ = await getDocs(q);
+            if (!snapQ.empty) {
+              docData = snapQ.docs[0].data();
+            }
+          }
 
-            if (data.activo === false || data.estado === "desactivado") {
-              handleUserRemoval();
+          if (docData) {
+            if (docData.activo === false || docData.estado === "desactivado" || docData.estado === "inactivo") {
+              await handleUserRemoval(true);
               return;
             }
 
-            const rolFinal = normalizarRol(data.rol, user.email);
+            const rolFinal = normalizarRol(docData.rol, user.email);
 
             setUsuario({
               uid: user.uid,
               correo: user.email,
-              nombre: data.nombre || data.nombre_completo || "Usuario",
+              nombre: docData.nombre || docData.nombre_completo || "Usuario",
               rol: rolFinal,
-              telefono: data.telefono || "",
-              dni: data.dni || "",
-              activo: data.activo !== false,
-              recibir_correos: data.recibir_correos !== false,
+              telefono: docData.telefono || "",
+              dni: docData.dni || "",
+              activo: true,
+              estado: "activo",
+              recibir_correos: docData.recibir_correos !== false,
             });
 
             unsubscribeUserDoc = onSnapshot(ref, (docSnap) => {
               if (docSnap.exists()) {
                 const updatedData = docSnap.data();
 
-                if (updatedData.activo === false || updatedData.estado === "desactivado") {
-                  handleUserRemoval();
+                if (updatedData.activo === false || updatedData.estado === "desactivado" || updatedData.estado === "inactivo") {
+                  handleUserRemoval(true);
                   return;
                 }
 
@@ -91,8 +103,6 @@ export const AuthProvider = ({ children }) => {
               }
             });
           } else {
-            // Document doesn't exist in Firestore yet, infer role from email or keep current state
-            const emailLow = (user.email || "").toLowerCase();
             const rolInferido = normalizarRol("", emailLow);
             const nombreInferido = emailLow.includes("cajero")
               ? "Cajero Municipal"
@@ -118,6 +128,7 @@ export const AuthProvider = ({ children }) => {
               telefono: "999888777",
               dni: "12345678",
               activo: true,
+              estado: "activo",
               recibir_correos: true,
             });
           }
@@ -126,7 +137,6 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.error("Error cargando usuario:", error);
-        // Do not force signOut on network errors
       } finally {
         setCargando(false);
       }

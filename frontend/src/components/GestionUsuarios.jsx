@@ -1,341 +1,571 @@
 import { useState } from "react";
-import { initializeApp } from "firebase/app";
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-} from "firebase/auth";
-import { firebaseConfig } from "../firebase";
+import { db, crearUsuarioEnFirebaseAuthentication } from "../firebase";
+import { doc, setDoc, deleteDoc, query, where, getDocs, serverTimestamp, collection } from "firebase/firestore";
 import {
   crearUsuarioInterno,
   actualizarUsuario,
-  eliminarUsuario as eliminarUsuarioService,
-  PERMISOS_POR_ROL,
+  cambiarEstadoUsuario,
+  eliminarUsuario,
   ROL_ETIQUETAS,
+  ROL_COLORES,
 } from "../services/adminService";
-import { registrarAccion } from "../services/auditService";
-import { useAuth } from "../context/AuthContext";
 
-function GestionUsuarios({ usuarios, onRecargar, solicitudes = [] }) {
-  const { usuario } = useAuth();
+function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCarga = "" }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editando, setEditando] = useState(null);
-  const [filtroRol, setFiltroRol] = useState("todos");
-  const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [form, setForm] = useState({ nombre: "", correo: "", password: "", rol: "cajero" });
   const [busqueda, setBusqueda] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [errorForm, setErrorForm] = useState("");
 
-  const [form, setForm] = useState({
-    nombre: "",
-    correo: "",
-    dni: "",
-    telefono: "",
-    cargo: "",
-    areaTrabajo: "Gerencia de Desarrollo Económico Local",
-    zonaAsignada: "Sector 1 - Centro Histórico",
-    rol: "cajero",
-    password: "",
-  });
+  const rolesPermitidos = [
+    { value: "cajero", label: "Cajero (Máx. 5 activos)" },
+    { value: "inspector", label: "Inspector (Máx. 1 activo)" },
+  ];
 
-  const rolesInternos = ["cajero", "inspector", "administrador", "negocio"];
-
-  const usuariosFiltrados = usuarios.filter((u) => {
-    if (filtroRol !== "todos" && u.rol !== filtroRol) return false;
-    if (filtroEstado !== "todos" && u.estado !== filtroEstado) return false;
-    if (busqueda) {
-      const b = busqueda.toLowerCase();
-      return (
-        (u.nombre || "").toLowerCase().includes(b) ||
-        (u.correo || "").toLowerCase().includes(b) ||
-        (u.dni || "").includes(b)
-      );
+  const desduplicarLista = (lista) => {
+    const mapa = new Map();
+    for (const u of lista) {
+      const email = (u.correo || u.email || "").trim().toLowerCase();
+      if (!email) continue;
+      if (!mapa.has(email)) {
+        mapa.set(email, u);
+      }
     }
-    return true;
+    return Array.from(mapa.values());
+  };
+
+  const usuariosUnicos = desduplicarLista(usuarios);
+
+  const esUsuarioActivo = (u) => u.estado === "activo" || (u.estado !== "inactivo" && u.estado !== "desactivado" && u.activo !== false);
+
+  const inspectoresActivos = usuariosUnicos.filter((u) => u.rol === "inspector" && esUsuarioActivo(u)).length;
+  const cajerosActivos = usuariosUnicos.filter((u) => u.rol === "cajero" && esUsuarioActivo(u)).length;
+  const adminTotales = usuariosUnicos.filter((u) => u.rol === "administrador").length;
+
+  const usuariosFiltrados = usuariosUnicos.filter((u) => {
+    if (!busqueda) return true;
+    const b = busqueda.toLowerCase();
+    return (
+      (u.nombre || "").toLowerCase().includes(b) ||
+      (u.correo || "").toLowerCase().includes(b) ||
+      (ROL_ETIQUETAS[u.rol] || u.rol || "").toLowerCase().includes(b)
+    );
   });
 
   const limpiarForm = () => {
-    setForm({
-      nombre: "",
-      correo: "",
-      dni: "",
-      telefono: "",
-      cargo: "",
-      areaTrabajo: "Gerencia de Desarrollo Económico Local",
-      zonaAsignada: "Sector 1 - Centro Histórico",
-      rol: "funcionario",
-      password: "",
-    });
+    setForm({ nombre: "", correo: "", password: "", rol: "cajero" });
     setEditando(null);
+    setErrorForm("");
     setMostrarForm(false);
+  };
+
+  const abrirEdicion = (u) => {
+    setEditando(u);
+    setForm({
+      nombre: u.nombre || "",
+      correo: u.correo || "",
+      password: "",
+      rol: u.rol || "cajero",
+    });
+    setErrorForm("");
+    setMostrarForm(true);
   };
 
   const guardar = async (e) => {
     e.preventDefault();
-    try {
-      if (editando) {
-        const cambios = {
-          nombre: form.nombre,
-          dni: form.dni,
-          telefono: form.telefono,
-          cargo: form.cargo,
-          areaTrabajo: form.areaTrabajo,
-          zonaAsignada: form.zonaAsignada,
-          rol: form.rol,
-          permisos: PERMISOS_POR_ROL[form.rol] || [],
-        };
+    setErrorForm("");
 
-        await actualizarUsuario(editando.uid || editando.id, cambios);
+    if (!form.nombre.trim() || !form.correo.trim()) {
+      setErrorForm("Por favor complete todos los campos obligatorios.");
+      return;
+    }
 
-        if (form.password && form.password.trim() !== "") {
-          try {
-            const appName = `TempApp_${Date.now()}`;
-            const tempApp = initializeApp(firebaseConfig, appName);
-            const tempAuth = getAuth(tempApp);
-            await sendPasswordResetEmail(tempAuth, form.correo);
-            await tempApp.delete();
-          } catch (resetErr) {
-            console.warn("Email reset warning:", resetErr.message);
-          }
-        }
+    const correoIngresado = form.correo.trim().toLowerCase();
 
-        await registrarAccion({
-          usuario: usuario.nombre,
-          usuarioId: usuario.uid,
-          accion: "Actualizar usuario del sistema",
-          detalle: `Actualizó datos de ${form.nombre} (${ROL_ETIQUETAS[form.rol] || form.rol})`,
-        });
-      } else {
-        if (!form.password || form.password.trim().length < 6) {
-          alert("La contraseña es requerida y debe tener al menos 6 caracteres.");
+    if (!editando) {
+      if (form.rol === "administrador") {
+        setErrorForm("Solo puede existir 1 Administrador. No se permite crear cuentas de Administrador.");
+        return;
+      }
+      const existeEmail = usuariosUnicos.some((u) => (u.correo || "").trim().toLowerCase() === correoIngresado);
+      if (existeEmail) {
+        setErrorForm("El correo electrónico ya está registrado en el sistema.");
+        return;
+      }
+      if (form.rol === "inspector" && inspectoresActivos >= 1) {
+        setErrorForm("Ya existe un Inspector activo. No se puede crear otro usuario Inspector.");
+        return;
+      }
+      if (form.rol === "cajero" && cajerosActivos >= 5) {
+        setErrorForm("Se alcanzó el límite máximo de 5 cajeros activos.");
+        return;
+      }
+    } else {
+      if (form.correo.trim().toLowerCase() !== (editando.correo || "").trim().toLowerCase()) {
+        const existeEmail = usuariosUnicos.some(
+          (u) => u.uid !== editando.uid && (u.correo || "").trim().toLowerCase() === correoIngresado
+        );
+        if (existeEmail) {
+          setErrorForm("El correo electrónico ya está registrado por otra cuenta.");
           return;
         }
+      }
 
-        const appName = `TempApp_${Date.now()}`;
-        const tempApp = initializeApp(firebaseConfig, appName);
-        const tempAuth = getAuth(tempApp);
-        let newUid;
+      if (esUsuarioActivo(editando) && form.rol !== editando.rol) {
+        if (form.rol === "inspector" && inspectoresActivos >= 1) {
+          setErrorForm("Ya existe un Inspector activo. No se puede crear otro usuario Inspector.");
+          return;
+        }
+        if (form.rol === "cajero" && cajerosActivos >= 5) {
+          setErrorForm("Se alcanzó el límite máximo de 5 cajeros activos.");
+          return;
+        }
+      }
+    }
+
+    setGuardando(true);
+    try {
+      if (editando) {
         try {
-          const cred = await createUserWithEmailAndPassword(tempAuth, form.correo, form.password.trim());
-          newUid = cred.user.uid;
+          await actualizarUsuario(editando.uid, {
+            nombre: form.nombre.trim(),
+            correo: form.correo.trim().toLowerCase(),
+            rol: form.rol,
+          });
+        } catch (apiErr) {
+          if (editando.uid && !editando.uid.includes("-001")) {
+            await setDoc(doc(db, "usuarios", editando.uid), {
+              nombre: form.nombre.trim(),
+              correo: form.correo.trim().toLowerCase(),
+              rol: form.rol,
+              actualizadoEn: serverTimestamp(),
+            }, { merge: true });
+          }
+        }
+        alert("Cuenta de usuario actualizada exitosamente.");
+      } else {
+        let authUser = null;
+        try {
+          authUser = await crearUsuarioEnFirebaseAuthentication(form.correo.trim().toLowerCase(), form.password);
         } catch (authErr) {
-          newUid = "USR-" + Date.now().toString().slice(-6);
-        } finally {
-          await tempApp.delete();
+          const authMsg = authErr.message || "";
+          if (authErr.code === "auth/email-already-in-use" || authMsg.includes("email-already-in-use")) {
+            setErrorForm("El correo electrónico ya está registrado en Firebase.");
+            setGuardando(false);
+            return;
+          }
+          if (authErr.code === "auth/weak-password" || authMsg.includes("weak-password")) {
+            setErrorForm("La contraseña debe tener al menos 6 caracteres.");
+            setGuardando(false);
+            return;
+          }
+          console.warn("[ADMIN] Client Auth creation fallback notice:", authMsg);
         }
 
-        await crearUsuarioInterno({
-          uid: newUid,
-          nombre: form.nombre,
-          correo: form.correo,
-          dni: form.dni,
-          telefono: form.telefono,
-          cargo: form.cargo,
-          areaTrabajo: form.areaTrabajo,
-          zonaAsignada: form.zonaAsignada,
+        const targetUid = authUser?.uid || doc(collection(db, "usuarios")).id;
+        const targetDocRef = doc(db, "usuarios", targetUid);
+
+        await setDoc(targetDocRef, {
+          uid: targetUid,
+          nombre: form.nombre.trim(),
+          correo: form.correo.trim().toLowerCase(),
+          password: form.password,
           rol: form.rol,
-          activo: true,
           estado: "activo",
-          permisos: PERMISOS_POR_ROL[form.rol] || [],
-          creadoPor: usuario.nombre,
+          activo: true,
+          fechaCreacion: serverTimestamp(),
+          creadoEn: serverTimestamp(),
         });
 
-        await registrarAccion({
-          usuario: usuario.nombre,
-          usuarioId: usuario.uid,
-          accion: "Crear usuario del sistema",
-          detalle: `Creó usuario ${form.nombre} (${ROL_ETIQUETAS[form.rol] || form.rol})`,
-        });
+        try {
+          await crearUsuarioInterno({
+            nombre: form.nombre.trim(),
+            correo: form.correo.trim().toLowerCase(),
+            password: form.password,
+            rol: form.rol,
+          });
+        } catch (apiErr) {
+          // Ignorar si la API local no respondió pero Firebase Auth y Firestore cliente crearon el usuario correctamente
+        }
+
+        alert("Usuario creado exitosamente en Firebase Authentication y Firestore.");
       }
       limpiarForm();
-      onRecargar();
+      if (onRecargar) onRecargar();
     } catch (err) {
-      alert("Error al guardar: " + (err.message || err));
+      const msg = err.response?.data?.error || err.message || "Error al procesar la solicitud.";
+      setErrorForm(msg);
+    } finally {
+      setGuardando(false);
     }
-  };
-
-  const editar = (u) => {
-    setForm({
-      nombre: u.nombre || "",
-      correo: u.correo || "",
-      dni: u.dni || "",
-      telefono: u.telefono || "",
-      cargo: u.cargo || "",
-      areaTrabajo: u.areaTrabajo || "Gerencia de Desarrollo Económico Local",
-      zonaAsignada: u.zonaAsignada || "Sector 1 - Centro Histórico",
-      rol: u.rol || "funcionario",
-      password: "",
-    });
-    setEditando(u);
-    setMostrarForm(true);
   };
 
   const toggleEstado = async (u) => {
-    const nuevoEstado = u.estado === "activo" ? "desactivado" : "activo";
-    const nuevoActivo = nuevoEstado === "activo";
-    try {
-      await actualizarUsuario(u.uid || u.id, { estado: nuevoEstado, activo: nuevoActivo });
-      await registrarAccion({
-        usuario: usuario.nombre,
-        usuarioId: usuario.uid,
-        accion: `${nuevoActivo ? "Activar" : "Desactivar"} usuario`,
-        detalle: `${nuevoActivo ? "Activó" : "Desactivó"} a ${u.nombre} (${u.correo})`,
-      });
-      onRecargar();
-    } catch (err) {
-      alert("Error: " + err.message);
+    if (u.rol === "administrador") {
+      alert("La cuenta de Administrador está protegida y no puede ser inhabilitada.");
+      return;
+    }
+    const actualmenteActivo = esUsuarioActivo(u);
+    const nuevoEstado = actualmenteActivo ? "inactivo" : "activo";
+
+    if (!actualmenteActivo) {
+      if (u.rol === "inspector" && inspectoresActivos >= 1) {
+        alert("Ya existe un Inspector activo. No se puede activar otro usuario Inspector.");
+        return;
+      }
+      if (u.rol === "cajero" && cajerosActivos >= 5) {
+        alert("Se alcanzó el límite máximo de 5 cajeros activos.");
+        return;
+      }
+    }
+
+    const accionTexto = actualmenteActivo ? "inhabilitar" : "habilitar";
+    if (confirm(`¿Está seguro de que desea ${accionTexto} la cuenta de "${u.nombre}" (${u.correo})?`)) {
+      try {
+        if (u.uid && !u.uid.includes("-001")) {
+          try {
+            await setDoc(doc(db, "usuarios", u.uid), {
+              estado: nuevoEstado,
+              activo: nuevoEstado === "activo",
+              actualizadoEn: serverTimestamp(),
+            }, { merge: true });
+          } catch (cErr) {
+            console.warn("[ADMIN] Client setDoc status warning:", cErr.message);
+          }
+        }
+
+        try {
+          await cambiarEstadoUsuario(u.uid, nuevoEstado, u.correo);
+        } catch (backendErr) {
+          console.warn("[ADMIN] Backend API status change notice:", backendErr.message);
+        }
+
+        alert(nuevoEstado === "inactivo" ? "Usuario inhabilitado correctamente." : "Usuario habilitado correctamente.");
+        if (onRecargar) onRecargar();
+      } catch (err) {
+        alert("Error al cambiar estado: " + (err.response?.data?.error || err.message));
+      }
     }
   };
 
-  const restablecerPassword = async (u) => {
-    try {
-      const appName = `TempApp_${Date.now()}`;
-      const tempApp = initializeApp(firebaseConfig, appName);
-      const tempAuth = getAuth(tempApp);
-      await sendPasswordResetEmail(tempAuth, u.correo);
-      await tempApp.delete();
-      alert(`Se ha enviado un correo de restablecimiento de contraseña a ${u.correo}.`);
-      await registrarAccion({
-        usuario: usuario.nombre,
-        usuarioId: usuario.uid,
-        accion: "Restablecer contraseña",
-        detalle: `Envió correo de restablecimiento a ${u.correo}`,
-      });
-    } catch (err) {
-      alert("No se pudo enviar el correo de restablecimiento: " + err.message);
+  const manejarEliminar = async (u) => {
+    if (u.rol === "administrador") {
+      alert("La cuenta de Administrador está protegida y no puede ser eliminada.");
+      return;
+    }
+    if (confirm(`⚠️ ¿Desea eliminar PERMANENTEMENTE la cuenta de "${u.nombre}" (${u.correo})?\nEsta acción eliminará el usuario de Firebase Auth y Firestore.`)) {
+      try {
+        const emailLow = (u.correo || "").toLowerCase().trim();
+        if (u.uid && !u.uid.includes("-001")) {
+          try {
+            await deleteDoc(doc(db, "usuarios", u.uid));
+          } catch (cErr) {
+            console.warn("[ADMIN] Client deleteDoc warning:", cErr.message);
+          }
+        }
+        if (emailLow) {
+          try {
+            const qDel = query(collection(db, "usuarios"), where("correo", "==", emailLow));
+            const snapDel = await getDocs(qDel);
+            snapDel.forEach(async (dDoc) => {
+              try { await deleteDoc(dDoc.ref); } catch (e) {}
+            });
+          } catch (e) {}
+        }
+
+        try {
+          await eliminarUsuario(u.uid, emailLow);
+        } catch (backendErr) {
+          console.warn("[ADMIN] Backend API delete notice:", backendErr.message);
+        }
+
+        alert("Cuenta de usuario eliminada correctamente.");
+        if (onRecargar) onRecargar();
+      } catch (err) {
+        alert("Error al eliminar cuenta: " + (err.response?.data?.error || err.message));
+      }
     }
   };
 
-  const obtenerMetricasUsuario = (u) => {
-    if (u.rol === "funcionario") {
-      const atendidas = solicitudes.filter(s => s.funcionarioAprueba === u.nombre || s.nombreProgramador === u.nombre).length;
-      const pendientes = solicitudes.filter(s => s.estado === "Pendiente de revisión" || s.estado === "En revisión").length;
-      const licencias = solicitudes.filter(s => s.funcionarioAprueba === u.nombre && s.numeroLicencia).length;
-      return `${atendidas} atendidas · ${pendientes} pend. · ${licencias} licencias`;
+  const formatearFecha = (u) => {
+    const val = u.fechaCreacion || u.creadoEn;
+    if (!val) return "---";
+    if (typeof val === "object" && val.seconds) {
+      return new Date(val.seconds * 1000).toLocaleString("es-PE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     }
-    if (u.rol === "inspector") {
-      const realizadas = solicitudes.filter(s => (s.inspectorAsignadoUid === u.uid || s.inspectorNombre === u.nombre) && s.inspeccion !== "Pendiente").length;
-      const pendientes = solicitudes.filter(s => (s.inspectorAsignadoUid === u.uid || s.inspectorNombre === u.nombre) && s.inspeccion === "Pendiente").length;
-      return `${realizadas} realizadas · ${pendientes} pend. · Disp: Alta`;
+    if (typeof val === "string" || typeof val === "number") {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleString("es-PE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
     }
-    if (u.rol === "cajero") {
-      const cobrados = solicitudes.filter(s => s.estadoPago === "Confirmado" && s.canalRegistro === "presencial").length;
-      return `${cobrados} pagos presenciales`;
-    }
-    return u.cargo || "Usuario registrado";
+    return "---";
   };
 
   return (
-    <div>
-      <div className="admin-module-header">
+    <div style={{ background: "white", borderRadius: "16px", padding: "24px", boxShadow: "0 4px 16px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", margin: "0 0 4px" }}>
-            👥 Gestión de Usuarios y Roles
+          <h2 style={{ fontSize: "22px", fontWeight: "800", color: "#0f172a", margin: "0 0 4px" }}>
+            👥 Gestión de Cuentas de Usuarios
           </h2>
-          <p style={{ color: "#64748b", fontSize: "13.5px", margin: 0 }}>
-            Administra cuentas de funcionarios, inspectores, cajeros, administradores y solicitantes con control de acceso por rol (RBAC).
+          <p style={{ margin: 0, fontSize: "13.5px", color: "#64748b" }}>
+            Administración centralizada de accesos al sistema municipal de licencias.
           </p>
         </div>
-        <button type="button" className="btn-primary" onClick={() => { limpiarForm(); setMostrarForm(true); }} style={{ background: "#2563eb" }}>
-          + Crear Usuario
+        <button
+          type="button"
+          onClick={() => {
+            limpiarForm();
+            setMostrarForm(true);
+          }}
+          style={{
+            background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+            color: "white",
+            border: "none",
+            padding: "10px 20px",
+            borderRadius: "10px",
+            fontWeight: "700",
+            fontSize: "14px",
+            cursor: "pointer",
+            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <span>➕</span> Crear Cuenta de Usuario
         </button>
       </div>
 
-      <div className="admin-filtros" style={{ marginBottom: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", marginBottom: "20px" }}>
+        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "14px 18px" }}>
+          <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Inspector Activo
+          </span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px" }}>
+            <strong style={{ fontSize: "20px", color: inspectoresActivos >= 1 ? "#7c3aed" : "#0f172a" }}>
+              {inspectoresActivos} / 1
+            </strong>
+            <span style={{ fontSize: "11px", fontWeight: "800", padding: "3px 10px", borderRadius: "999px", background: inspectoresActivos >= 1 ? "#f3e8ff" : "#dcfce7", color: inspectoresActivos >= 1 ? "#6b21a8" : "#15803d" }}>
+              {inspectoresActivos >= 1 ? "Límite alcanzado" : "Disponible"}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "14px 18px" }}>
+          <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Cajeros Activos
+          </span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px" }}>
+            <strong style={{ fontSize: "20px", color: cajerosActivos >= 5 ? "#d97706" : "#0f172a" }}>
+              {cajerosActivos} / 5
+            </strong>
+            <span style={{ fontSize: "11px", fontWeight: "800", padding: "3px 10px", borderRadius: "999px", background: cajerosActivos >= 5 ? "#fef3c7" : "#dcfce7", color: cajerosActivos >= 5 ? "#b45309" : "#15803d" }}>
+              {cajerosActivos >= 5 ? "Límite alcanzado" : `${5 - cajerosActivos} vacantes`}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "14px 18px" }}>
+          <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Administradores
+          </span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px" }}>
+            <strong style={{ fontSize: "20px", color: "#dc2626" }}>
+              {adminTotales}
+            </strong>
+            <span style={{ fontSize: "11px", fontWeight: "800", padding: "3px 10px", borderRadius: "999px", background: "#fee2e2", color: "#991b1b" }}>
+              Gestores
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: "20px" }}>
         <input
           type="text"
-          placeholder="Buscar por nombre, correo o DNI..."
+          placeholder="🔍 Buscar por nombre, correo o rol..."
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            borderRadius: "10px",
+            border: "1.5px solid #cbd5e1",
+            fontSize: "14px",
+            outline: "none",
+            transition: "all 0.2s ease",
+          }}
         />
-        <select value={filtroRol} onChange={(e) => setFiltroRol(e.target.value)} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}>
-          <option value="todos">Todos los roles</option>
-          {rolesInternos.map((r) => (
-            <option key={r} value={r}>{ROL_ETIQUETAS[r] || r}</option>
-          ))}
-        </select>
-        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}>
-          <option value="todos">Todos los estados</option>
-          <option value="activo">Activos</option>
-          <option value="desactivado">Desactivados</option>
-        </select>
       </div>
 
       {mostrarForm && (
-        <div className="admin-form-modal" style={{ zIndex: 1000 }}>
-          <div className="admin-form-card" style={{ maxWidth: "560px" }}>
-            <div className="admin-form-header">
-              <h3>{editando ? `Editar usuario — ${editando.nombre}` : "Nuevo usuario del sistema"}</h3>
-              <button type="button" onClick={limpiarForm}>✕</button>
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "32px",
+              width: "100%",
+              maxWidth: "460px",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "800", color: "#0f172a" }}>
+                {editando ? "✏️ Editar Cuenta de Usuario" : "👤 Crear Nueva Cuenta"}
+              </h3>
+              <button
+                type="button"
+                onClick={limpiarForm}
+                style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#94a3b8" }}
+              >
+                ✕
+              </button>
             </div>
-            <form onSubmit={guardar} style={{ padding: "16px 0" }}>
-              <div className="admin-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>Nombre completo *</label>
-                  <input type="text" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>Correo electrónico *</label>
-                  <input type="email" value={form.correo} onChange={(e) => setForm({ ...form, correo: e.target.value })} required disabled={!!editando} style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>DNI</label>
-                  <input type="text" value={form.dni} onChange={(e) => setForm({ ...form, dni: e.target.value.replace(/\D/g, "").slice(0, 8) })} maxLength="8" style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>Teléfono</label>
-                  <input type="text" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, "").slice(0, 9) })} maxLength="9" style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>Rol del Usuario *</label>
-                  <select
-                    value={form.rol}
-                    onChange={(e) => setForm({ ...form, rol: e.target.value })}
-                    required
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
-                  >
-                    {rolesInternos.map((r) => (
-                      <option key={r} value={r}>{ROL_ETIQUETAS[r] || r}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>Cargo / Puesto</label>
-                  <input type="text" value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} placeholder="Ej: Inspector de Defensa Civil" style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} />
-                </div>
 
-                {form.rol === "funcionario" && (
-                  <div style={{ gridColumn: "span 2" }}>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>Área de Trabajo</label>
-                    <input type="text" value={form.areaTrabajo} onChange={(e) => setForm({ ...form, areaTrabajo: e.target.value })} placeholder="Área o subgerencia municipal" style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} />
-                  </div>
-                )}
+            {errorForm && (
+              <div
+                style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  color: "#991b1b",
+                  padding: "12px 14px",
+                  borderRadius: "10px",
+                  fontSize: "13px",
+                  marginBottom: "16px",
+                  fontWeight: "600",
+                }}
+              >
+                ⚠️ {errorForm}
+              </div>
+            )}
 
-                {form.rol === "inspector" && (
-                  <div style={{ gridColumn: "span 2" }}>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>Zona / Área Asignada</label>
-                    <input type="text" value={form.zonaAsignada} onChange={(e) => setForm({ ...form, zonaAsignada: e.target.value })} placeholder="Ej: Sector Centro, Urb. El Recreo" style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} />
-                  </div>
-                )}
+            <form onSubmit={guardar}>
+              <div style={{ marginBottom: "14px" }}>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  Nombre Completo *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Alessandro Paul Rodriguez"
+                  value={form.nombre}
+                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                  required
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                />
+              </div>
 
-                <div style={{ gridColumn: "span 2" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#475569", marginBottom: "4px" }}>
-                    {editando ? "Cambiar contraseña (opcional)" : "Contraseña de acceso *"}
+              <div style={{ marginBottom: "14px" }}>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  Correo Electrónico *
+                </label>
+                <input
+                  type="email"
+                  placeholder="usuario@munitrujillo.gob.pe"
+                  value={form.correo}
+                  onChange={(e) => setForm({ ...form, correo: e.target.value })}
+                  required
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                />
+              </div>
+
+              {!editando && (
+                <div style={{ marginBottom: "14px" }}>
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    Contraseña Inicial *
                   </label>
                   <input
                     type="password"
+                    placeholder="Mínimo 6 caracteres"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    placeholder={editando ? "Dejar en blanco si no desea modificar" : "Mínimo 6 caracteres"}
-                    required={!editando}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    required
+                    minLength={6}
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
                   />
                 </div>
+              )}
+
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  Rol del Usuario *
+                </label>
+                <select
+                  value={form.rol}
+                  onChange={(e) => setForm({ ...form, rol: e.target.value })}
+                  required
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "600" }}
+                >
+                  {rolesPermitidos.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="admin-form-actions" style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                <button type="button" onClick={limpiarForm}>Cancelar</button>
-                <button type="submit" className="btn-primary" style={{ background: "#2563eb", color: "white" }}>
-                  {editando ? "Guardar Cambios" : "Registrar Usuario"}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={limpiarForm}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    background: "white",
+                    fontWeight: "600",
+                    fontSize: "13.5px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardando}
+                  style={{
+                    padding: "10px 22px",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "#2563eb",
+                    color: "white",
+                    fontWeight: "700",
+                    fontSize: "13.5px",
+                    cursor: "pointer",
+                    opacity: guardando ? 0.7 : 1,
+                  }}
+                >
+                  {guardando ? "Guardando..." : editando ? "Guardar Cambios" : "Crear Usuario"}
                 </button>
               </div>
             </form>
@@ -343,73 +573,183 @@ function GestionUsuarios({ usuarios, onRecargar, solicitudes = [] }) {
         </div>
       )}
 
-      <div className="admin-table-wrap">
-        <table className="modern-table">
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
           <thead>
-            <tr>
-              <th>Usuario / Correo</th>
-              <th>DNI / Teléfono</th>
-              <th>Rol</th>
-              <th>Área / Zona</th>
-              <th>Métricas / Productividad</th>
-              <th>Estado</th>
-              <th>Acciones</th>
+            <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+              <th style={{ padding: "14px", fontSize: "13px", fontWeight: "800", color: "#475569" }}>Nombre</th>
+              <th style={{ padding: "14px", fontSize: "13px", fontWeight: "800", color: "#475569" }}>Correo</th>
+              <th style={{ padding: "14px", fontSize: "13px", fontWeight: "800", color: "#475569" }}>Rol</th>
+              <th style={{ padding: "14px", fontSize: "13px", fontWeight: "800", color: "#475569" }}>Estado</th>
+              <th style={{ padding: "14px", fontSize: "13px", fontWeight: "800", color: "#475569" }}>Fecha de creación</th>
+              <th style={{ padding: "14px", fontSize: "13px", fontWeight: "800", color: "#475569", textAlign: "center" }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {usuariosFiltrados.length === 0 ? (
+            {errorCarga ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: "center", padding: "40px", color: "#94a3b8" }}>
-                  No se encontraron usuarios que coincidan con los filtros.
+                <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#dc2626", fontSize: "14px", fontWeight: "600" }}>
+                  ⚠️ Error al obtener los usuarios desde Firebase: {errorCarga}
+                </td>
+              </tr>
+            ) : cargando ? (
+              <tr>
+                <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#64748b", fontSize: "14px" }}>
+                  ⏳ Conectando con Firebase y cargando usuarios en tiempo real...
+                </td>
+              </tr>
+            ) : usuariosFiltrados.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
+                  📭 No se encontraron usuarios registrados en la base de datos.
                 </td>
               </tr>
             ) : (
-              usuariosFiltrados.map((u) => (
-                <tr key={u.uid || u.id}>
-                  <td>
-                    <strong>{u.nombre}</strong>
-                    <small style={{ display: "block", color: "#64748b" }}>{u.correo}</small>
-                  </td>
-                  <td>
-                    <strong>{u.dni || "---"}</strong>
-                    <small style={{ display: "block", color: "#64748b" }}>{u.telefono || "---"}</small>
-                  </td>
-                  <td>
-                    <span className="badge info" style={{ textTransform: "capitalize" }}>
-                      {ROL_ETIQUETAS[u.rol] || u.rol}
-                    </span>
-                  </td>
-                  <td>
-                    <small style={{ color: "#334155", fontWeight: "600" }}>
-                      {u.rol === "funcionario" ? (u.areaTrabajo || "Subgerencia Licencias") : u.rol === "inspector" ? (u.zonaAsignada || "Sector Trujillo") : (u.cargo || "---")}
-                    </small>
-                  </td>
-                  <td>
-                    <small style={{ color: "#0f766e", fontWeight: "600" }}>
-                      {obtenerMetricasUsuario(u)}
-                    </small>
-                  </td>
-                  <td>
-                    <span className={`badge ${u.estado === "activo" || u.activo !== false ? "ok" : "danger"}`}>
-                      {u.estado === "activo" || u.activo !== false ? "Activo" : "Desactivado"}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                      <button type="button" className="btn-info" onClick={() => editar(u)}>Editar</button>
-                      <button type="button" className="btn-warning" onClick={() => restablecerPassword(u)}>Clave</button>
-                      <button
-                        type="button"
-                        className={`badge ${u.estado === "activo" || u.activo !== false ? "danger" : "ok"}`}
-                        onClick={() => toggleEstado(u)}
-                        style={{ cursor: "pointer", border: "none" }}
+              usuariosFiltrados.map((u) => {
+                const activo = esUsuarioActivo(u);
+                const colorRol = ROL_COLORES[u.rol] || "#64748b";
+
+                return (
+                  <tr key={u.uid} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.2s ease" }}>
+                    <td style={{ padding: "14px" }}>
+                      <strong style={{ fontSize: "14px", color: "#0f172a", display: "block" }}>{u.nombre || "Sin Nombre"}</strong>
+                    </td>
+                    <td style={{ padding: "14px", fontSize: "13.5px", color: "#475569" }}>
+                      {u.correo}
+                    </td>
+                    <td style={{ padding: "14px" }}>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          color: colorRol,
+                          background: `${colorRol}15`,
+                          padding: "4px 10px",
+                          borderRadius: "999px",
+                          border: `1px solid ${colorRol}30`,
+                        }}
                       >
-                        {u.estado === "activo" || u.activo !== false ? "Desactivar" : "Activar"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        {ROL_ETIQUETAS[u.rol] || u.rol}
+                      </span>
+                    </td>
+                    <td style={{ padding: "14px" }}>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          color: activo ? "#15803d" : "#b91c1c",
+                          background: activo ? "#dcfce7" : "#fee2e2",
+                          padding: "4px 10px",
+                          borderRadius: "999px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: activo ? "#16a34a" : "#dc2626" }} />
+                        {activo ? "Activo" : "Inactivo"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "14px", fontSize: "13px", color: "#64748b" }}>
+                      {formatearFecha(u)}
+                    </td>
+                    <td style={{ padding: "14px" }}>
+                      {u.rol === "administrador" ? (
+                        <div style={{ display: "flex", gap: "6px", justifyContent: "center", alignItems: "center" }}>
+                          <button
+                            type="button"
+                            onClick={() => abrirEdicion(u)}
+                            title="Editar datos del administrador"
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid #cbd5e1",
+                              background: "white",
+                              color: "#1e293b",
+                              fontWeight: "600",
+                              fontSize: "12.5px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            ✏️ Editar
+                          </button>
+                          <span style={{ fontSize: "11.5px", color: "#dc2626", fontWeight: "700", background: "#fef2f2", padding: "4px 10px", borderRadius: "6px", border: "1px solid #fecaca", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            🛡️ Protegido
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: "6px", justifyContent: "center" }}>
+                          <button
+                            type="button"
+                            onClick={() => abrirEdicion(u)}
+                            title="Editar usuario"
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid #cbd5e1",
+                              background: "white",
+                              color: "#1e293b",
+                              fontWeight: "600",
+                              fontSize: "12.5px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            ✏️ Editar
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => toggleEstado(u)}
+                            title={activo ? "Inhabilitar cuenta" : "Habilitar cuenta"}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: "6px",
+                              border: `1px solid ${activo ? "#fca5a5" : "#86efac"}`,
+                              background: activo ? "#fff1f2" : "#f0fdf4",
+                              color: activo ? "#991b1b" : "#166534",
+                              fontWeight: "600",
+                              fontSize: "12.5px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            {activo ? "🔒 Inhabilitar" : "✅ Habilitar"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => manejarEliminar(u)}
+                            title="Eliminar cuenta permanentemente"
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid #fee2e2",
+                              background: "#fef2f2",
+                              color: "#dc2626",
+                              fontWeight: "600",
+                              fontSize: "12.5px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            🗑️ Eliminar
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

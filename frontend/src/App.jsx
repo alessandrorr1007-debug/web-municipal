@@ -117,8 +117,8 @@ function App() {
     );
   }
 
-  if (!usuario) {
-    return <Login />;
+  if (!usuario || usuario.activo === false || usuario.estado === "inactivo" || usuario.estado === "desactivado") {
+    return <Login errorInicial={usuario ? "⚠️ Esta cuenta está inhabilitada. Contacte al administrador del sistema." : ""} />;
   }
 
   const rolNorm = normalizarRol(usuario.rol, usuario.correo);
@@ -126,7 +126,7 @@ function App() {
   const seccionesPorRol = {
     cajero: ["nueva-solicitud", "consulta-expedientes", "historial"],
     inspector: ["inicio", "inspecciones", "historial", "estadisticas"],
-    administrador: ["inicio", "gestion-usuarios", "gestion-roles", "config-sistema", "reportes", "auditoria"],
+    administrador: ["gestion-usuarios", "config-sistema"],
   };
 
   const rolEtiqueta = {

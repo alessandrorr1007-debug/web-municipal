@@ -9,6 +9,7 @@ import fs from "fs";
 import { emailProvider } from "./emailProvider.js";
 import { initializeApp } from "firebase/app";
 import { initializeFirestore, doc, getDoc, getDocs, setDoc, updateDoc, collection, serverTimestamp } from "firebase/firestore";
+import admin from "firebase-admin";
 
 
 
@@ -48,6 +49,27 @@ const db = initializeFirestore(firebaseApp, {
 
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 
+let adminApp = null;
+let adminAuth = null;
+let adminDb = null;
+
+try {
+  const serviceAccountPath = join(__dirname, "firebase-service-account.json");
+  if (fs.existsSync(serviceAccountPath)) {
+    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+    adminApp = initAdminApp({
+      credential: cert(serviceAccount),
+    });
+    adminAuth = getAdminAuth(adminApp);
+    adminDb = getAdminFirestore(adminApp);
+    console.log("[ADMIN] Firebase Admin SDK inicializado correctamente con firebase-service-account.json.");
+  } else {
+    console.warn("[ADMIN] firebase-service-account.json no encontrado.");
+  }
+} catch (err) {
+  console.error("[ADMIN] Error inicializando Firebase Admin SDK:", err.message);
+}
+
 const verificarToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -86,6 +108,50 @@ const verificarTokenOpcional = async (req, res, next) => {
     return next();
   }
   return verificarToken(req, res, next);
+};
+
+const verificarAdmin = async (req, res, next) => {
+  if (!adminDb) {
+    return res.status(503).json({ error: "Firebase Admin no configurado en el servidor." });
+  }
+  try {
+    const uid = req.usuarioFirebase?.uid;
+    const email = (req.usuarioFirebase?.email || "").toLowerCase();
+    if (!uid && !email) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+
+    let userDoc = null;
+    if (uid) {
+      userDoc = await adminDb.collection("usuarios").doc(uid).get();
+    }
+    if ((!userDoc || !userDoc.exists) && email) {
+      const q = await adminDb.collection("usuarios").where("correo", "==", email).get();
+      if (!q.empty) {
+        userDoc = q.docs[0];
+      }
+    }
+
+    if (userDoc && userDoc.exists) {
+      const userData = userDoc.data();
+      const rolNorm = (userData.rol || "").toLowerCase();
+      if (rolNorm !== "administrador" && !email.includes("admin") && email !== "medicitasapp01@gmail.com") {
+        return res.status(403).json({ error: "No tiene permisos de administrador." });
+      }
+      req.usuarioAdmin = userData;
+      return next();
+    }
+
+    if (email === "medicitasapp01@gmail.com" || email.includes("admin")) {
+      req.usuarioAdmin = { nombre: "Administrador General", rol: "administrador", correo: email };
+      return next();
+    }
+
+    return res.status(403).json({ error: "No tiene permisos de administrador." });
+  } catch (err) {
+    console.error("[ADMIN] Error verificando rol admin:", err.message);
+    return res.status(500).json({ error: "Error verificando permisos." });
+  }
 };
 
 const PORT = process.env.PORT || 3000;
@@ -1074,6 +1140,343 @@ app.post("/api/comprobantes/enviar-correo", verificarToken, async (req, res) => 
 });
 
 
+/* =========================
+   ADMIN — USER MANAGEMENT
+========================= */
+
+const ROLES_PERMITIDOS = ["administrador", "cajero", "inspector"];
+
+const obtenerConteoActivosPorRol = async (rol, excludeUid = null) => {
+  if (!adminDb) return 0;
+  const snapshot = await adminDb.collection("usuarios").where("rol", "==", rol).get();
+  let count = 0;
+  snapshot.docs.forEach((doc) => {
+    if (doc.id === excludeUid) return;
+    const d = doc.data();
+    const esActivo = d.estado === "activo" || (d.estado !== "inactivo" && d.estado !== "desactivado" && d.activo !== false);
+    if (esActivo) count++;
+  });
+  return count;
+};
+
+app.post("/api/admin/usuarios", verificarToken, verificarAdmin, async (req, res) => {
+  if (!adminAuth || !adminDb) {
+    return res.status(503).json({ error: "Firebase Admin no configurado." });
+  }
+  try {
+    const { nombre, correo, password, rol } = req.body;
+
+    if (!nombre || !correo || !password || !rol) {
+      return res.status(400).json({ error: "Todos los campos son requeridos: nombre, correo, password, rol." });
+    }
+    if (!ROLES_PERMITIDOS.includes(rol)) {
+      return res.status(400).json({ error: `Rol no permitido. Roles válidos: ${ROLES_PERMITIDOS.join(", ")}` });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres." });
+    }
+
+    if (rol === "inspector") {
+      const count = await obtenerConteoActivosPorRol("inspector");
+      if (count >= 1) {
+        return res.status(400).json({ error: "Ya existe un Inspector activo. No se puede crear otro usuario Inspector." });
+      }
+    } else if (rol === "cajero") {
+      const count = await obtenerConteoActivosPorRol("cajero");
+      if (count >= 5) {
+        return res.status(400).json({ error: "Se alcanzó el límite máximo de 5 cajeros activos." });
+      }
+    }
+
+    let existingUser;
+    try {
+      existingUser = await adminAuth.getUserByEmail(correo.trim());
+    } catch (e) {
+      existingUser = null;
+    }
+    if (existingUser) {
+      return res.status(409).json({ error: "El correo electrónico ya está registrado." });
+    }
+
+    const userRecord = await adminAuth.createUser({
+      email: correo.trim(),
+      password: password,
+      displayName: nombre.trim(),
+    });
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const firestoreData = {
+      uid: userRecord.uid,
+      nombre: nombre.trim(),
+      correo: correo.trim().toLowerCase(),
+      password: password,
+      rol: rol,
+      estado: "activo",
+      activo: true,
+      fechaCreacion: now,
+      creadoEn: now,
+      actualizadoEn: now,
+      creadoPor: req.usuarioAdmin?.nombre || "Administrador",
+    };
+
+    await adminDb.collection("usuarios").doc(userRecord.uid).set(firestoreData);
+
+    res.status(201).json({ mensaje: "Usuario creado exitosamente.", uid: userRecord.uid });
+  } catch (err) {
+    console.error("[ADMIN] Error creando usuario:", err.message);
+    res.status(500).json({ error: err.message || "Error al crear el usuario." });
+  }
+});
+
+app.get("/api/admin/usuarios", verificarToken, verificarAdmin, async (req, res) => {
+  if (!adminDb) {
+    return res.status(503).json({ error: "Firebase Admin no configurado." });
+  }
+  try {
+    const snapshot = await adminDb.collection("usuarios").get();
+    const mapa = new Map();
+
+    snapshot.docs.forEach((d) => {
+      const data = d.data();
+      const email = (data.correo || data.email || "").trim().toLowerCase();
+      if (!email) return;
+
+      const estadoNorm = data.estado === "inactivo" || data.estado === "desactivado" || data.activo === false ? "inactivo" : "activo";
+      const userObj = {
+        uid: d.id,
+        id: d.id,
+        ...data,
+        correo: email,
+        estado: estadoNorm,
+      };
+
+      if (!mapa.has(email)) {
+        mapa.set(email, userObj);
+      } else {
+        const existente = mapa.get(email);
+        if ((existente.uid || "").includes("-001") && !(d.id || "").includes("-001")) {
+          mapa.set(email, userObj);
+        }
+      }
+    });
+
+    const usuarios = Array.from(mapa.values());
+
+    usuarios.sort((a, b) => {
+      const tA = a.fechaCreacion?.seconds || a.creadoEn?.seconds || 0;
+      const tB = b.fechaCreacion?.seconds || b.creadoEn?.seconds || 0;
+      return tB - tA;
+    });
+
+    res.json(usuarios);
+  } catch (err) {
+    console.error("[ADMIN] Error listando usuarios:", err.message);
+    res.status(500).json({ error: "Error al listar usuarios." });
+  }
+});
+
+app.get("/api/admin/usuarios/verificar-email/:email", verificarToken, verificarAdmin, async (req, res) => {
+  if (!adminAuth) {
+    return res.status(503).json({ error: "Firebase Admin no configurado." });
+  }
+  try {
+    const email = req.params.email.trim().toLowerCase();
+    let exists = false;
+    try {
+      await adminAuth.getUserByEmail(email);
+      exists = true;
+    } catch (e) {
+      exists = false;
+    }
+    res.json({ existe: exists });
+  } catch (err) {
+    res.status(500).json({ error: "Error al verificar el correo." });
+  }
+});
+
+app.put("/api/admin/usuarios/:uid", verificarToken, verificarAdmin, async (req, res) => {
+  if (!adminDb) {
+    return res.status(503).json({ error: "Firebase Admin no configurado." });
+  }
+  try {
+    const { uid } = req.params;
+    const { nombre, correo, rol } = req.body;
+
+    if (rol && !ROLES_PERMITIDOS.includes(rol)) {
+      return res.status(400).json({ error: `Rol no permitido. Roles válidos: ${ROLES_PERMITIDOS.join(", ")}` });
+    }
+
+    const userDoc = await adminDb.collection("usuarios").doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "Usuario no encontrado." });
+    }
+    const currentData = userDoc.data();
+    const esActivo = currentData.estado === "activo" || (currentData.estado !== "inactivo" && currentData.estado !== "desactivado" && currentData.activo !== false);
+
+    const nuevoRol = rol || currentData.rol;
+
+    if (esActivo && nuevoRol !== currentData.rol) {
+      if (nuevoRol === "inspector") {
+        const count = await obtenerConteoActivosPorRol("inspector", uid);
+        if (count >= 1) {
+          return res.status(400).json({ error: "Ya existe un Inspector activo. No se puede crear otro usuario Inspector." });
+        }
+      } else if (nuevoRol === "cajero") {
+        const count = await obtenerConteoActivosPorRol("cajero", uid);
+        if (count >= 5) {
+          return res.status(400).json({ error: "Se alcanzó el límite máximo de 5 cajeros activos." });
+        }
+      }
+    }
+
+    const cambios = { actualizadoEn: admin.firestore.FieldValue.serverTimestamp() };
+    if (nombre) cambios.nombre = nombre.trim();
+    if (rol) cambios.rol = rol;
+    if (correo) cambios.correo = correo.trim().toLowerCase();
+
+    await adminDb.collection("usuarios").doc(uid).update(cambios);
+
+    if (adminAuth) {
+      const authUpdates = {};
+      if (nombre) authUpdates.displayName = nombre.trim();
+      if (correo) authUpdates.email = correo.trim().toLowerCase();
+
+      if (Object.keys(authUpdates).length > 0) {
+        try {
+          await adminAuth.updateUser(uid, authUpdates);
+        } catch (e) {
+          console.warn("[ADMIN] Error actualizando en Auth:", e.message);
+        }
+      }
+    }
+
+    res.json({ mensaje: "Usuario actualizado exitosamente." });
+  } catch (err) {
+    console.error("[ADMIN] Error actualizando usuario:", err.message);
+    res.status(500).json({ error: err.message || "Error al actualizar el usuario." });
+  }
+});
+
+app.put("/api/admin/usuarios/:uid/estado", verificarToken, verificarAdmin, async (req, res) => {
+  if (!adminDb) {
+    return res.status(503).json({ error: "Firebase Admin no configurado." });
+  }
+  try {
+    const { uid } = req.params;
+    const { estado, correo } = req.body;
+
+    const estadoNorm = estado === "activo" ? "activo" : "inactivo";
+    const esActivo = estadoNorm === "activo";
+
+    let docRef = adminDb.collection("usuarios").doc(uid);
+    let userDoc = await docRef.get();
+
+    if (!userDoc.exists) {
+      // Buscar por campo uid o por correo
+      let q = await adminDb.collection("usuarios").where("uid", "==", uid).get();
+      if (q.empty && correo) {
+        q = await adminDb.collection("usuarios").where("correo", "==", correo.trim().toLowerCase()).get();
+      }
+      if (!q.empty) {
+        docRef = q.docs[0].ref;
+        userDoc = q.docs[0];
+      }
+    }
+
+    const currentData = userDoc.exists ? userDoc.data() : {};
+
+    if (esActivo) {
+      if (currentData.rol === "inspector") {
+        const count = await obtenerConteoActivosPorRol("inspector", docRef.id);
+        if (count >= 1) {
+          return res.status(400).json({ error: "Ya existe un Inspector activo. No se puede activar otro usuario Inspector." });
+        }
+      } else if (currentData.rol === "cajero") {
+        const count = await obtenerConteoActivosPorRol("cajero", docRef.id);
+        if (count >= 5) {
+          return res.status(400).json({ error: "Se alcanzó el límite máximo de 5 cajeros activos." });
+        }
+      }
+    }
+
+    await docRef.set({
+      estado: estadoNorm,
+      activo: esActivo,
+      actualizadoEn: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    if (adminAuth) {
+      try {
+        await adminAuth.updateUser(uid, { disabled: !esActivo });
+      } catch (e) {
+        console.warn("[ADMIN] Error actualizando estado disabled en Auth:", e.message);
+      }
+      if (!esActivo) {
+        try {
+          await adminAuth.revokeRefreshTokens(uid);
+        } catch (e) {
+          console.warn("[ADMIN] Error revocando tokens:", e.message);
+        }
+      }
+    }
+
+    res.json({ mensaje: `Usuario ${esActivo ? "activado" : "inhabilitado"} exitosamente.` });
+  } catch (err) {
+    console.error("[ADMIN] Error cambiando estado:", err.message);
+    res.status(500).json({ error: err.message || "Error al cambiar el estado del usuario." });
+  }
+});
+
+app.delete("/api/admin/usuarios/:uid", verificarToken, verificarAdmin, async (req, res) => {
+  if (!adminDb) {
+    return res.status(503).json({ error: "Firebase Admin no configurado." });
+  }
+  try {
+    const { uid } = req.params;
+    const correo = req.query?.correo ? req.query.correo.trim().toLowerCase() : "";
+
+    let docRef = adminDb.collection("usuarios").doc(uid);
+    let userDoc = await docRef.get();
+
+    if (!userDoc.exists) {
+      let q = await adminDb.collection("usuarios").where("uid", "==", uid).get();
+      if (q.empty && correo) {
+        q = await adminDb.collection("usuarios").where("correo", "==", correo).get();
+      }
+      if (!q.empty) {
+        docRef = q.docs[0].ref;
+      }
+    }
+
+    if (adminAuth) {
+      try {
+        await adminAuth.deleteUser(uid);
+      } catch (authErr) {
+        console.warn("[ADMIN] No se pudo eliminar de Auth (o ya no existía):", authErr.message);
+      }
+    }
+    await docRef.delete();
+    res.json({ mensaje: "Usuario eliminado exitosamente." });
+  } catch (err) {
+    console.error("[ADMIN] Error eliminando usuario:", err.message);
+    res.status(500).json({ error: err.message || "Error al eliminar el usuario." });
+  }
+});
+
+app.post("/api/admin/usuarios/:uid/reset-password", verificarToken, verificarAdmin, async (req, res) => {
+  if (!adminAuth) {
+    return res.status(503).json({ error: "Firebase Admin no configurado." });
+  }
+  try {
+    const { uid } = req.params;
+    const userRecord = await adminAuth.getUser(uid);
+    const link = await adminAuth.generatePasswordResetLink(userRecord.email);
+    res.json({ mensaje: `Correo de restablecimiento enviado a ${userRecord.email}.`, link });
+  } catch (err) {
+    console.error("[ADMIN] Error generando reset:", err.message);
+    res.status(500).json({ error: "Error al generar el enlace de restablecimiento." });
+  }
+});
 
 
 /* =========================

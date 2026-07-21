@@ -5,12 +5,12 @@ import {
 } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 
-function Login({ onVolver }) {
+function Login({ onVolver, errorInicial = "" }) {
   const { setUsuario } = useAuth();
 
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(errorInicial || "");
   const [cargando, setCargando] = useState(false);
 
   // Estados para recuperar contraseña
@@ -27,14 +27,16 @@ function Login({ onVolver }) {
       setUsuario(dataUsuario);
     } catch (err) {
       const msg = err?.message || "";
-      if (msg.includes("user-not-found") || msg.includes("invalid-credential")) {
+      if (msg.includes("inhabilitada") || msg.includes("deshabilitada") || msg.includes("inactiva") || msg.includes("desactivada")) {
+        setError("⚠️ Esta cuenta está inhabilitada. Contacte al administrador del sistema.");
+      } else if (msg.includes("user-not-found")) {
         setError("No encontramos una cuenta registrada con ese correo electrónico.");
       } else if (msg.includes("wrong-password") || msg.includes("invalid-credential")) {
         setError("La contraseña ingresada es incorrecta. Intente de nuevo.");
       } else if (msg.includes("too-many-requests")) {
         setError("Demasiados intentos fallidos. Por seguridad, espere unos minutos.");
       } else {
-        setError("No se pudo iniciar sesión. Verifique sus credenciales institucionales.");
+        setError(msg || "No se pudo iniciar sesión. Verifique sus credenciales institucionales.");
       }
     } finally {
       setCargando(false);

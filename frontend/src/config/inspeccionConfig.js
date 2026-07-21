@@ -10,6 +10,13 @@ export const TIME_SLOTS = [
 
 export const DIAS_LABORABLES = [1, 2, 3, 4, 5];
 
+export const INSPECTORES_DEFAULT = [
+  { uid: "INSP-001", nombre: "Inspector Carlos Ramírez", correo: "c.ramirez@munitrujillo.gob.pe", cargo: "Inspector Municipal de Defensa Civil" },
+  { uid: "INSP-002", nombre: "Inspectora Ana López", correo: "a.lopez@munitrujillo.gob.pe", cargo: "Inspectora de Licencias y Seguridad Edil" },
+  { uid: "INSP-003", nombre: "Inspector Luis Mendoza", correo: "l.mendoza@munitrujillo.gob.pe", cargo: "Inspector Técnico Edilicio" },
+  { uid: "INSP-004", nombre: "Inspectora María Torres", correo: "m.torres@munitrujillo.gob.pe", cargo: "Inspectora de Gestión Ambiental" },
+];
+
 export const obtenerCapacidadColor = (count) => {
   if (count >= MAX_INSPECCIONES_POR_DIA) return "completo";
   if (count >= MAX_INSPECCIONES_POR_DIA - 1) return "casi-lleno";
@@ -19,14 +26,6 @@ export const obtenerCapacidadColor = (count) => {
 export const esDiaHabil = (fecha) => {
   const dia = fecha.getDay();
   return DIAS_LABORABLES.includes(dia);
-};
-
-export const formatearFechaParaQuery = (fecha) => {
-  const d = new Date(fecha);
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const anio = d.getFullYear();
-  return `${dia}/${mes}/${anio}`;
 };
 
 export const formatearFechaLocal = (fecha) => {
@@ -111,4 +110,61 @@ export const formatearFechaYYYYMMDD = (d) => {
   const mes = String(d.getMonth() + 1).padStart(2, "0");
   const anio = d.getFullYear();
   return `${anio}-${mes}-${dia}`;
+};
+
+const ESTADOS_CERRADOS = ["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"];
+
+export const buscarSiguienteDisponibilidad = (solicitudesActuales) => {
+  const hoy = new Date();
+  const maxDiasHorizonte = 30;
+  const listaSolicitudes = Array.isArray(solicitudesActuales) ? solicitudesActuales : [];
+
+  for (let offset = 1; offset <= maxDiasHorizonte; offset++) {
+    const fechaEvaluada = new Date(hoy);
+    fechaEvaluada.setDate(hoy.getDate() + offset);
+
+    if (!esDiaHabil(fechaEvaluada)) continue;
+
+    const fechaStrDDMMYYYY = formatearFechaLocal(fechaEvaluada);
+
+    for (const inspector of INSPECTORES_DEFAULT) {
+      const inspUid = inspector.uid;
+
+      const conteoDiario = listaSolicitudes.filter((s) => {
+        if (!s) return false;
+        const u = s.inspectorUid || s.inspectorAsignadoUid || "";
+        if (u !== inspUid) return false;
+        const f = s.fechaVisitaInspector || s.fechaInspeccion || "";
+        if (f !== fechaStrDDMMYYYY) return false;
+        return !ESTADOS_CERRADOS.includes(s.estado);
+      }).length;
+
+      if (conteoDiario >= MAX_INSPECCIONES_POR_DIA) continue;
+
+      for (const slot of TIME_SLOTS) {
+        const ocupado = listaSolicitudes.some((s) => {
+          if (!s) return false;
+          const u = s.inspectorUid || s.inspectorAsignadoUid || "";
+          if (u !== inspUid) return false;
+          const f = s.fechaVisitaInspector || s.fechaInspeccion || "";
+          if (f !== fechaStrDDMMYYYY) return false;
+          const h = s.horaVisitaInspector || s.horaVisitaLabel || s.slotInspeccion || "";
+          if (h !== slot.value && !h.includes(slot.value)) return false;
+          return !ESTADOS_CERRADOS.includes(s.estado);
+        });
+
+        if (!ocupado) {
+          return {
+            exito: true,
+            fechaInspeccion: fechaStrDDMMYYYY,
+            slotInspeccion: slot.value,
+            horaLabel: slot.label,
+            inspector,
+          };
+        }
+      }
+    }
+  }
+
+  return { exito: false };
 };

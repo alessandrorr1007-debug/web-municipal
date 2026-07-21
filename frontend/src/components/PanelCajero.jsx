@@ -12,59 +12,18 @@ import { GROS_DISPONIBLES, obtenerDocumentosPorGiro } from "../config/documentos
 import { useAuth } from "../context/AuthContext";
 import {
   TIME_SLOTS,
+  INSPECTORES_DEFAULT,
   formatearFechaLocal,
   esHorarioPasado,
+  esFechaValidaParaInspeccion,
   MENSAJE_FECHA_INSPECCION,
   obtenerFechaMinimaInspeccion,
+  formatearFechaYYYYMMDD,
+  MAX_INSPECCIONES_POR_DIA,
+  buscarSiguienteDisponibilidad,
 } from "../config/inspeccionConfig";
 
 const MONTO_TRAMITE = 3.0;
-
-const INSPECTORES_DEFAULT = [
-  { uid: "INSP-001", nombre: "Inspector Carlos Ramírez", correo: "carlos.ramirez@munitrujillo.gob.pe", cargo: "Inspector Municipal de Defensa Civil" },
-  { uid: "INSP-002", nombre: "Inspectora Ana Torres", correo: "ana.torres@munitrujillo.gob.pe", cargo: "Inspectora de Licencias y Subgerencia" },
-  { uid: "INSP-003", nombre: "Inspector Luis Pérez", correo: "luis.perez@munitrujillo.gob.pe", cargo: "Inspector Técnico Edilicio" },
-];
-
-const obtenerFechaMananaObj = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d;
-};
-
-const formatearFechaDDMMYYYY = (d) => {
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const anio = d.getFullYear();
-  return `${dia}/${mes}/${anio}`;
-};
-
-const formatearFechaYYYYMMDD = (d) => {
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const anio = d.getFullYear();
-  return `${anio}-${mes}-${dia}`;
-};
-
-const esFechaPermitidaInspeccion = (fechaStr) => {
-  if (!fechaStr) return false;
-  let fechaObj;
-  if (fechaStr.includes("-")) {
-    const [y, m, d] = fechaStr.split("-").map(Number);
-    fechaObj = new Date(y, m - 1, d);
-  } else if (fechaStr.includes("/")) {
-    const [d, m, y] = fechaStr.split("/").map(Number);
-    fechaObj = new Date(y, m - 1, d);
-  } else {
-    fechaObj = new Date(fechaStr);
-  }
-
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  fechaObj.setHours(0, 0, 0, 0);
-
-  return fechaObj > hoy;
-};
 
 function PanelCajero({ seccion, cambiarSeccion }) {
   const { usuario } = useAuth();
@@ -93,8 +52,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
   // ESTADOS DE ASIGNACIÓN E INSPECCIÓN DIRECTA (DESDE MAÑANA COMO MÍNIMO)
   const [inspectorElegido, setInspectorElegido] = useState(() => INSPECTORES_DEFAULT[0]);
-  const [fechaInspeccion, setFechaInspeccion] = useState(() => formatearFechaDDMMYYYY(obtenerFechaMananaObj()));
-  const [slotInspeccion, setSlotInspeccion] = useState("08:00");
+  const [fechaInspeccion, setFechaInspeccion] = useState(() => formatearFechaLocal(obtenerFechaMinimaInspeccion()));
+  const [slotInspeccion, setSlotInspeccion] = useState("08:00 AM - 10:00 AM");
+  const [sinDisponibilidadInspeccion, setSinDisponibilidadInspeccion] = useState(false);
 
   // ESTADOS PARA REGISTRO PRESENCIAL DE NUEVA SOLICITUD (WIZARD DE PASO ÚNICO ACTIVO)
   const [pasoActual, setPasoActual] = useState(1);
@@ -273,32 +233,32 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     });
   }, [solicitudes]);
 
-  // PROGRAMACIÓN AUTOMÁTICA Y SUGERENCIA DE INSPECTOR/HORARIO CUANDO CAMBIA LA FECHA
+  // EJECUCIÓN AUTOMÁTICA DE ASIGNACIÓN
   useEffect(() => {
-    if (!fechaInspeccion || !esFechaPermitidaInspeccion(fechaInspeccion)) return;
-
-    // Buscar primer inspector disponible (< 4 cupos)
-    const primerDisponible = INSPECTORES_DEFAULT.find((insp) => {
-      const c = obtenerConteoInspectorEnFecha(insp.uid, fechaInspeccion);
-      return c < 4;
-    }) || INSPECTORES_DEFAULT[0];
-
-    let actualInsp = inspectorElegido;
-    if (!actualInsp || obtenerConteoInspectorEnFecha(actualInsp.uid, fechaInspeccion) >= 4) {
-      actualInsp = primerDisponible;
-      setInspectorElegido(primerDisponible);
+    const res = buscarSiguienteDisponibilidad(solicitudes);
+    if (res.exito) {
+      setFechaInspeccion(res.fechaInspeccion);
+      setSlotInspeccion(res.slotInspeccion);
+      setInspectorElegido(res.inspector);
+      setSinDisponibilidadInspeccion(false);
+    } else {
+      setSinDisponibilidadInspeccion(true);
     }
+  }, [solicitudes]);
 
-    if (actualInsp) {
-      // Buscar primer horario libre
-      const primerSlotLibre = TIME_SLOTS.find(
-        (s) => !esHorarioOcupado(actualInsp.uid, fechaInspeccion, s.value)
-      );
-      if (primerSlotLibre) {
-        setSlotInspeccion(primerSlotLibre.value);
+  useEffect(() => {
+    if (solicitudCobro) {
+      const res = buscarSiguienteDisponibilidad(solicitudes);
+      if (res.exito) {
+        setFechaInspeccion(res.fechaInspeccion);
+        setSlotInspeccion(res.slotInspeccion);
+        setInspectorElegido(res.inspector);
+        setSinDisponibilidadInspeccion(false);
+      } else {
+        setSinDisponibilidadInspeccion(true);
       }
     }
-  }, [fechaInspeccion, solicitudes, obtenerConteoInspectorEnFecha, esHorarioOcupado]);
+  }, [solicitudCobro, solicitudes]);
 
   const cargarSolicitudes = async () => {
     try {
@@ -388,8 +348,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   // Paso 5: Cobro de Tasa (S/ 3.00) y Método de Pago
   const paso5Completado = paso4Completado && Boolean(metodoPagoSeleccionado);
 
-  // Paso 6: Programación de Inspección Técnica
-  const paso6Completado = paso5Completado && Boolean(inspectorElegido) && Boolean(fechaInspeccion) && Boolean(slotInspeccion);
+  // Paso 6: Programación Automática de Inspección Técnica
+  const paso6Completado = paso5Completado && !sinDisponibilidadInspeccion && Boolean(inspectorElegido) && Boolean(fechaInspeccion) && Boolean(slotInspeccion);
 
   // Paso 7: Registro y Finalización
   const paso7Listo = paso6Completado;
@@ -1302,114 +1262,68 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 {/* PASO 6: INSPECCIÓN */}
                 {pasoActual === 6 && (
                   <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1.5px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-                    <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>📅 Programación de Inspección Técnica</h4>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
-                      <div>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                          📅 Fecha de Inspección (Mínimo a partir de mañana) *
-                        </label>
-                        <input
-                          type="date"
-                          min={formatearFechaYYYYMMDD(obtenerFechaMananaObj())}
-                          value={
-                            fechaInspeccion.includes("/")
-                              ? fechaInspeccion.split("/").reverse().join("-")
-                              : fechaInspeccion
-                          }
-                          onChange={(e) => {
-                            const valYMD = e.target.value;
-                            if (!valYMD) return;
-                            const [y, m, d] = valYMD.split("-");
-                            setFechaInspeccion(`${d}/${m}/${y}`);
-                          }}
-                          style={{
-                            width: "100%",
-                            padding: "12px 16px",
-                            borderRadius: "10px",
-                            border: !esFechaPermitidaInspeccion(fechaInspeccion) ? "1.5px solid #dc2626" : "1.5px solid #cbd5e1",
-                            fontSize: "14.5px",
-                            fontWeight: "700",
-                            background: "white"
-                          }}
-                        />
-                        {!esFechaPermitidaInspeccion(fechaInspeccion) && (
-                          <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "10px 14px", borderRadius: "10px", marginTop: "8px", fontSize: "12.5px" }}>
-                            ⚠️ <strong>Fecha no permitida:</strong> Las inspecciones deben programarse con al menos un día de anticipación. Seleccione una fecha a partir de mañana.
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                          ⏰ Rango Horario Disponible para Inspector *
-                        </label>
-                        <select
-                          value={slotInspeccion}
-                          disabled={!esFechaPermitidaInspeccion(fechaInspeccion)}
-                          onChange={(e) => setSlotInspeccion(e.target.value)}
-                          style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px", fontWeight: "700" }}
-                        >
-                          {TIME_SLOTS.map((slot) => {
-                            const ocupado = inspectorElegido && esHorarioOcupado(inspectorElegido.uid, fechaInspeccion, slot.value);
-                            return (
-                              <option key={slot.value} value={slot.value} disabled={ocupado}>
-                                {slot.label} {ocupado ? "❌ Ocupado" : "✅ Disponible"}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px" }}>
+                      <h4 style={{ margin: 0, color: "#0f172a", fontSize: "16.5px", fontWeight: "700" }}>
+                        🤖 Programación Automática de Inspección Técnica
+                      </h4>
+                      <span style={{ background: "#eff6ff", color: "#1d4ed8", padding: "4px 12px", borderRadius: "20px", fontSize: "12.5px", fontWeight: "700", border: "1px solid #bfdbfe" }}>
+                        🔒 Asignación Automática (Solo Lectura)
+                      </span>
                     </div>
 
-                    <div>
-                      <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "10px" }}>
-                        👷‍♂️ Inspector Municipal Asignado (Máx 4 por día)
-                      </label>
-                      {inspectorElegido ? (() => {
-                        const cupos = obtenerConteoInspectorEnFecha(inspectorElegido.uid, fechaInspeccion);
-                        const estaLleno = cupos >= 4;
-                        return (
-                          <div style={{
-                            padding: "16px 20px", borderRadius: "12px",
-                            border: estaLleno ? "2px solid #fca5a5" : "2px solid #16a34a",
-                            background: estaLleno ? "#fef2f2" : "#f0fdf4",
-                            boxShadow: estaLleno ? "none" : "0 2px 8px rgba(22, 163, 74, 0.12)"
-                          }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                              <div>
-                                <strong style={{ color: estaLleno ? "#991b1b" : "#166534", fontSize: "15px" }}>
-                                  {inspectorElegido.nombre}
-                                </strong>
-                                <span style={{ display: "block", fontSize: "12.5px", color: "#64748b", marginTop: "2px" }}>
-                                  {inspectorElegido.cargo}
-                                </span>
-                              </div>
-                              <span style={{
-                                padding: "5px 14px", borderRadius: "20px", fontSize: "12.5px", fontWeight: "800",
-                                background: estaLleno ? "#fee2e2" : "#dcfce7",
-                                color: estaLleno ? "#dc2626" : "#15803d",
-                                border: `1.5px solid ${estaLleno ? "#fca5a5" : "#bbf7d0"}`
-                              }}>
-                                {estaLleno ? "🔴 No disponible" : "🟢 Disponible"}
-                              </span>
-                            </div>
-                            <span style={{ fontSize: "13px", color: estaLleno ? "#991b1b" : "#15803d", fontWeight: "600" }}>
-                              Inspecciones programadas: {cupos}/4
+                    {sinDisponibilidadInspeccion ? (
+                      <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", color: "#991b1b", padding: "20px", borderRadius: "14px", textAlign: "center" }}>
+                        <div style={{ fontSize: "32px", marginBottom: "8px" }}>⚠️</div>
+                        <h4 style={{ margin: "0 0 6px", fontSize: "15px", fontWeight: "800" }}>No fue posible programar la inspección</h4>
+                        <p style={{ margin: 0, fontSize: "13.5px", color: "#b91c1c" }}>
+                          No existe disponibilidad de inspectores en el período configurado por el sistema.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gap: "16px" }}>
+                        <div style={{ background: "#f8fafc", padding: "18px", borderRadius: "14px", border: "1px solid #cbd5e1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+                          <div>
+                            <span style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
+                              🔒 Fecha de Inspección (Asignada Automáticamente)
                             </span>
+                            <input
+                              type="text"
+                              readOnly
+                              value={fechaInspeccion}
+                              style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "15px", fontWeight: "700", background: "#f1f5f9", color: "#0f172a", cursor: "not-allowed" }}
+                            />
                           </div>
-                        );
-                      })() : (
-                        <div style={{
-                          padding: "16px 20px", borderRadius: "12px", border: "1.5px solid #fca5a5",
-                          background: "#fef2f2", textAlign: "center"
-                        }}>
-                          <span style={{ color: "#991b1b", fontWeight: "700", fontSize: "14px" }}>
-                            ⚠️ No hay inspectores disponibles para esta fecha. Seleccione otra fecha.
-                          </span>
+
+                          <div>
+                            <span style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
+                              🔒 Horario Asignado (Solo Lectura)
+                            </span>
+                            <input
+                              type="text"
+                              readOnly
+                              value={slotInspeccion}
+                              style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "15px", fontWeight: "700", background: "#f1f5f9", color: "#0f172a", cursor: "not-allowed" }}
+                            />
+                          </div>
+
+                          <div>
+                            <span style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
+                              🔒 Inspector Asignado (Solo Lectura)
+                            </span>
+                            <input
+                              type="text"
+                              readOnly
+                              value={`${inspectorElegido?.nombre || "Carlos Ramírez"} (${inspectorElegido?.cargo || "Inspector Municipal"})`}
+                              style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "1.5px solid #86efac", fontSize: "15px", fontWeight: "800", background: "#f0fdf4", color: "#166534", cursor: "not-allowed" }}
+                            />
+                          </div>
                         </div>
-                      )}
-                    </div>
+
+                        <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "12px 16px", borderRadius: "10px", color: "#1e40af", fontSize: "13px" }}>
+                          ℹ️ <strong>Asignación automática confirmada:</strong> El sistema evaluó la disponibilidad a partir del día siguiente y reservó el primer turno libre para la inspección técnica.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1499,7 +1413,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           return;
                         }
                         if (pasoActual === 6) {
-                          if (!esFechaPermitidaInspeccion(fechaInspeccion)) {
+                          if (!esFechaValidaParaInspeccion(fechaInspeccion)) {
                             alert("Las inspecciones deben programarse con al menos un día de anticipación. Seleccione una fecha a partir de mañana.");
                             return;
                           }
@@ -1920,100 +1834,54 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 </select>
               </div>
 
-              {/* SECCIÓN PROGRAMACIÓN DE INSPECCIÓN */}
+              {/* SECCIÓN PROGRAMACIÓN DE INSPECCIÓN — SOLO LECTURA */}
               <div style={{ background: "#f0fdf4", padding: "14px", borderRadius: "10px", border: "1px solid #bbf7d0", marginBottom: "16px" }}>
                 <h4 style={{ margin: "0 0 10px", color: "#166534", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
-                  📅 Programar Inspección Técnica Oficial
+                  📅 Programación Automática de Inspección Técnica
                 </h4>
-
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>
-                    Fecha de la Inspección (Mínimo mañana) *
-                  </label>
-                  <input
-                    type="date"
-                    min={formatearFechaYYYYMMDD(obtenerFechaMananaObj())}
-                    value={
-                      fechaInspeccion.includes("/")
-                        ? fechaInspeccion.split("/").reverse().join("-")
-                        : fechaInspeccion
-                    }
-                    onChange={(e) => {
-                      const valYMD = e.target.value;
-                      if (!valYMD) return;
-                      const [y, m, d] = valYMD.split("-");
-                      setFechaInspeccion(`${d}/${m}/${y}`);
-                    }}
-                    style={{
-                      width: "100%", padding: "8px 12px", borderRadius: "8px",
-                      border: fechaInspeccion && !esFechaPermitidaInspeccion(fechaInspeccion) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
-                      fontSize: "13.5px", fontWeight: "bold"
-                    }}
-                  />
-                  {fechaInspeccion && !esFechaPermitidaInspeccion(fechaInspeccion) && (
-                    <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "8px 12px", borderRadius: "8px", marginTop: "6px", fontSize: "11.5px" }}>
-                      ⚠️ {MENSAJE_FECHA_INSPECCION}
-                    </div>
-                  )}
+                <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px", fontSize: "12px", color: "#065f46", display: "flex", alignItems: "center", gap: "6px" }}>
+                  🔒 Asignación automática — Solo lectura
                 </div>
 
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                    👷 Inspector Municipal Asignado (Máx 4/día)
-                  </label>
-                  {inspectorElegido ? (() => {
-                    const cupos = obtenerConteoInspectorEnFecha(inspectorElegido.uid, fechaInspeccion);
-                    const estaLleno = cupos >= 4;
-                    return (
-                      <div style={{
-                        padding: "12px 14px", borderRadius: "10px",
-                        border: estaLleno ? "1.5px solid #fca5a5" : "1.5px solid #16a34a",
-                        background: estaLleno ? "#fef2f2" : "#f0fdf4",
-                      }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <div>
-                            <strong style={{ color: estaLleno ? "#991b1b" : "#166534", fontSize: "13.5px" }}>{inspectorElegido.nombre}</strong>
-                            <span style={{ display: "block", fontSize: "11.5px", color: "#64748b" }}>{inspectorElegido.cargo}</span>
-                          </div>
-                          <span style={{
-                            padding: "3px 10px", borderRadius: "14px", fontSize: "11.5px", fontWeight: "800",
-                            background: estaLleno ? "#fee2e2" : "#dcfce7",
-                            color: estaLleno ? "#dc2626" : "#15803d",
-                          }}>
-                            {estaLleno ? "🔴 No disponible" : "🟢 Disponible"}
-                          </span>
+                {sinDisponibilidadInspeccion ? (
+                  <div style={{ padding: "14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#991b1b", fontSize: "13.5px", textAlign: "center" }}>
+                    ⚠️ No fue posible programar la inspección. No hay disponibilidad en los próximos 30 días hábiles.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: "10px" }}>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Fecha de Inspección</label>
+                      <input
+                        type="text"
+                        value={fechaInspeccion || ""}
+                        readOnly
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13.5px", fontWeight: "bold", background: "#f9fafb", cursor: "not-allowed", color: "#111827" }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: "10px" }}>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Horario</label>
+                      <input
+                        type="text"
+                        value={TIME_SLOTS.find((s) => s.value === slotInspeccion)?.label || slotInspeccion || ""}
+                        readOnly
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13.5px", fontWeight: "bold", background: "#f9fafb", cursor: "not-allowed", color: "#111827" }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Inspector Asignado</label>
+                      {inspectorElegido ? (
+                        <div style={{ padding: "10px 14px", borderRadius: "10px", border: "1.5px solid #16a34a", background: "#f0fdf4" }}>
+                          <strong style={{ color: "#166534", fontSize: "13.5px" }}>{inspectorElegido.nombre}</strong>
+                          <span style={{ display: "block", fontSize: "11.5px", color: "#64748b" }}>{inspectorElegido.cargo}</span>
                         </div>
-                        <span style={{ fontSize: "12px", color: estaLleno ? "#991b1b" : "#15803d", fontWeight: "600", marginTop: "4px", display: "block" }}>
-                          Inspecciones: {cupos}/4
-                        </span>
-                      </div>
-                    );
-                  })() : (
-                    <div style={{ padding: "12px 14px", borderRadius: "10px", border: "1.5px solid #fca5a5", background: "#fef2f2", textAlign: "center" }}>
-                      <span style={{ color: "#991b1b", fontWeight: "700", fontSize: "13px" }}>⚠️ No hay inspectores disponibles para esta fecha.</span>
+                      ) : (
+                        <div style={{ padding: "10px 14px", borderRadius: "10px", border: "1.5px solid #fca5a5", background: "#fef2f2", textAlign: "center" }}>
+                          <span style={{ color: "#991b1b", fontWeight: "700", fontSize: "13px" }}>⚠️ No hay inspectores disponibles.</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-
-                <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>
-                    Rango Horario de Inspección *
-                  </label>
-                  <select
-                    value={slotInspeccion}
-                    onChange={(e) => setSlotInspeccion(e.target.value)}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
-                  >
-                    {TIME_SLOTS.map((slot) => {
-                      const ocupado = inspectorElegido && esHorarioOcupado(inspectorElegido.uid, fechaInspeccion, slot.value);
-                      return (
-                        <option key={slot.value} value={slot.value} disabled={ocupado}>
-                          {slot.label} {ocupado ? " (Ocupado para este inspector)" : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -2386,11 +2254,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       }}
                       style={{
                         width: "100%", padding: "8px 12px", borderRadius: "8px",
-                        border: fechaInspeccion && !esFechaPermitidaInspeccion(fechaInspeccion) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
+                        border: fechaInspeccion && !esFechaValidaParaInspeccion(fechaInspeccion) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
                         fontSize: "13.5px", fontWeight: "bold"
                       }}
                     />
-                    {fechaInspeccion && !esFechaPermitidaInspeccion(fechaInspeccion) && (
+                    {fechaInspeccion && !esFechaValidaParaInspeccion(fechaInspeccion) && (
                       <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "8px 12px", borderRadius: "8px", marginTop: "6px", fontSize: "11.5px" }}>
                         ⚠️ {MENSAJE_FECHA_INSPECCION}
                       </div>

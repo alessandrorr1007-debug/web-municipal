@@ -62,8 +62,47 @@ export const registrarUsuario = async (datos) => {
   return nuevoUsuario;
 };
 
+export const verificarEstadoInactivo = async (uid, correo) => {
+  const correoNorm = (correo || "").toLowerCase().trim();
+  let userDoc = null;
+  if (uid) {
+    try {
+      const snap = await getDoc(doc(db, "usuarios", uid));
+      if (snap.exists()) userDoc = snap.data();
+    } catch (e) {
+      console.warn("[AUTH] Error checking user doc by UID:", e.message);
+    }
+  }
+  if (!userDoc && correoNorm) {
+    try {
+      const q = query(collection(db, "usuarios"), where("correo", "==", correoNorm));
+      const snapQ = await getDocs(q);
+      if (!snapQ.empty) {
+        userDoc = snapQ.docs[0].data();
+      }
+    } catch (e) {
+      console.warn("[AUTH] Error checking user doc by email:", e.message);
+    }
+  }
+
+  if (userDoc) {
+    if (userDoc.estado === "inactivo" || userDoc.estado === "desactivado" || userDoc.activo === false) {
+      try {
+        await signOut(auth);
+      } catch (e) {
+        // ignore
+      }
+      throw new Error("⚠️ Esta cuenta está inhabilitada. Contacte al administrador del sistema.");
+    }
+  }
+  return userDoc;
+};
+
 export const iniciarSesion = async (correo, password) => {
   const correoNorm = (correo || "").toLowerCase().trim();
+
+  await verificarEstadoInactivo(null, correoNorm);
+
   const demoAccounts = {
     "alessandropaul19@gmail.com": { uid: "CAJERO-001", correo: "alessandropaul19@gmail.com", nombre: "Cajero Municipal", rol: "cajero", password: "cajeroprueba" },
     "arodriguezr1020@gmail.com": { uid: "INSP-001", correo: "arodriguezr1020@gmail.com", nombre: "Inspector Municipal", rol: "inspector", password: "inspectorprueba" },
@@ -73,47 +112,53 @@ export const iniciarSesion = async (correo, password) => {
   try {
     const credenciales = await signInWithEmailAndPassword(auth, correoNorm, password);
     const usuario = credenciales.user;
-    const usuarioRef = doc(db, "usuarios", usuario.uid);
-    const usuarioSnap = await getDoc(usuarioRef);
 
-    if (!usuarioSnap.exists()) {
-      const demoTarget = demoAccounts[correoNorm];
-      if (demoTarget) {
-        return {
-          uid: usuario.uid,
-          correo: usuario.email,
-          nombre: demoTarget.nombre,
-          rol: demoTarget.rol,
-          telefono: "999888777",
-          dni: "12345678",
-          activo: true,
-        };
-      }
-      throw new Error("No existe información del usuario en Firestore");
-    }
+    const data = await verificarEstadoInactivo(usuario.uid, usuario.email);
 
-    const data = usuarioSnap.data();
     const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
+    const rolFinal = data?.rol ? (rolesValidos.includes(data.rol) ? data.rol : "negocio") : "cajero";
 
     return {
       uid: usuario.uid,
       correo: usuario.email,
-      nombre: data.nombre || data.nombre_completo || "Usuario",
-      rol: data.rol && rolesValidos.includes(data.rol) ? data.rol : "negocio",
-      telefono: data.telefono || "",
-      dni: data.dni || "",
-      digito_verificador: data.digito_verificador || "",
-      nombres: data.nombres || "",
-      apellido_paterno: data.apellido_paterno || "",
-      apellido_materno: data.apellido_materno || "",
-      nombre_completo: data.nombre_completo || data.nombre || "",
-      areaTrabajo: data.areaTrabajo || "",
-      zonaAsignada: data.zonaAsignada || "",
-      activo: data.activo !== false,
+      nombre: data?.nombre || data?.nombre_completo || "Usuario",
+      rol: rolFinal,
+      telefono: data?.telefono || "",
+      dni: data?.dni || "",
+      digito_verificador: data?.digito_verificador || "",
+      nombres: data?.nombres || "",
+      apellido_paterno: data?.apellido_paterno || "",
+      apellido_materno: data?.apellido_materno || "",
+      nombre_completo: data?.nombre_completo || data?.nombre || "",
+      areaTrabajo: data?.areaTrabajo || "",
+      zonaAsignada: data?.zonaAsignada || "",
+      activo: true,
+      estado: "activo",
     };
   } catch (authError) {
+    if (authError.message && authError.message.includes("inhabilitada")) {
+      throw authError;
+    }
+
+    const userDocData = await verificarEstadoInactivo(null, correoNorm);
+    if (userDocData && userDocData.password && userDocData.password === password) {
+      const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
+      const rolFinal = userDocData.rol && rolesValidos.includes(userDocData.rol) ? userDocData.rol : "cajero";
+      return {
+        uid: userDocData.uid || `USR-${Date.now()}`,
+        correo: correoNorm,
+        nombre: userDocData.nombre || userDocData.nombre_completo || "Usuario",
+        rol: rolFinal,
+        telefono: userDocData.telefono || "",
+        dni: userDocData.dni || "",
+        activo: true,
+        estado: "activo",
+      };
+    }
+
     const target = demoAccounts[correoNorm];
     if (target && target.password === password) {
+      await verificarEstadoInactivo(target.uid, target.correo);
       return {
         uid: target.uid,
         correo: target.correo,
@@ -122,6 +167,7 @@ export const iniciarSesion = async (correo, password) => {
         telefono: "999888777",
         dni: "12345678",
         activo: true,
+        estado: "activo",
       };
     }
     throw authError;
