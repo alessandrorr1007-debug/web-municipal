@@ -25,7 +25,9 @@ const MUNICIPALIDAD_CONFIG = {
   sistemaNombre: "Sistema de Licencias v1.0"
 };
 
-const distPath = join(__dirname, "..", "frontend", "dist");
+const distPathRoot = join(__dirname, "..", "dist");
+const distPathFrontend = join(__dirname, "..", "frontend", "dist");
+const distPath = fs.existsSync(distPathRoot) ? distPathRoot : distPathFrontend;
 
 const app = express();
 
@@ -1525,8 +1527,11 @@ app.post("/api/admin/usuarios/:uid/reset-password", verificarToken, verificarAdm
    STATIC FILES & SPA
 ========================= */
 
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
+if (fs.existsSync(distPathRoot)) {
+  app.use(express.static(distPathRoot));
+}
+if (fs.existsSync(distPathFrontend)) {
+  app.use(express.static(distPathFrontend));
 }
 
 app.use("/pago-exitoso", express.urlencoded({ extended: false }), (req, res) => {
@@ -1534,18 +1539,22 @@ app.use("/pago-exitoso", express.urlencoded({ extended: false }), (req, res) => 
   if (req.method === "POST" && token) {
     return res.redirect(303, `/pago-exitoso?token=${encodeURIComponent(token)}`);
   }
-  const indexPath = join(distPath, "index.html");
+  const indexPath = fs.existsSync(join(distPathRoot, "index.html"))
+    ? join(distPathRoot, "index.html")
+    : join(distPathFrontend, "index.html");
   if (fs.existsSync(indexPath)) {
     return res.sendFile(indexPath);
   }
   return res.status(404).json({ error: "Frontend no encontrado" });
 });
 
-app.get("*", (req, res) => {
+app.get("(.*)", (req, res) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "Ruta de API no encontrada." });
   }
-  const indexPath = join(distPath, "index.html");
+  const indexPath = fs.existsSync(join(distPathRoot, "index.html"))
+    ? join(distPathRoot, "index.html")
+    : join(distPathFrontend, "index.html");
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
