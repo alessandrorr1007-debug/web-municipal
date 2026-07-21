@@ -877,7 +877,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     Registro Presencial de Licencia Municipal
                   </span>
                   <span style={{ background: "#f0fdf4", color: "#166534", padding: "4px 14px", borderRadius: "20px", fontSize: "12.5px", fontWeight: "800", border: "1px solid #bbf7d0" }}>
-                    Paso {pasoActual} de 7 ({porcentajeProgreso}%)
+                    Paso {pasoActual} de 5 ({Math.round((pasoActual / 5) * 100)}%)
                   </span>
                 </div>
 
@@ -886,16 +886,14 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   {pasoActual === 2 && "Paso 2: Datos de Contacto del Solicitante"}
                   {pasoActual === 3 && "Paso 3: Validación de Establecimiento SUNAT"}
                   {pasoActual === 4 && "Paso 4: Carga del Plano del Local (PDF)"}
-                  {pasoActual === 5 && "Paso 5: Pago de Tasa Municipal"}
-                  {pasoActual === 6 && "Paso 6: Programación de Inspección Técnica"}
-                  {pasoActual === 7 && "Paso 7: Resumen y Confirmación Final"}
+                  {pasoActual === 5 && "Paso 5: Pago de Tasa Municipal (S/ 3.00) y Registro Directo"}
                 </h3>
 
                 <div style={{ height: "10px", width: "100%", background: "#f1f5f9", borderRadius: "5px", overflow: "hidden", border: "1px solid #e2e8f0" }}>
                   <div
                     style={{
                       height: "100%",
-                      width: `${(pasoActual / 7) * 100}%`,
+                      width: `${(pasoActual / 5) * 100}%`,
                       background: "linear-gradient(90deg, #2563eb, #16a34a)",
                       transition: "width 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
                       borderRadius: "5px"
@@ -1208,10 +1206,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </div>
                 )}
 
-                {/* PASO 5: PAGO TASA */}
+                {/* PASO 5: PAGO DE TASA Y REGISTRO DIRECTO */}
                 {pasoActual === 5 && (
                   <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-                    <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>💳 Pago de Tasa Municipal y Generación de Boleta</h4>
+                    <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>💳 Pago de Tasa Municipal (S/ 3.00) y Finalización Directa</h4>
 
                     <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "24px", marginBottom: "20px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -1225,7 +1223,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         </div>
                       </div>
 
-                      <div>
+                      <div style={{ marginBottom: "16px" }}>
                         <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "8px" }}>Seleccione Método de Pago *</label>
                         <select
                           value={metodoPagoSeleccionado}
@@ -1236,110 +1234,19 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
                         </select>
                       </div>
-                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setPagoConfirmadoLocal(true)}
-                      style={{
-                        width: "100%",
-                        padding: "14px",
-                        background: pagoConfirmadoLocal ? "#16a34a" : "#2563eb",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "12px",
-                        fontSize: "15px",
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                        boxShadow: "0 4px 10px rgba(37,99,235,0.2)"
-                      }}
-                    >
-                      {pagoConfirmadoLocal ? "✅ Pago Registrado Correctamente" : "Confirmar Pago (S/ 3.00)"}
-                    </button>
-                  </div>
-                )}
-
-                {/* PASO 6: INSPECCIÓN */}
-                {pasoActual === 6 && (
-                  <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1.5px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px" }}>
-                      <h4 style={{ margin: 0, color: "#0f172a", fontSize: "16.5px", fontWeight: "700" }}>
-                        🤖 Programación Automática de Inspección Técnica
-                      </h4>
-                      <span style={{ background: "#eff6ff", color: "#1d4ed8", padding: "4px 12px", borderRadius: "20px", fontSize: "12.5px", fontWeight: "700", border: "1px solid #bfdbfe" }}>
-                        🔒 Asignación Automática (Solo Lectura)
-                      </span>
-                    </div>
-
-                    {sinDisponibilidadInspeccion ? (
-                      <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", color: "#991b1b", padding: "20px", borderRadius: "14px", textAlign: "center" }}>
-                        <div style={{ fontSize: "32px", marginBottom: "8px" }}>⚠️</div>
-                        <h4 style={{ margin: "0 0 6px", fontSize: "15px", fontWeight: "800" }}>No fue posible programar la inspección</h4>
-                        <p style={{ margin: 0, fontSize: "13.5px", color: "#b91c1c" }}>
-                          No existe disponibilidad de inspectores en el período configurado por el sistema.
+                      {/* INFORMACIÓN DE ASIGNACIÓN AUTOMÁTICA DE INSPECCIÓN */}
+                      <div style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: "16px 20px", borderRadius: "12px" }}>
+                        <strong style={{ color: "#1e40af", fontSize: "14px", display: "block", marginBottom: "6px" }}>
+                          🤖 Inspección Técnica Agendada Automáticamente por el Sistema
+                        </strong>
+                        <p style={{ margin: "0 0 6px", fontSize: "13.5px", color: "#1e3a8a" }}>
+                          <strong>Fecha de Visita:</strong> {fechaInspeccion} ({slotInspeccion})
+                        </p>
+                        <p style={{ margin: 0, fontSize: "13.5px", color: "#1e3a8a" }}>
+                          <strong>Inspector Asignado:</strong> {inspectorElegido?.nombre || "Carlos Ramírez"}
                         </p>
                       </div>
-                    ) : (
-                      <div style={{ display: "grid", gap: "16px" }}>
-                        <div style={{ background: "#f8fafc", padding: "18px", borderRadius: "14px", border: "1px solid #cbd5e1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
-                          <div>
-                            <span style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
-                              🔒 Fecha de Inspección (Asignada Automáticamente)
-                            </span>
-                            <input
-                              type="text"
-                              readOnly
-                              value={fechaInspeccion}
-                              style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "15px", fontWeight: "700", background: "#f1f5f9", color: "#0f172a", cursor: "not-allowed" }}
-                            />
-                          </div>
-
-                          <div>
-                            <span style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
-                              🔒 Horario Asignado (Solo Lectura)
-                            </span>
-                            <input
-                              type="text"
-                              readOnly
-                              value={slotInspeccion}
-                              style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "15px", fontWeight: "700", background: "#f1f5f9", color: "#0f172a", cursor: "not-allowed" }}
-                            />
-                          </div>
-
-                          <div>
-                            <span style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
-                              🔒 Inspector Asignado (Solo Lectura)
-                            </span>
-                            <input
-                              type="text"
-                              readOnly
-                              value={`${inspectorElegido?.nombre || "Carlos Ramírez"} (${inspectorElegido?.cargo || "Inspector Municipal"})`}
-                              style={{ width: "100%", padding: "12px 14px", borderRadius: "10px", border: "1.5px solid #86efac", fontSize: "15px", fontWeight: "800", background: "#f0fdf4", color: "#166534", cursor: "not-allowed" }}
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "12px 16px", borderRadius: "10px", color: "#1e40af", fontSize: "13px" }}>
-                          ℹ️ <strong>Asignación automática confirmada:</strong> El sistema evaluó la disponibilidad a partir del día siguiente y reservó el primer turno libre para la inspección técnica.
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* PASO 7: RESUMEN Y FINALIZAR */}
-                {pasoActual === 7 && (
-                  <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-                    <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>🚀 Resumen General del Expediente Presencial</h4>
-
-                    <div style={{ background: "#f8fafc", padding: "20px", borderRadius: "14px", border: "1px solid #e2e8f0", display: "grid", gap: "12px", marginBottom: "24px" }}>
-                      <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Solicitante:</strong> {nombresForm} {apellidosForm} (DNI: {dniForm})</p>
-                      <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Contacto:</strong> Cel. {telefonoForm} | {correoForm}</p>
-                      <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Establecimiento:</strong> {nombreNegocioForm} (RUC: {rucForm})</p>
-                      <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Dirección Fiscal:</strong> {direccionForm}</p>
-                      <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Derecho de Trámite:</strong> S/ {MONTO_TRAMITE.toFixed(2)} ({metodoPagoSeleccionado})</p>
-                      <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Plano Adjunto:</strong> {archivosPresenciales[0]?.archivoNombre || "Plano_Local.pdf"}</p>
-                      <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}><strong>Inspección:</strong> {inspectorElegido?.nombre} el {fechaInspeccion} ({slotInspeccion})</p>
                     </div>
 
                     <button
@@ -1359,7 +1266,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         boxShadow: "0 4px 14px rgba(22, 163, 74, 0.3)"
                       }}
                     >
-                      {procesando ? "Procesando Registro Presencial..." : "🚀 Registrar Solicitud"}
+                      {procesando ? "Procesando Registro Presencial..." : "💰 Confirmar Pago (S/ 3.00) y Registrar Solicitud"}
                     </button>
                   </div>
                 )}
@@ -1378,7 +1285,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     <div />
                   )}
 
-                  {pasoActual < 7 && (
+                  {pasoActual < 5 && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1408,51 +1315,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           alert("⚠️ Debe adjuntar el archivo PDF del Plano del Local.");
                           return;
                         }
-                        if (pasoActual === 5 && !paso5Completado) {
-                          alert("⚠️ Debe seleccionar el método de pago y confirmar.");
-                          return;
-                        }
-                        if (pasoActual === 6) {
-                          if (!esFechaValidaParaInspeccion(fechaInspeccion)) {
-                            alert("Las inspecciones deben programarse con al menos un día de anticipación. Seleccione una fecha a partir de mañana.");
-                            return;
-                          }
-                          if (!inspectorElegido) {
-                            alert("⚠️ Seleccione un inspector municipal para la visita.");
-                            return;
-                          }
-                          const c = obtenerConteoInspectorEnFecha(inspectorElegido.uid, fechaInspeccion);
-                          if (c >= 4) {
-                            alert(`⚠️ El inspector ${inspectorElegido.nombre} ha alcanzado el límite máximo de 4 inspecciones programadas para el día ${fechaInspeccion}. Seleccione otro inspector.`);
-                            return;
-                          }
-                          if (esHorarioOcupado(inspectorElegido.uid, fechaInspeccion, slotInspeccion)) {
-                            alert("⚠️ El horario seleccionado ya está ocupado para este inspector. Seleccione otro horario.");
-                            return;
-                          }
-                        }
-                        setPasoActual((prev) => Math.min(7, prev + 1));
+                        setPasoActual((prev) => Math.min(5, prev + 1));
                       }}
-                      style={{
-                        padding: "12px 28px",
-                        background:
-                          (pasoActual === 1 && paso1Completado) ||
-                          (pasoActual === 2 && paso2Completado) ||
-                          (pasoActual === 3 && paso3Completado) ||
-                          (pasoActual === 4 && paso4Completado) ||
-                          (pasoActual === 5 && paso5Completado) ||
-                          (pasoActual === 6 && paso6Completado)
-                            ? "#2563eb"
-                            : "#cbd5e1",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "10px",
-                        fontWeight: "bold",
-                        fontSize: "14.5px",
-                        cursor: "pointer"
-                      }}
+                      style={{ padding: "12px 28px", background: "#2563eb", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", boxShadow: "0 2px 6px rgba(37,99,235,0.2)" }}
                     >
-                      Continuar →
+                      Siguiente ➔
                     </button>
                   )}
                 </div>
