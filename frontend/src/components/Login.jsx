@@ -1,55 +1,40 @@
 import { useState, useEffect } from "react";
 import {
   iniciarSesion,
-  registrarUsuario,
   enviarRecuperacion,
-  guardarCodigoVerificacion,
 } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
 
-
-function Login({ onVolver, modoInicial }) {
+function Login({ onVolver }) {
   const { setUsuario } = useAuth();
 
-  const [modo, setModo] = useState(modoInicial || "login");
-  const [nombre, setNombre] = useState("");
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [telefono, setTelefono] = useState("");
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
-  const [correoRecuperacion, setCorreoRecuperacion] = useState("");
+
+  // Estados para recuperar contraseña
   const [mostrarRecuperar, setMostrarRecuperar] = useState(false);
+  const [correoRecuperacion, setCorreoRecuperacion] = useState("");
   const [recuperacionEnviado, setRecuperacionEnviado] = useState(false);
 
-  const [nombres, setNombres] = useState("");
-  const [apellidos, setApellidos] = useState("");
-  // Helper regex for allowed characters (letters, spaces, accents, ñ, hyphen, apostrophe)
-  const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$/;
-  const filterName = (val) => val.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]/g, "");
-
-  const [pasoRegistro, setPasoRegistro] = useState("formulario");
-  const [correoVerificar, setCorreoVerificar] = useState("");
-  const [codigoIngresado, setCodigoIngresado] = useState("");
-  const [errorCodigo, setErrorCodigo] = useState("");
-  const [tiempoRestante, setTiempoRestante] = useState(0);
-  const [reenviando, setReenviando] = useState(false);
-
+  // Estado de fecha y hora actual en vivo
+  const [fechaHoraActual, setFechaHoraActual] = useState("");
 
   useEffect(() => {
-    if (tiempoRestante <= 0) return;
-    const timer = setTimeout(() => {
-      setTiempoRestante((t) => t - 1);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [tiempoRestante]);
+    const actualizarFechaHora = () => {
+      const ahora = new Date();
+      const opcionesFecha = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+      const fecha = ahora.toLocaleDateString("es-PE", opcionesFecha);
+      const hora = ahora.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+      const fechaCapitalizada = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+      setFechaHoraActual(`${fechaCapitalizada} — ${hora}`);
+    };
 
-  const minutos = Math.floor(tiempoRestante / 60);
-  const segundos = tiempoRestante % 60;
-  const tiempoFormateado = `${minutos}:${segundos.toString().padStart(2, "0")}`;
+    actualizarFechaHora();
+    const interval = setInterval(actualizarFechaHora, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const manejarLogin = async (e) => {
     e.preventDefault();
@@ -61,130 +46,18 @@ function Login({ onVolver, modoInicial }) {
     } catch (err) {
       const msg = err?.message || "";
       if (msg.includes("user-not-found") || msg.includes("invalid-credential")) {
-        setError("No encontramos una cuenta con ese correo electronico.");
+        setError("No encontramos una cuenta registrada con ese correo electrónico.");
       } else if (msg.includes("wrong-password") || msg.includes("invalid-credential")) {
-        setError("La contraseña ingresada es incorrecta. Intenta de nuevo.");
+        setError("La contraseña ingresada es incorrecta. Intente de nuevo.");
       } else if (msg.includes("too-many-requests")) {
-        setError("Demasiados intentos. Espera unos minutos e intentalo de nuevo.");
+        setError("Demasiados intentos fallidos. Por seguridad, espere unos minutos.");
       } else {
-        setError("No pudimos iniciar sesión. Verifica tus datos e intenta de nuevo.");
+        setError("No se pudo iniciar sesión. Verifique sus credenciales institucionales.");
       }
     } finally {
       setCargando(false);
     }
   };
-
-  const manejarRegistro = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    if (!nombres.trim()) { setError("Ingresa tus nombres."); return; }
-    if (!apellidos.trim()) { setError("Ingresa tus apellidos."); return; }
-    if (!nameRegex.test(nombres.trim()) || !nameRegex.test(apellidos.trim())) {
-      setError("Los nombres y apellidos solo pueden contener letras.");
-      return;
-    }
-    if (!correo) { setError("Ingresa tu correo electrónico."); return; }
-    if (!telefono || telefono.length < 9) { setError("Ingresa un número de teléfono válido de 9 dígitos."); return; }
-    if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return; }
-    if (password !== confirmPassword) { setError("Las contraseñas no coinciden."); return; }
-
-    setCargando(true);
-    try {
-      // 1. Verificar Correo único en Firestore
-      const qCorreo = query(collection(db, "usuarios"), where("correo", "==", correo.trim()));
-      const snapCorreo = await getDocs(qCorreo);
-      if (!snapCorreo.empty) {
-        setError("Este correo electrónico ya está registrado.");
-        setCargando(false);
-        return;
-      }
-
-      // 2. Verificar Teléfono único en Firestore
-      const qTelefono = query(collection(db, "usuarios"), where("telefono", "==", telefono.trim()));
-      const snapTelefono = await getDocs(qTelefono);
-      if (!snapTelefono.empty) {
-        setError("Este número de teléfono ya está registrado.");
-        setCargando(false);
-        return;
-      }
-
-      // 3. Guardar código de verificación y enviar por correo
-      const nombreCompleto = `${nombres.trim()} ${apellidos.trim()}`;
-      await guardarCodigoVerificacion(correo.trim(), nombreCompleto);
-
-      setCorreoVerificar(correo.trim());
-      setPasoRegistro("verificar");
-      setTiempoRestante(300);
-      setCodigoIngresado("");
-      setErrorCodigo("");
-    } catch (err) {
-      console.error("[DEBUG] Error en registro:", err.message);
-      setError(err.message.includes("registrado") ? err.message : `No se pudo enviar el código: ${err.message}`);
-    } finally {
-      setCargando(false);
-    }
-  };
-
-
-  const manejarVerificarCodigo = async (e) => {
-    e.preventDefault();
-    setErrorCodigo("");
-
-    if (!codigoIngresado || codigoIngresado.length !== 6) {
-      setErrorCodigo("Ingresa el código de 6 dígitos.");
-      return;
-    }
-
-    setCargando(true);
-    try {
-      const resultado = await verificarCodigoVerificacion(correoVerificar, codigoIngresado);
-
-      if (!resultado.valido) {
-        setErrorCodigo(resultado.mensaje);
-        setCargando(false);
-        return;
-      }
-
-      const nombreCompleto = `${nombres.trim()} ${apellidos.trim()}`;
-      await registrarUsuario({
-        nombre: nombreCompleto,
-        correo: correoVerificar,
-        password,
-        rol: "negocio",
-        telefono,
-        nombre_completo: nombreCompleto,
-      });
-
-      setPasoRegistro("exito");
-    } catch (err) {
-      const msg = err?.message || "";
-      if (msg.includes("email-already-in-use")) {
-        setErrorCodigo("Ya existe una cuenta con ese correo.");
-      } else {
-        setErrorCodigo("No se pudo crear la cuenta. Intenta de nuevo.");
-      }
-    } finally {
-      setCargando(false);
-    }
-  };
-
-
-  const reenviarCodigo = async () => {
-    setReenviando(true);
-    setErrorCodigo("");
-    try {
-      const nombreCompleto = `${nombres.trim()} ${apellidos.trim()}`;
-      await guardarCodigoVerificacion(correoVerificar, nombreCompleto);
-      setTiempoRestante(300);
-      setCodigoIngresado("");
-    } catch {
-      setErrorCodigo("No se pudo reenviar el código.");
-    } finally {
-      setReenviando(false);
-    }
-  };
-
 
   const manejarRecuperar = async (e) => {
     e.preventDefault();
@@ -194,387 +67,360 @@ function Login({ onVolver, modoInicial }) {
       await enviarRecuperacion(correoRecuperacion.trim());
       setRecuperacionEnviado(true);
     } catch (err) {
-      setError(err.message || "No se pudo enviar el enlace. Intenta de nuevo.");
+      setError(err.message || "No se pudo enviar el enlace. Intente de nuevo.");
     } finally {
       setCargando(false);
     }
   };
 
-  const resetRegistro = () => {
-    setPasoRegistro("formulario");
-    setCodigoIngresado("");
-    setErrorCodigo("");
-    setTiempoRestante(0);
-    setCorreoVerificar("");
-    setNombres("");
-    setApellidos("");
-    setCorreo("");
-    setTelefono("");
-    setPassword("");
-    setConfirmPassword("");
-    setError("");
-  };
-
-
-  const inputLabel = { display: "block", fontSize: "13px", fontWeight: 600, color: "#334155", marginBottom: "6px" };
-
-  const pasos = [
-    { numero: "1", titulo: "Crea tu cuenta", descripcion: "Regístrate como negocio para acceder al sistema municipal." },
-    { numero: "2", titulo: "Completa tu solicitud", descripcion: "Ingresa tu RUC, datos del local y adjunta tus documentos PDF." },
-    { numero: "3", titulo: "Realiza el pago", descripcion: "Paga el derecho de trámite y registra tu comprobante digital." },
-    { numero: "4", titulo: "Inspección", descripcion: "Un inspector revisará tu local, observaciones y evidencias." },
-    { numero: "5", titulo: "Recibe tu resultado", descripcion: "El funcionario evaluará el informe y emitirá la decisión final." },
-    { numero: "6", titulo: "Descarga tu licencia", descripcion: "Si es aprobada, podrás descargar tu licencia municipal." },
-  ];
+  const inputLabel = { display: "block", fontSize: "13px", fontWeight: 700, color: "#334155", marginBottom: "6px" };
 
   return (
     <div className="login-page">
       {onVolver && (
-        <button type="button" onClick={() => { resetRegistro(); onVolver(); }} style={{ position: "absolute", top: "20px", left: "20px", zIndex: 10, background: "rgba(255,255,255,0.12)", color: "white", border: "1px solid rgba(255,255,255,0.25)", padding: "10px 16px", fontSize: "14px" }}>
-          &#8592; Volver
+        <button
+          type="button"
+          onClick={onVolver}
+          style={{
+            position: "absolute",
+            top: "20px",
+            left: "20px",
+            zIndex: 10,
+            background: "rgba(255,255,255,0.15)",
+            color: "white",
+            border: "1px solid rgba(255,255,255,0.3)",
+            padding: "10px 18px",
+            fontSize: "14px",
+            borderRadius: "10px",
+            cursor: "pointer",
+            fontWeight: "bold"
+          }}
+        >
+          ← Volver
         </button>
       )}
 
-      <div className="login-card">
-        <div className="login-info">
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "28px" }}>
-            <div style={{ width: "48px", height: "48px", borderRadius: "14px", background: "rgba(255,255,255,0.15)", display: "grid", placeItems: "center", fontSize: "24px", border: "1px solid rgba(255,255,255,0.2)" }}>
-              &#9881;
-            </div>
-            <div>
-              <span className="eyebrow" style={{ marginBottom: "2px" }}>Municipalidad de Trujillo</span>
-              <p style={{ margin: 0, fontSize: "12px", color: "#93c5fd" }}>La Libertad, Peru</p>
-            </div>
-          </div>
-
-          <h1 style={{ fontSize: "34px", lineHeight: 1.2 }}>
-            Licencia Municipal de Funcionamiento
-          </h1>
-          <p style={{ fontSize: "15px", lineHeight: 1.7 }}>
-            Plataforma oficial para solicitar, dar seguimiento y descargar
-            licencias municipales de funcionamiento de tu negocio de manera 100% digital.
-          </p>
-          <div className="login-benefits">
-            <span>100% Digital</span>
-            <span>Pago en linea</span>
-            <span>Seguimiento en tiempo real</span>
-            <span>Descarga inmediata</span>
-          </div>
-        </div>
-
-        <div className="login-form-box" style={{ overflow: "auto", maxHeight: "600px" }}>
+      <div className="login-card" style={{ maxWidth: "980px", margin: "0 auto", borderRadius: "24px", overflow: "hidden", boxShadow: "0 25px 60px rgba(0,0,0,0.35)" }}>
+        {/* PANEL IZQUIERDO: FORMULARIO DE INICIO DE SESIÓN */}
+        <div className="login-form-box" style={{ padding: "44px 40px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
           {mostrarRecuperar ? (
             <div>
-              <button type="button" onClick={() => { setMostrarRecuperar(false); setRecuperacionEnviado(false); setCorreoRecuperacion(""); setError(""); }} style={{ background: "none", color: "#64748b", border: "none", cursor: "pointer", fontSize: "14px", marginBottom: "16px", padding: 0 }}>
-                &#8592; Volver al inicio de sesión
+              <button
+                type="button"
+                onClick={() => { setMostrarRecuperar(false); setRecuperacionEnviado(false); setCorreoRecuperacion(""); setError(""); }}
+                style={{ background: "none", color: "#2563eb", border: "none", cursor: "pointer", fontSize: "14px", marginBottom: "20px", padding: 0, fontWeight: "bold" }}
+              >
+                ← Volver al inicio de sesión
               </button>
 
               {recuperacionEnviado ? (
                 <div style={{ textAlign: "center", padding: "20px 0" }}>
-                  <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#f0fdf4", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "36px", border: "2px solid #bbf7d0" }}>&#9989;</div>
-                  <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Correo enviado</h2>
+                  <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#f0fdf4", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "36px", border: "2px solid #bbf7d0" }}>
+                    ✅
+                  </div>
+                  <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px", fontWeight: "800" }}>Correo Enviado</h2>
                   <p style={{ margin: "0 0 24px", color: "#475569", fontSize: "14px", lineHeight: "1.6" }}>
-                    Si el correo está registrado, recibirás un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.
+                    Si su correo electrónico se encuentra registrado en el sistema municipal, recibirá un enlace para restablecer su contraseña.
                   </p>
-                  <button type="button" onClick={() => { setMostrarRecuperar(false); setRecuperacionEnviado(false); setModo("login"); setError(""); }} className="primary-btn" style={{ padding: "14px 32px", fontSize: "15px" }}>
-                    Volver al inicio de sesión
+                  <button
+                    type="button"
+                    onClick={() => { setMostrarRecuperar(false); setRecuperacionEnviado(false); setError(""); }}
+                    className="primary-btn"
+                    style={{ padding: "14px 32px", fontSize: "15px", borderRadius: "10px" }}
+                  >
+                    Volver al Inicio de Sesión
                   </button>
                 </div>
               ) : (
                 <div>
-                  <h2 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "20px" }}>Recuperar contraseña</h2>
+                  <h2 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "22px", fontWeight: "800" }}>Recuperar Contraseña</h2>
                   <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "14px" }}>
-                    Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
+                    Ingrese su correo electrónico institucional para enviar las instrucciones de recuperación.
                   </p>
                   <form onSubmit={manejarRecuperar}>
-                    <label style={inputLabel}>Correo electrónico</label>
-                    <input type="email" placeholder="tu@correo.com" value={correoRecuperacion} onChange={(e) => setCorreoRecuperacion(e.target.value)} required autoFocus />
-                    {error && <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", marginTop: "12px" }}>&#9888; {error}</div>}
-                    <button type="submit" disabled={cargando} className="primary-btn" style={{ marginTop: "16px", padding: "14px", opacity: cargando ? 0.7 : 1 }}>
-                      {cargando ? "Enviando..." : "Enviar enlace de recuperación"}
+                    <div style={{ marginBottom: "16px" }}>
+                      <label style={inputLabel}>Correo electrónico institucional</label>
+                      <input
+                        type="email"
+                        placeholder="usuario@munitrujillo.gob.pe"
+                        value={correoRecuperacion}
+                        onChange={(e) => setCorreoRecuperacion(e.target.value)}
+                        required
+                        style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px" }}
+                        autoFocus
+                      />
+                    </div>
+                    {error && (
+                      <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", marginBottom: "16px" }}>
+                        ⚠️ {error}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={cargando}
+                      className="primary-btn"
+                      style={{ width: "100%", padding: "14px", fontSize: "15px", borderRadius: "10px", opacity: cargando ? 0.7 : 1, fontWeight: "bold" }}
+                    >
+                      {cargando ? "Enviando enlace..." : "Enviar Enlace de Recuperación"}
                     </button>
                   </form>
                 </div>
               )}
             </div>
           ) : (
-            <>
-              {pasoRegistro === "exito" ? (
-                <div style={{ textAlign: "center", padding: "20px 0" }}>
-                  <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#f0fdf4", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "36px", border: "2px solid #bbf7d0" }}>&#9989;</div>
-                  <h2 style={{ margin: "0 0 8px", color: "#166534", fontSize: "22px" }}>Cuenta creada correctamente</h2>
-                  <p style={{ margin: "0 0 24px", color: "#475569", fontSize: "14px", lineHeight: "1.6" }}>
-                    Tu cuenta ha sido registrada exitosamente. Ahora puedes iniciar sesión con tu correo electrónico y contraseña.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => { resetRegistro(); setModo("login"); setError(""); }}
-                    className="primary-btn"
-                    style={{ padding: "14px 32px", fontSize: "15px" }}
-                  >
-                    Iniciar sesión
-                  </button>
-                </div>
-              ) : pasoRegistro === "verificar" ? (
-                <div>
-                  <button type="button" onClick={resetRegistro} style={{ background: "none", color: "#64748b", border: "none", cursor: "pointer", fontSize: "14px", marginBottom: "16px", padding: 0 }}>
-                    &#8592; Volver al formulario
-                  </button>
-                  <div style={{ textAlign: "center", marginBottom: "24px" }}>
-                    <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#eff6ff", display: "grid", placeItems: "center", margin: "0 auto 16px", fontSize: "28px", border: "2px solid #bfdbfe" }}>&#128231;</div>
-                    <h2 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "22px" }}>Verifica tu correo electrónico</h2>
-                    <p style={{ margin: 0, color: "#64748b", fontSize: "14px", lineHeight: "1.5" }}>
-                      Enviamos un código de verificación de 6 dígitos a<br />
-                      <strong style={{ color: "#1f3b57" }}>{correoVerificar}</strong>
-                    </p>
+            <div>
+              <div style={{ marginBottom: "28px" }}>
+                <span style={{ background: "#eff6ff", color: "#1d4ed8", padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px", display: "inline-block", marginBottom: "10px", border: "1px solid #bfdbfe" }}>
+                  🔐 Portal de Acceso Interno
+                </span>
+                <h2 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "24px", fontWeight: "800" }}>
+                  Iniciar Sesión
+                </h2>
+                <p style={{ margin: 0, color: "#64748b", fontSize: "14px", lineHeight: "1.5" }}>
+                  Ingrese sus credenciales institucionales para acceder a los módulos de gestión.
+                </p>
+              </div>
+
+              <form onSubmit={manejarLogin}>
+                <div style={{ display: "grid", gap: "16px", marginBottom: "16px" }}>
+                  <div>
+                    <label style={inputLabel}>Correo electrónico institucional *</label>
+                    <input
+                      type="email"
+                      placeholder="usuario@munitrujillo.gob.pe"
+                      value={correo}
+                      onChange={(e) => setCorreo(e.target.value)}
+                      required
+                      style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px", fontWeight: "600" }}
+                      autoFocus
+                    />
                   </div>
 
-                  <form onSubmit={manejarVerificarCodigo}>
-                    <label style={inputLabel}>Código de verificación</label>
+                  <div>
+                    <label style={inputLabel}>Contraseña *</label>
                     <input
-                      type="text"
-                      placeholder="Ej: 123456"
-                      value={codigoIngresado}
-                      onChange={(e) => setCodigoIngresado(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      maxLength="6"
-                      style={{ textAlign: "center", fontSize: "20px", letterSpacing: "8px", fontWeight: 700 }}
-                      autoFocus
+                      type="password"
+                      placeholder="••••••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       required
+                      minLength={6}
+                      style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px" }}
                     />
+                  </div>
 
-                    {tiempoRestante > 0 ? (
-                      <p style={{ margin: "8px 0 0", fontSize: "13px", color: "#64748b", textAlign: "center" }}>
-                        El código expira en <strong style={{ color: tiempoRestante <= 60 ? "#dc2626" : "#2563eb" }}>{tiempoFormateado}</strong>
-                      </p>
-                    ) : (
-                      <p style={{ margin: "8px 0 0", fontSize: "13px", color: "#dc2626", textAlign: "center", fontWeight: 600 }}>
-                        El código ha expirado
-                      </p>
-                    )}
-
-                    {errorCodigo && (
-                      <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", marginTop: "12px", display: "flex", alignItems: "flex-start", gap: "10px" }}>
-                        <span style={{ fontSize: "16px", marginTop: "1px" }}>&#9888;</span>
-                        <span>{errorCodigo}</span>
-                      </div>
-                    )}
-
-                    <button className="primary-btn" type="submit" disabled={cargando} style={{ opacity: cargando ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "15px", fontSize: "15px", marginTop: "16px" }}>
-                      {cargando ? (
-                        <>
-                          <span style={{ display: "inline-block", width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                          Verificando código...
-                        </>
-                      ) : "Verificar código"}
-                    </button>
-                  </form>
-
-                  <div style={{ marginTop: "20px", textAlign: "center" }}>
-                    <span style={{ fontSize: "13px", color: "#64748b" }}>¿No recibiste el código? </span>
+                  <div style={{ textAlign: "right", marginTop: "-4px" }}>
                     <button
                       type="button"
-                      onClick={reenviarCodigo}
-                      disabled={reenviando || tiempoRestante > 0}
+                      onClick={() => {
+                        setMostrarRecuperar(true);
+                        setCorreoRecuperacion("");
+                        setError("");
+                      }}
                       style={{
-                        background: "none", border: "none", color: tiempoRestante > 0 ? "#94a3b8" : "#2563eb",
-                        fontSize: "13px", cursor: tiempoRestante > 0 ? "default" : "pointer", fontWeight: 600,
-                        textDecoration: tiempoRestante > 0 ? "none" : "underline",
+                        background: "none",
+                        border: "none",
+                        color: "#2563eb",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        padding: 0,
+                        textDecoration: "underline",
+                        textUnderlineOffset: "2px",
                       }}
                     >
-                      {reenviando ? "Reenviando..." : "Reenviar código"}
+                      ¿Olvidaste tu contraseña?
                     </button>
                   </div>
                 </div>
-              ) : (
-                <>
-                  <div style={{ textAlign: "center", marginBottom: "24px" }}>
-                    <h2 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "22px" }}>
-                      Acceso al Sistema Municipal
-                    </h2>
-                    <p style={{ margin: 0, color: "#64748b", fontSize: "14px" }}>
-                      Ingresa tus credenciales institucionales para acceder a tu panel.
-                    </p>
+
+                {error && (
+                  <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "13.5px", color: "#991b1b", display: "flex", alignItems: "flex-start", gap: "10px", marginBottom: "16px" }}>
+                    <span style={{ fontSize: "16px", marginTop: "1px" }}>⚠️</span>
+                    <span>{error}</span>
                   </div>
+                )}
 
-                  <form onSubmit={manejarLogin}>
-                    {modo === "registro" && (
-                      <div style={{ display: "grid", gap: "12px", marginBottom: "4px" }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                          <div>
-                            <label style={inputLabel}>Nombres *</label>
-                            <input
-                              type="text"
-                              placeholder="Ej: Juan Carlos"
-                              value={nombres}
-                              onChange={(e) => { setNombres(filterName(e.target.value)); setError(""); }}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label style={inputLabel}>Apellidos *</label>
-                            <input
-                              type="text"
-                              placeholder="Ej: García López"
-                              value={apellidos}
-                              onChange={(e) => { setApellidos(filterName(e.target.value)); setError(""); }}
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label style={inputLabel}>Correo electrónico *</label>
-                          <input
-                            type="email"
-                            placeholder="tu@correo.com"
-                            value={correo}
-                            onChange={(e) => setCorreo(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label style={inputLabel}>Número de teléfono *</label>
-                          <input
-                            type="text"
-                            placeholder="912345678"
-                            value={telefono}
-                            onChange={(e) => setTelefono(e.target.value.replace(/\D/g, "").slice(0, 9))}
-                            maxLength="9"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label style={inputLabel}>Contraseña *</label>
-                          <input
-                            type="password"
-                            placeholder="Mínimo 6 caracteres"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            minLength={6}
-                          />
-                        </div>
-                        <div>
-                          <label style={inputLabel}>Confirmar contraseña *</label>
-                          <input
-                            type="password"
-                            placeholder="Repite tu contraseña"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            required
-                            minLength={6}
-                          />
-                        </div>
-                      </div>
-                    )}
+                <button
+                  className="primary-btn"
+                  type="submit"
+                  disabled={cargando}
+                  style={{
+                    width: "100%",
+                    padding: "15px",
+                    fontSize: "15.5px",
+                    fontWeight: "800",
+                    borderRadius: "10px",
+                    opacity: cargando ? 0.75 : 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "10px",
+                    background: "linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)",
+                    boxShadow: "0 4px 12px rgba(30, 58, 138, 0.3)",
+                    cursor: "pointer"
+                  }}
+                >
+                  {cargando ? (
+                    <>
+                      <span style={{ display: "inline-block", width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      Verificando credenciales...
+                    </>
+                  ) : (
+                    "Ingresar al Sistema →"
+                  )}
+                </button>
+              </form>
 
-
-
-                    {modo === "login" && (
-                      <div style={{ display: "grid", gap: "12px" }}>
-                        <div>
-                          <label style={inputLabel}>Correo electrónico</label>
-                          <input
-                            type="email"
-                            placeholder="tu@correo.com"
-                            value={correo}
-                            onChange={(e) => setCorreo(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label style={inputLabel}>Contraseña</label>
-                          <input
-                            type="password"
-                            placeholder="Mínimo 6 caracteres"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            minLength={6}
-                          />
-                        </div>
-                        <div style={{ textAlign: "right", marginTop: "-4px" }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMostrarRecuperar(true);
-                              setPasoRecuperacion("correo");
-                              setCorreoRecuperacion("");
-                              setError("");
-                              setErrorRecuperacion("");
-                            }}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              color: "#2563eb",
-                              fontSize: "13px",
-                              cursor: "pointer",
-                              fontWeight: 600,
-                              padding: 0,
-                              textDecoration: "underline",
-                              textUnderlineOffset: "2px",
-                            }}
-                          >
-                            ¿Olvidaste tu contraseña?
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {error && (
-                      <div style={{ background: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fecaca", fontSize: "14px", color: "#991b1b", display: "flex", alignItems: "flex-start", gap: "10px", marginTop: "12px" }}>
-                        {!error.startsWith("❌") && <span style={{ fontSize: "16px", marginTop: "1px" }}>&#9888;</span>}
-                        <span>{error}</span>
-                      </div>
-                    )}
-
-                    {(modo === "login" || modo === "registro") && (
-                      <button
-                        className="primary-btn"
-                        type="submit"
-                        disabled={cargando}
-                        style={{ opacity: cargando ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "15px", fontSize: "15px", marginTop: "16px" }}
-                      >
-                        {cargando ? (
-                          <>
-                            <span style={{ display: "inline-block", width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                            {modo === "login" ? "Verificando credenciales..." : "Enviando código de verificación..."}
-                          </>
-                        ) : modo === "login" ? "Ingresar al sistema" : "Crear cuenta"}
-                      </button>
-                    )}
-                  </form>
-
-                  <div style={{ marginTop: "24px", textAlign: "center", fontSize: "12px", color: "#94a3b8" }}>
-                    <p style={{ margin: "0 0 4px" }}>Al continuar, aceptas los términos y condiciones del sistema municipal.</p>
-                    <p style={{ margin: 0 }}>Protegido por Firebase Authentication</p>
-                  </div>
-                </>
-              )}
-            </>
+              <div style={{ marginTop: "24px", padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <span style={{ display: "block", fontSize: "12px", color: "#475569", fontWeight: "700", marginBottom: "4px" }}>
+                  🔐 Roles Autorizados:
+                </span>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b", lineHeight: "1.4" }}>
+                  Administrador Municipal, Funcionario de Licencias, Cajera de Ventanilla e Inspector Técnico.
+                </p>
+              </div>
+            </div>
           )}
         </div>
-      </div>
 
-      <section className="login-steps-section" style={{ animation: "slideUp 0.8s ease-out 0.2s both" }}>
-        <div className="login-steps-header">
-          <span className="eyebrow">Proceso digital</span>
-          <h2>Como funciona?</h2>
-          <p>Sigue estos pasos para registrar tu solicitud y obtener tu licencia municipal de funcionamiento.</p>
-        </div>
-        <div className="login-steps-grid">
-          {pasos.map((paso) => (
-            <div className="login-step-card" key={paso.numero} style={{ animation: `fadeIn 0.5s ease-out ${0.1 * Number(paso.numero)}s both` }}>
-              <div className="step-number">{paso.numero}</div>
-              <h3>{paso.titulo}</h3>
-              <p>{paso.descripcion}</p>
+        {/* PANEL DERECHO INSTITUCIONAL */}
+        <div
+          className="login-info"
+          style={{
+            background: "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%)",
+            padding: "44px 40px",
+            color: "white",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            position: "relative",
+            overflow: "hidden"
+          }}
+        >
+          {/* Sello translúcido de fondo */}
+          <div
+            style={{
+              position: "absolute",
+              top: "-50px",
+              right: "-50px",
+              width: "280px",
+              height: "280px",
+              borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(217, 119, 6, 0.15) 0%, transparent 70%)",
+              pointerEvents: "none"
+            }}
+          />
+
+          <div>
+            {/* ENCABEZADO INSTITUCIONAL TRUJILLO */}
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px" }}>
+              <div style={{
+                width: "52px",
+                height: "52px",
+                borderRadius: "14px",
+                background: "linear-gradient(135deg, #d97706 0%, #b45309 100%)",
+                display: "grid",
+                placeItems: "center",
+                fontSize: "26px",
+                boxShadow: "0 4px 14px rgba(217, 119, 6, 0.4)",
+                border: "1px solid rgba(255,255,255,0.3)"
+              }}>
+                🏛️
+              </div>
+              <div>
+                <span style={{ fontSize: "11.5px", fontWeight: "800", color: "#fef08a", textTransform: "uppercase", letterSpacing: "1.2px", display: "block" }}>
+                  Municipalidad Provincial de Trujillo
+                </span>
+                <h4 style={{ margin: "2px 0 0", color: "white", fontSize: "15px", fontWeight: "700" }}>
+                  Sede Central — La Libertad, Perú
+                </h4>
+              </div>
             </div>
-          ))}
-        </div>
-      </section>
 
-      <footer style={{ marginTop: "24px", padding: "16px", textAlign: "center", fontSize: "12px", color: "rgba(255,255,255,0.5)", position: "relative", zIndex: 1 }}>
-        Municipalidad de Trujillo &mdash; Sistema de Licencias v1.0 &mdash; {new Date().getFullYear()}
-      </footer>
+            <h1 style={{ fontSize: "26px", lineHeight: 1.25, fontWeight: "800", color: "#ffffff", marginBottom: "12px" }}>
+              Sistema Municipal de Licencias de Funcionamiento
+            </h1>
+            <p style={{ fontSize: "14px", lineHeight: 1.6, color: "#cbd5e1", marginBottom: "20px" }}>
+              Plataforma institucional interna para la atención presencial, gestión de solicitudes, fiscalización, cobro de tasas e inspecciones técnicas.
+            </p>
+
+            {/* FECHA Y HORA ACTUAL EN VIVO */}
+            <div style={{
+              background: "rgba(255, 255, 255, 0.08)",
+              backdropFilter: "blur(8px)",
+              padding: "12px 18px",
+              borderRadius: "12px",
+              border: "1px solid rgba(255,255,255,0.15)",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              color: "#e2e8f0",
+              fontSize: "13px",
+              fontWeight: "600"
+            }}>
+              <span style={{ fontSize: "16px" }}>🕒</span>
+              <span>{fechaHoraActual || "Cargando fecha y hora..."}</span>
+            </div>
+
+            {/* TARJETA DE ESTADO DEL SISTEMA */}
+            <div style={{
+              background: "rgba(15, 23, 42, 0.6)",
+              backdropFilter: "blur(10px)",
+              padding: "18px 20px",
+              borderRadius: "16px",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              marginBottom: "20px",
+              boxShadow: "0 8px 20px rgba(0,0,0,0.2)"
+            }}>
+              <div style={{ fontSize: "12px", fontWeight: "800", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>📊 Estado del Sistema</span>
+                <span style={{ background: "#166534", color: "#bbf7d0", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: "bold" }}>PROD v1.0</span>
+              </div>
+
+              <div style={{ display: "grid", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13.5px" }}>
+                  <span style={{ color: "#cbd5e1" }}>Estado del Servidor:</span>
+                  <strong style={{ color: "#4ade80", display: "flex", alignItems: "center", gap: "6px" }}>
+                    🟢 Operativo
+                  </strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13.5px" }}>
+                  <span style={{ color: "#cbd5e1" }}>Disponibilidad:</span>
+                  <strong style={{ color: "#ffffff" }}>⚡ 99.9% Uptime</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13.5px" }}>
+                  <span style={{ color: "#cbd5e1" }}>Seguridad de Acceso:</span>
+                  <strong style={{ color: "#60a5fa", display: "flex", alignItems: "center", gap: "4px" }}>
+                    🔒 Firebase Auth & SSL
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* COMUNICADO INSTITUCIONAL DE GTI */}
+            <div style={{
+              background: "linear-gradient(135deg, rgba(217, 119, 6, 0.18) 0%, rgba(180, 83, 9, 0.28) 100%)",
+              border: "1px solid rgba(251, 191, 36, 0.35)",
+              padding: "16px 18px",
+              borderRadius: "14px",
+              color: "#fef08a"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "800", fontSize: "12.5px", color: "#fbbf24", marginBottom: "6px", textTransform: "uppercase" }}>
+                <span>📢</span> Comunicado TI (Soporte Interno)
+              </div>
+              <p style={{ margin: 0, fontSize: "12.5px", color: "#fef3c7", lineHeight: "1.5" }}>
+                El sistema opera con normalidad. Para asignación de roles o asistencia con sus credenciales institucionales, contacte a la Gerencia de Tecnologías de la Información (GTI) al <strong>Anexo 104</strong>.
+              </p>
+            </div>
+          </div>
+
+          <footer style={{ marginTop: "24px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "14px", textAlign: "center", fontSize: "11.5px", color: "#94a3b8" }}>
+            Municipalidad Provincial de Trujillo &mdash; Sistema de Licencias &copy; {new Date().getFullYear()}
+          </footer>
+        </div>
+      </div>
     </div>
   );
 }
