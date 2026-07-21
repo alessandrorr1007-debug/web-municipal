@@ -682,7 +682,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         razonSocial: razonSocialForm || nombreNegocioForm,
         direccion: direccionForm,
         giro: giroForm,
-        tipoTramite: tipoTramiteSeleccionado,
+        tipoTramite: "Nueva Licencia de Funcionamiento",
         estado: "Inspección programada",
         estadoNormalizado: "INSPECCION_PROGRAMADA",
         estadoPago: "Confirmado",
@@ -1678,20 +1678,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
                           </select>
                         </div>
-                      </div>
-
-                      <div style={{ marginBottom: "16px" }}>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                          Tipo de Trámite Municipal *
-                        </label>
-                        <select
-                          value={tipoTramiteSeleccionado}
-                          onChange={(e) => setTipoTramiteSeleccionado(e.target.value)}
-                          style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
-                        >
-                          <option value="Nueva Licencia de Funcionamiento">📜 Nueva Licencia de Funcionamiento</option>
-                          <option value="Renovación de Licencia de Funcionamiento">🔄 Renovación de Licencia de Funcionamiento</option>
-                        </select>
                       </div>
 
                       {/* INFORMACIÓN DE ASIGNACIÓN AUTOMÁTICA DE INSPECCIÓN */}
