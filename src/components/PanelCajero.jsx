@@ -413,6 +413,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       alert("⚠️ Ingrese un DNI válido de 8 dígitos.");
       return;
     }
+    if (!telefonoForm || !/^9\d{8}$/.test(telefonoForm)) {
+      alert("⚠️ Ingrese un número de celular peruano válido de 9 dígitos que inicie con 9.");
+      return;
+    }
     if (!nombresForm || !apellidosForm) {
       alert("⚠️ Ingrese nombres y apellidos completos del solicitante.");
       return;
@@ -656,15 +660,34 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 </div>
 
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Teléfono de Contacto (Editable) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>
+                    📱 Teléfono Celular (Editable - 9 dígitos) *
+                  </label>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={9}
                     placeholder="Ej. 987654321"
                     value={telefonoForm}
-                    onChange={(e) => setTelefonoForm(e.target.value)}
+                    onChange={(e) => {
+                      const valorLimpio = e.target.value.replace(/\D/g, "").slice(0, 9);
+                      setTelefonoForm(valorLimpio);
+                    }}
                     required
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: (telefonoForm && !/^9\d{8}$/.test(telefonoForm)) ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                      fontSize: "13.5px",
+                      fontWeight: "bold"
+                    }}
                   />
+                  {telefonoForm && !/^9\d{8}$/.test(telefonoForm) && (
+                    <small style={{ color: "#dc2626", fontSize: "11px", fontWeight: "bold", display: "block", marginTop: "2px" }}>
+                      ⚠️ Ingrese un celular peruano de 9 dígitos que inicie con 9.
+                    </small>
+                  )}
                 </div>
               </div>
 
@@ -1438,15 +1461,34 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>Teléfono de Contacto (Editable) *</label>
+                    <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>
+                      📱 Teléfono Celular (Editable - 9 dígitos) *
+                    </label>
                     <input
-                      type="text"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={9}
                       placeholder="Ej. 987654321"
                       value={telefonoForm}
-                      onChange={(e) => setTelefonoForm(e.target.value)}
+                      onChange={(e) => {
+                        const valorLimpio = e.target.value.replace(/\D/g, "").slice(0, 9);
+                        setTelefonoForm(valorLimpio);
+                      }}
                       required
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: (telefonoForm && !/^9\d{8}$/.test(telefonoForm)) ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                        fontSize: "13.5px",
+                        fontWeight: "bold"
+                      }}
                     />
+                    {telefonoForm && !/^9\d{8}$/.test(telefonoForm) && (
+                      <small style={{ color: "#dc2626", fontSize: "11px", fontWeight: "bold", display: "block", marginTop: "2px" }}>
+                        ⚠️ Ingrese un celular peruano de 9 dígitos que inicie con 9.
+                      </small>
+                    )}
                   </div>
                 </div>
 
