@@ -1009,7 +1009,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 {/* CÁLCULO TOTAL Y DESGLOSE FINANCIERO */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
                   <div style={{ fontSize: "12px", color: "#334155" }}>
-                    <p style={{ margin: "2px 0" }}><strong>MÉTODO DE PAGO:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.metodoPago || "TARJETA").toUpperCase()}</p>
+                    <p style={{ margin: "2px 0" }}><strong>MÉTODO DE PAGO:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.metodoPago || "BILLETERA DIGITAL (YAPE / PLIN)").toUpperCase()}</p>
                     <p style={{ margin: "2px 0" }}><strong>CAJERA:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.cajeraResponsable || "CAJERA MUNICIPAL").toUpperCase()}</p>
                   </div>
                   <table style={{ width: "210px", fontSize: "13.5px" }}>
@@ -1472,7 +1472,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
                             style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
                           >
-                            <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
+                            <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
                             <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
                           </select>
                         </div>
@@ -1991,7 +1991,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
                 >
                   <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                  <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
+                  <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
                 </select>
               </div>
 
@@ -2393,7 +2393,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
                     >
                       <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                      <option value="Tarjeta (Pago Digital)">💳 Tarjeta (Pago Digital)</option>
+                      <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
                     </select>
                   </div>
 
