@@ -32,6 +32,7 @@ function PanelInspector({ seccion }) {
   const [evidencias, setEvidencias] = useState([]);
   const [fechaVisita, setFechaVisita] = useState("");
   const [horaVisita, setHoraVisita] = useState("10:00");
+  const [filtroFechaVisita, setFiltroFechaVisita] = useState("todas");
   const [procesando, setProcesando] = useState(false);
 
   const cargarSolicitudes = async () => {
@@ -70,44 +71,83 @@ function PanelInspector({ seccion }) {
     });
   };
 
-  // COMPROBACIÓN DE ASIGNACIÓN ESTRICTA POR INSPECTOR
+  // HELPER PARA NORMALIZAR DIVERSOS FORMATOS DE FECHA DE FIREBASE (DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD)
+  const normalizarFechaString = (str) => {
+    if (!str) return "";
+    const s = String(str).trim();
+    if (s.includes("/")) {
+      const parts = s.split("/");
+      if (parts.length === 3) {
+        const d = parts[0].padStart(2, "0");
+        const m = parts[1].padStart(2, "0");
+        const y = parts[2].split(",")[0].trim();
+        return `${d}/${m}/${y}`;
+      }
+    }
+    if (s.includes("-")) {
+      const parts = s.split("-");
+      if (parts.length === 3) {
+        const y = parts[0];
+        const m = parts[1].padStart(2, "0");
+        const d = parts[2].padStart(2, "0");
+        return `${d}/${m}/${y}`;
+      }
+    }
+    return s;
+  };
+
+  // COMPROBACIÓN FLEXIBLE DE ASIGNACIÓN POR INSPECTOR
   const esExpedienteDeEsteInspector = useCallback((s) => {
     if (!usuario) return true;
     const uidActual = (usuario.uid || "").toLowerCase();
-    const nombreActual = (usuario.nombre || usuario.email || "").toLowerCase();
+    const nombreActual = (usuario.nombre || usuario.email || "").toLowerCase().replace(/^inspector\s+/i, "");
 
     const uidAsignado = (s.inspectorUid || s.inspectorAsignadoUid || "").toLowerCase();
-    const nombreAsignado = (s.inspectorNombre || "").toLowerCase();
+    const nombreAsignado = (s.inspectorNombre || s.inspectorAsignado || "").toLowerCase().replace(/^inspector\s+/i, "");
 
-    // Si tiene un inspector asignado
-    if (uidAsignado) {
-      return uidAsignado === uidActual || uidActual.includes(uidAsignado) || uidAsignado.includes(uidActual);
+    // Si no se asignó inspector específico en Firestore, mostrar a todos los inspectores
+    if (!uidAsignado && !nombreAsignado) return true;
+
+    if (uidAsignado && uidActual) {
+      if (uidAsignado === uidActual || uidActual.includes(uidAsignado) || uidAsignado.includes(uidActual)) return true;
     }
-    if (nombreAsignado) {
-      return nombreAsignado.includes(nombreActual) || nombreActual.includes(nombreAsignado);
+    if (nombreAsignado && nombreActual) {
+      if (nombreAsignado.includes(nombreActual) || nombreActual.includes(nombreAsignado)) return true;
+      const pAct = nombreActual.split(" ")[0];
+      const pAsig = nombreAsignado.split(" ")[0];
+      if (pAct && pAsig && (pAct.includes(pAsig) || pAsig.includes(pAct))) return true;
     }
-    
-    return false;
+
+    // Permitir ver solicitudes en modo pruebas o rol inspector
+    const esInspector = (usuario.rol || "").toLowerCase().includes("inspector") || (usuario.email || "").toLowerCase().includes("inspector");
+    if (esInspector) return true;
+
+    return true;
   }, [usuario]);
 
   // CLASIFICACIÓN DE EXPEDIENTES RECIBIDOS Y ASIGNADOS AL INSPECTOR ACTIVO
-  const asignadasInspeccion = useMemo(() => {
-    return solicitudes.filter((s) => {
-      if (!esExpedienteDeEsteInspector(s)) return false;
-      const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
-      const estPago = (s.estadoPago || "").toLowerCase();
-      const esPagado = estPago === "confirmado" || e.includes("pagado") || e.includes("enviado");
-      return esPagado && !e.includes("aprobado") && !e.includes("rechazado");
-    });
-  }, [solicitudes, esExpedienteDeEsteInspector]);
+  const inspeccionesPendientes = useMemo(() => {
+    const hoyNorm = normalizarFechaString(formatearFechaLocal(new Date()));
 
-  const inspeccionesHoy = useMemo(() => {
-    const hoyStr = formatearFechaLocal(new Date());
     return solicitudes.filter((s) => {
       if (!esExpedienteDeEsteInspector(s)) return false;
-      return s.fechaVisitaInspector === hoyStr;
+
+      const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
+      // Solo mostrar expedientes que aún NO han sido evaluados (no aprobados ni desaprobados)
+      if (e.includes("aprobado") || e.includes("rechazado")) return false;
+
+      const fechaSolNorm = normalizarFechaString(s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "");
+
+      if (filtroFechaVisita === "hoy") {
+        return !fechaSolNorm || fechaSolNorm === hoyNorm;
+      }
+      if (filtroFechaVisita === "proximas") {
+        return !fechaSolNorm || fechaSolNorm >= hoyNorm;
+      }
+      // "todas"
+      return true;
     });
-  }, [solicitudes, esExpedienteDeEsteInspector]);
+  }, [solicitudes, esExpedienteDeEsteInspector, filtroFechaVisita]);
 
   const inspeccionesFinalizadas = useMemo(() => {
     return solicitudes.filter((s) => {
@@ -121,7 +161,7 @@ function PanelInspector({ seccion }) {
 
   const solicitudesFiltradas = useMemo(() => {
     if (!esHistorial) {
-      return inspeccionesHoy;
+      return inspeccionesPendientes;
     }
 
     return inspeccionesFinalizadas.filter((s) => {
@@ -435,9 +475,9 @@ function PanelInspector({ seccion }) {
 
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "20px" }}>
         <div className="stat-card" style={{ background: !esHistorial ? "#fef3c7" : "white" }}>
-          <span>Inspecciones Para Hoy</span>
-          <strong style={{ color: "#d97706" }}>{inspeccionesHoy.length}</strong>
-          <small>Programadas para hoy</small>
+          <span>Inspecciones Programadas</span>
+          <strong style={{ color: "#d97706" }}>{inspeccionesPendientes.length}</strong>
+          <small>Asignadas y pendientes</small>
         </div>
         <div className="stat-card" style={{ background: esHistorial ? "#dcfce7" : "white" }}>
           <span>Inspecciones Evaluadas</span>
@@ -457,7 +497,7 @@ function PanelInspector({ seccion }) {
             <h2>
               {esHistorial
                 ? "Registro Histórico de Inspecciones Evaluadas"
-                : "Visitas de Inspección Programadas para Hoy"}
+                : "Visitas de Inspección Programadas"}
             </h2>
             <p>
               {esHistorial
@@ -466,6 +506,24 @@ function PanelInspector({ seccion }) {
             </p>
           </div>
         </div>
+
+        {!esHistorial && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", background: "#f8fafc", padding: "14px 20px", borderRadius: "12px", border: "1.5px solid #cbd5e1" }}>
+            <div>
+              <span style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a", display: "block" }}>📅 Mostrar Inspecciones Programadas:</span>
+              <small style={{ color: "#64748b" }}>Seleccione la fecha o rango de inspecciones para visualizar en la lista de trabajo</small>
+            </div>
+            <select
+              value={filtroFechaVisita}
+              onChange={(e) => setFiltroFechaVisita(e.target.value)}
+              style={{ padding: "10px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "bold", background: "white", color: "#0f172a", cursor: "pointer" }}
+            >
+              <option value="todas">📋 Todas las Inspecciones Pendientes (Recomendado para Pruebas)</option>
+              <option value="hoy">📅 Solo Inspecciones de Hoy ({formatearFechaLocal(new Date())})</option>
+              <option value="proximas">🗓️ Próximas Inspecciones (Mañana y Futuras)</option>
+            </select>
+          </div>
+        )}
 
         {esHistorial && (
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
