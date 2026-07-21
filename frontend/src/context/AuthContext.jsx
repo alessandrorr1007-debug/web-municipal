@@ -100,37 +100,13 @@ export const AuthProvider = ({ children }) => {
                   telefono: updatedData.telefono || prev?.telefono || "",
                   dni: updatedData.dni || prev?.dni || "",
                 }));
+              } else {
+                handleUserRemoval(false);
               }
             });
           } else {
-            const rolInferido = normalizarRol("", emailLow);
-            const nombreInferido = emailLow.includes("cajero")
-              ? "Cajero Municipal"
-              : emailLow.includes("funcionario")
-              ? "Funcionario Municipal"
-              : emailLow.includes("inspector")
-              ? "Inspector Municipal"
-              : emailLow.includes("admin")
-              ? "Administrador General"
-              : emailLow === "alessandropaul19@gmail.com"
-              ? "Cajero Municipal"
-              : emailLow === "arodriguezr1020@gmail.com"
-              ? "Inspector Municipal"
-              : emailLow === "medicitasapp01@gmail.com"
-              ? "Administrador General"
-              : "Usuario Solicitante";
-
-            setUsuario({
-              uid: user.uid,
-              correo: user.email,
-              nombre: nombreInferido,
-              rol: rolInferido,
-              telefono: "999888777",
-              dni: "12345678",
-              activo: true,
-              estado: "activo",
-              recibir_correos: true,
-            });
+            await handleUserRemoval(false);
+            return;
           }
         } else {
           setUsuario(null);

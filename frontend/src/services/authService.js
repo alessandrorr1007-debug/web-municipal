@@ -62,16 +62,19 @@ export const registrarUsuario = async (datos) => {
   return nuevoUsuario;
 };
 
-export const verificarEstadoInactivo = async (uid, correo) => {
+export const obtenerDocUsuarioFirestore = async (uid, correo) => {
   const correoNorm = (correo || "").toLowerCase().trim();
   let userDoc = null;
+  let docId = null;
+
   if (uid) {
     try {
       const snap = await getDoc(doc(db, "usuarios", uid));
-      if (snap.exists()) userDoc = snap.data();
-    } catch (e) {
-      console.warn("[AUTH] Error checking user doc by UID:", e.message);
-    }
+      if (snap.exists()) {
+        userDoc = snap.data();
+        docId = snap.id;
+      }
+    } catch (e) {}
   }
   if (!userDoc && correoNorm) {
     try {
@@ -79,97 +82,68 @@ export const verificarEstadoInactivo = async (uid, correo) => {
       const snapQ = await getDocs(q);
       if (!snapQ.empty) {
         userDoc = snapQ.docs[0].data();
+        docId = snapQ.docs[0].id;
       }
-    } catch (e) {
-      console.warn("[AUTH] Error checking user doc by email:", e.message);
-    }
+    } catch (e) {}
   }
 
-  if (userDoc) {
-    if (userDoc.estado === "inactivo" || userDoc.estado === "desactivado" || userDoc.activo === false) {
-      try {
-        await signOut(auth);
-      } catch (e) {
-        // ignore
-      }
-      throw new Error("⚠️ Esta cuenta está inhabilitada. Contacte al administrador del sistema.");
-    }
-  }
-  return userDoc;
+  return { userDoc, docId };
 };
 
 export const iniciarSesion = async (correo, password) => {
   const correoNorm = (correo || "").toLowerCase().trim();
 
-  await verificarEstadoInactivo(null, correoNorm);
+  const { userDoc } = await obtenerDocUsuarioFirestore(null, correoNorm);
 
-  const demoAccounts = {
-    "alessandropaul19@gmail.com": { uid: "CAJERO-001", correo: "alessandropaul19@gmail.com", nombre: "Cajero Municipal", rol: "cajero", password: "cajeroprueba" },
-    "arodriguezr1020@gmail.com": { uid: "INSP-001", correo: "arodriguezr1020@gmail.com", nombre: "Inspector Municipal", rol: "inspector", password: "inspectorprueba" },
-    "medicitasapp01@gmail.com": { uid: "ADMIN-001", correo: "medicitasapp01@gmail.com", nombre: "Administrador General", rol: "administrador", password: "admin321" },
-  };
+  if (!userDoc) {
+    try { await signOut(auth); } catch (e) {}
+    const errNotF = new Error("No encontramos una cuenta registrada con ese correo electrónico.");
+    errNotF.code = "auth/user-not-found";
+    throw errNotF;
+  }
+
+  if (userDoc.estado === "inactivo" || userDoc.estado === "desactivado" || userDoc.activo === false) {
+    try { await signOut(auth); } catch (e) {}
+    throw new Error("⚠️ Esta cuenta está inhabilitada. Contacte al administrador del sistema.");
+  }
 
   try {
     const credenciales = await signInWithEmailAndPassword(auth, correoNorm, password);
     const usuario = credenciales.user;
 
-    const data = await verificarEstadoInactivo(usuario.uid, usuario.email);
-
     const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
-    const rolFinal = data?.rol ? (rolesValidos.includes(data.rol) ? data.rol : "negocio") : "cajero";
+    const rolFinal = userDoc.rol && rolesValidos.includes(userDoc.rol) ? userDoc.rol : "cajero";
 
     return {
       uid: usuario.uid,
       correo: usuario.email,
-      nombre: data?.nombre || data?.nombre_completo || "Usuario",
+      nombre: userDoc.nombre || userDoc.nombre_completo || "Usuario",
       rol: rolFinal,
-      telefono: data?.telefono || "",
-      dni: data?.dni || "",
-      digito_verificador: data?.digito_verificador || "",
-      nombres: data?.nombres || "",
-      apellido_paterno: data?.apellido_paterno || "",
-      apellido_materno: data?.apellido_materno || "",
-      nombre_completo: data?.nombre_completo || data?.nombre || "",
-      areaTrabajo: data?.areaTrabajo || "",
-      zonaAsignada: data?.zonaAsignada || "",
+      telefono: userDoc.telefono || "",
+      dni: userDoc.dni || "",
       activo: true,
       estado: "activo",
     };
   } catch (authError) {
-    if (authError.message && authError.message.includes("inhabilitada")) {
+    if (authError.message && (authError.message.includes("inhabilitada") || authError.message.includes("registrada"))) {
       throw authError;
     }
 
-    const userDocData = await verificarEstadoInactivo(null, correoNorm);
-    if (userDocData && userDocData.password && userDocData.password === password) {
+    if (userDoc.password && userDoc.password === password) {
       const rolesValidos = ["negocio", "cajero", "funcionario", "inspector", "administrador"];
-      const rolFinal = userDocData.rol && rolesValidos.includes(userDocData.rol) ? userDocData.rol : "cajero";
+      const rolFinal = userDoc.rol && rolesValidos.includes(userDoc.rol) ? userDoc.rol : "cajero";
       return {
-        uid: userDocData.uid || `USR-${Date.now()}`,
+        uid: userDoc.uid || `USR-${Date.now()}`,
         correo: correoNorm,
-        nombre: userDocData.nombre || userDocData.nombre_completo || "Usuario",
+        nombre: userDoc.nombre || userDoc.nombre_completo || "Usuario",
         rol: rolFinal,
-        telefono: userDocData.telefono || "",
-        dni: userDocData.dni || "",
+        telefono: userDoc.telefono || "",
+        dni: userDoc.dni || "",
         activo: true,
         estado: "activo",
       };
     }
 
-    const target = demoAccounts[correoNorm];
-    if (target && target.password === password) {
-      await verificarEstadoInactivo(target.uid, target.correo);
-      return {
-        uid: target.uid,
-        correo: target.correo,
-        nombre: target.nombre,
-        rol: target.rol,
-        telefono: "999888777",
-        dni: "12345678",
-        activo: true,
-        estado: "activo",
-      };
-    }
     throw authError;
   }
 };
