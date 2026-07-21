@@ -1151,8 +1151,31 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 El expediente fue cobrado y derivado oficialmente para la visita de inspección técnica.
               </p>
 
+              {/* ESTILO DE IMPRESIÓN EXCLUSIVA PARA EL COMPROBANTE SUNAT */}
+              <style>{`
+                @media print {
+                  body * {
+                    visibility: hidden !important;
+                  }
+                  #comprobante-sunat-impresion, #comprobante-sunat-impresion * {
+                    visibility: visible !important;
+                  }
+                  #comprobante-sunat-impresion {
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    border: 2px solid #0f172a !important;
+                    box-shadow: none !important;
+                    margin: 0 !important;
+                    padding: 20px !important;
+                  }
+                }
+              `}</style>
+
               {/* VOUCHER / COMPROBANTE DE VENTA ELECTRÓNICO (BOLETA O FACTURA CON ESTRUCTURA SUNAT) */}
-              <div style={{ background: "#ffffff", border: "2px solid #0f172a", borderRadius: "14px", padding: "28px", maxWidth: "620px", margin: "0 auto 24px", textAlign: "left", boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}>
+              <div id="comprobante-sunat-impresion" style={{ background: "#ffffff", border: "2px solid #0f172a", borderRadius: "14px", padding: "28px", maxWidth: "620px", margin: "0 auto 24px", textAlign: "left", boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}>
                 {/* ENCABEZADO CON LOGO / RECUADRO OSCURO */}
                 <div style={{ background: "#0f172a", color: "white", padding: "14px 20px", borderRadius: "8px", textAlign: "center", marginBottom: "20px" }}>
                   <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "900", letterSpacing: "0.5px" }}>MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
