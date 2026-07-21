@@ -608,25 +608,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         </div>
       </div>
 
-      {/* METRICAS DE CAJA */}
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "20px" }}>
-        <div className="stat-card" onClick={() => { setFiltroEstado("pagado"); if (cambiarSeccion) cambiarSeccion("consulta-expedientes"); }} style={{ cursor: "pointer" }}>
-          <span>Trámites Procesados</span>
-          <strong style={{ color: "#16a34a" }}>{pagadas.length + enviadasAInspeccion.length}</strong>
-          <small>Cobros presenciales confirmados</small>
-        </div>
-        <div className="stat-card" onClick={() => { setFiltroEstado("enviado"); if (cambiarSeccion) cambiarSeccion("consulta-expedientes"); }} style={{ cursor: "pointer" }}>
-          <span>Enviados a Inspección</span>
-          <strong style={{ color: "#2563eb" }}>{enviadasAInspeccion.length}</strong>
-          <small>Derivados a inspección técnica</small>
-        </div>
-        <div className="stat-card" onClick={() => { setFiltroEstado("todos"); if (cambiarSeccion) cambiarSeccion("consulta-expedientes"); }} style={{ cursor: "pointer" }}>
-          <span>Recaudación Total</span>
-          <strong style={{ color: "#0f766e" }}>S/ {((pagadas.length + enviadasAInspeccion.length) * MONTO_TRAMITE).toFixed(2)}</strong>
-          <small>Ingresos de caja (S/ 3.00 c/u)</small>
-        </div>
-      </div>
-
       {/* VISTA 1: NUEVA SOLICITUD PRESENCIAL DIRECTA */}
       {seccion === "nueva-solicitud" && (
         <section className="section-card">
