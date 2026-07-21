@@ -120,8 +120,29 @@ function PanelInspector({ seccion }) {
   const esHistorial = seccion === "historial" || seccion === "historial-inspecciones";
 
   const solicitudesFiltradas = useMemo(() => {
-    return esHistorial ? inspeccionesFinalizadas : inspeccionesHoy;
-  }, [esHistorial, inspeccionesHoy, inspeccionesFinalizadas]);
+    if (!esHistorial) {
+      return inspeccionesHoy;
+    }
+
+    return inspeccionesFinalizadas.filter((s) => {
+      // 1. Filtro por Dictamen / Estado en Historial (Aprobada / Observada / Rechazada)
+      const est = (s.estado || "").toLowerCase();
+      if (filtroEstado === "aprobada" && !est.includes("aprobado")) return false;
+      if (filtroEstado === "observada" && !est.includes("observada")) return false;
+      if (filtroEstado === "rechazada" && !est.includes("rechazado")) return false;
+
+      // 2. Búsqueda por DNI, RUC o Código de Expediente en Historial
+      if (!busqueda.trim()) return true;
+      const q = busqueda.toLowerCase().trim();
+      const dni = (s.dniSolicitante || s.dni || "").toLowerCase();
+      const idExp = (s.id || "").toLowerCase();
+      const codExp = `exp-${idExp}`;
+      const ruc = (s.ruc || "").toLowerCase();
+      const nombreSol = [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante, s.nombreNegocio].filter(Boolean).join(" ").toLowerCase();
+
+      return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
+    });
+  }, [solicitudes, busqueda, filtroEstado, esHistorial, inspeccionesHoy, inspeccionesFinalizadas]);
 
   // ABRIR MODAL DE ATENCIÓN DE INSPECCIÓN
   const abrirModalAtencion = (solicitud, tabInicial = "evaluacion") => {
@@ -362,6 +383,29 @@ function PanelInspector({ seccion }) {
             </p>
           </div>
         </div>
+
+        {esHistorial && (
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
+            <input
+              type="text"
+              placeholder="🔍 Buscar por DNI, RUC o Código de Expediente (EXP-XXXX)..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              style={{ flex: 1, minWidth: "240px", padding: "12px 18px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+            />
+
+            <select
+              value={filtroEstado}
+              onChange={(e) => setFiltroEstado(e.target.value)}
+              style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold", background: "#f8fafc", color: "#1e293b", minWidth: "200px" }}
+            >
+              <option value="todos">📌 Todos los dictámenes</option>
+              <option value="aprobada">✅ Aprobadas</option>
+              <option value="observada">⚠️ Observadas</option>
+              <option value="rechazada">❌ Rechazadas</option>
+            </select>
+          </div>
+        )}
 
         {solicitudesFiltradas.length === 0 ? (
           <div className="empty-state">
