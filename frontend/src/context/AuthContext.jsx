@@ -83,10 +83,10 @@ export const AuthProvider = ({ children }) => {
             }
 
             if (docData.sesionId) {
-              const localId = localStorage.getItem("web_municipal_sesion_id");
-              if (!localId) {
-                localStorage.setItem("web_municipal_sesion_id", docData.sesionId);
-              } else if (localId !== docData.sesionId) {
+              const tabId = sessionStorage.getItem("web_municipal_sesion_id");
+              if (!tabId) {
+                sessionStorage.setItem("web_municipal_sesion_id", docData.sesionId);
+              } else if (tabId !== docData.sesionId) {
                 await handleSessionReplaced();
                 return;
               }
@@ -116,8 +116,8 @@ export const AuthProvider = ({ children }) => {
                   return;
                 }
 
-                const currentLocalSesionId = localStorage.getItem("web_municipal_sesion_id");
-                if (updatedData.sesionId && currentLocalSesionId && updatedData.sesionId !== currentLocalSesionId) {
+                const currentTabSesionId = sessionStorage.getItem("web_municipal_sesion_id");
+                if (updatedData.sesionId && currentTabSesionId && updatedData.sesionId !== currentTabSesionId) {
                   handleSessionReplaced();
                   return;
                 }

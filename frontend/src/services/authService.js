@@ -92,6 +92,7 @@ export const obtenerDocUsuarioFirestore = async (uid, correo) => {
 
 export const registrarNuevaSesionId = async (uid, docId) => {
   const nuevaSesionId = Date.now().toString() + "_" + Math.random().toString(36).substring(2, 9);
+  sessionStorage.setItem("web_municipal_sesion_id", nuevaSesionId);
   localStorage.setItem("web_municipal_sesion_id", nuevaSesionId);
 
   const targetId = docId || uid;
