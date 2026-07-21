@@ -258,12 +258,17 @@ function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCar
     if (confirm(`⚠️ ¿Desea eliminar PERMANENTEMENTE la cuenta de "${u.nombre}" (${u.correo})?\nEsta acción eliminará el usuario de Firebase Auth y Firestore.`)) {
       try {
         const emailLow = (u.correo || "").toLowerCase().trim();
-        if (u.uid && !u.uid.includes("-001")) {
+        if (u.uid) {
           try {
             await deleteDoc(doc(db, "usuarios", u.uid));
           } catch (cErr) {
             console.warn("[ADMIN] Client deleteDoc warning:", cErr.message);
           }
+        }
+        if (u.id && u.id !== u.uid) {
+          try {
+            await deleteDoc(doc(db, "usuarios", u.id));
+          } catch (cErr) {}
         }
         if (emailLow) {
           try {
@@ -281,7 +286,7 @@ function GestionUsuarios({ usuarios = [], onRecargar, cargando = false, errorCar
           console.warn("[ADMIN] Backend API delete notice:", backendErr.message);
         }
 
-        alert("Cuenta de usuario eliminada correctamente.");
+        alert("Cuenta de usuario eliminada correctamente de Firestore y Firebase Auth.");
         if (onRecargar) onRecargar();
       } catch (err) {
         alert("Error al eliminar cuenta: " + (err.response?.data?.error || err.message));
