@@ -144,84 +144,54 @@ function App() {
   const rolNorm = normalizarRol(usuario.rol, usuario.correo);
 
   const seccionesPorRol = {
-    negocio: ["inicio", "nueva-solicitud", "mis-solicitudes", "mis-pagos", "notificaciones", "mi-cuenta"],
-    cajero: ["inicio", "nueva-solicitud", "historial"],
-    funcionario: ["inicio", "solicitudes", "registro-presencial", "notificaciones", "estadisticas", "reportes"],
-    inspector: ["inicio", "inspecciones-hoy", "historial", "estadisticas"],
+    cajero: ["nueva-solicitud", "consulta-expedientes", "historial"],
+    inspector: ["inicio", "inspecciones", "historial", "estadisticas"],
     administrador: ["inicio", "gestion-usuarios", "gestion-roles", "config-sistema", "reportes", "auditoria"],
   };
 
   const rolEtiqueta = {
-    negocio: "Solicitante",
-    cajero: "Cajero",
-    funcionario: "Funcionario",
+    cajero: "Cajera",
     inspector: "Inspector",
     administrador: "Administrador",
   };
 
   const rolColor = {
-    negocio: "#2563eb",
     cajero: "#d97706",
-    funcionario: "#0f766e",
     inspector: "#7c3aed",
     administrador: "#dc2626",
   };
 
+  const seccionesDisponibles = seccionesPorRol[rolNorm] || [];
+  const seccionActiva = seccionesDisponibles.includes(seccion) ? seccion : (seccionesDisponibles[0] || "nueva-solicitud");
+
   const renderSeccion = () => {
-    if (rolNorm === "negocio") {
-      switch (seccion) {
-        case "nueva-solicitud": return <PanelNegocio seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
-        case "mis-solicitudes": return <PanelNegocio seccion="mis-solicitudes" cambiarSeccion={cambiarSeccion} />;
-        case "mis-comprobantes": return <PanelNegocio seccion="mis-comprobantes" cambiarSeccion={cambiarSeccion} />;
-        case "mis-pagos": return <PanelNegocio seccion="mis-comprobantes" cambiarSeccion={cambiarSeccion} />;
-        case "notificaciones": return <PanelNegocio seccion="notificaciones" cambiarSeccion={cambiarSeccion} />;
-        case "mi-cuenta": return <PanelNegocio seccion="mi-cuenta" cambiarSeccion={cambiarSeccion} />;
-        default: return <PanelNegocio seccion="inicio" cambiarSeccion={cambiarSeccion} />;
-      }
-    }
     if (rolNorm === "cajero") {
-      switch (seccion) {
-        case "nueva-solicitud": return <PanelCajero seccion="nueva-solicitud" />;
-        case "historial": return <PanelCajero seccion="historial" />;
-        case "estadisticas": return <PanelCajero seccion="estadisticas" />;
-        default: return <PanelCajero seccion="inicio" />;
-      }
-    }
-    if (rolNorm === "funcionario") {
-      switch (seccion) {
-        case "solicitudes": return <PanelFuncionario seccion="solicitudes" />;
-        case "registro-presencial": return <PanelFuncionario seccion="registro-presencial" />;
-        case "notificaciones": return <PanelFuncionario seccion="notificaciones" />;
-        case "reportes": return <PanelFuncionario seccion="reportes" />;
-        case "estadisticas": return <PanelFuncionario seccion="estadisticas" />;
-        default: return <PanelFuncionario seccion="inicio" />;
+      switch (seccionActiva) {
+        case "nueva-solicitud": return <PanelCajero seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
+        case "consulta-expedientes": return <PanelCajero seccion="consulta-expedientes" cambiarSeccion={cambiarSeccion} />;
+        case "historial": return <PanelCajero seccion="historial" cambiarSeccion={cambiarSeccion} />;
+        default: return <PanelCajero seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
       }
     }
     if (rolNorm === "inspector") {
-      switch (seccion) {
-        case "inspecciones-hoy": return <PanelInspector seccion="inspecciones-hoy" />;
+      switch (seccionActiva) {
+        case "inspecciones": return <PanelInspector seccion="inspecciones" />;
         case "historial": return <PanelInspector seccion="historial" />;
         case "estadisticas": return <PanelInspector seccion="estadisticas" />;
         default: return <PanelInspector seccion="inicio" />;
       }
     }
     if (rolNorm === "administrador") {
-      switch (seccion) {
-        case "gestion-usuarios": return <PanelAdmin seccion="gestion-usuarios" />;
-        case "gestion-roles": return <PanelAdmin seccion="gestion-roles" />;
-        case "auditoria": return <PanelAdmin seccion="auditoria" />;
-        case "config-sistema": return <PanelAdmin seccion="config-sistema" />;
-        case "reportes": return <PanelAdmin seccion="reportes" />;
-        default: return <PanelAdmin seccion="inicio" />;
+      switch (seccionActiva) {
+        case "gestion-usuarios": return <GestionUsuarios usuarios={[]} onRecargar={() => {}} />;
+        case "gestion-roles": return <GestionRoles onRecargar={() => {}} />;
+        case "config-sistema": return <ConfigSistema onRecargar={() => {}} />;
+        case "reportes": return <ReportesConsolidados />;
+        case "auditoria": return <BitacoraAuditoria />;
+        default: return <PanelAdmin seccion={seccionActiva} cambiarSeccion={cambiarSeccion} />;
       }
     }
-    return (
-      <div className="section-card" style={{ textAlign: "center", padding: "60px 28px" }}>
-        <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#fee2e2", display: "grid", placeItems: "center", margin: "0 auto 20px", fontSize: "32px" }}>&#9888;</div>
-        <h2 style={{ color: "#1f3b57", marginBottom: "8px" }}>Rol no reconocido</h2>
-        <p style={{ color: "#64748b", maxWidth: "400px", margin: "0 auto" }}>Tu usuario no tiene un rol válido asignado. Contacta al administrador.</p>
-      </div>
-    );
+    return <PanelCajero seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
   };
 
   return (
@@ -230,7 +200,7 @@ function App() {
         usuario={{ ...usuario, rol: rolNorm }}
         rolEtiqueta={rolEtiqueta}
         rolColor={rolColor}
-        seccion={seccion}
+        seccion={seccionActiva}
         onCambiarSeccion={cambiarSeccion}
         abierto={sidebarAbierto}
         onToggle={() => setSidebarAbierto(!sidebarAbierto)}

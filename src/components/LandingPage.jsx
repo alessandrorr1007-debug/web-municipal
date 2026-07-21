@@ -3,21 +3,21 @@ function LandingPage({ onLogin, onRegister }) {
   const tarjetas = [
     {
       icono: "&#128221;",
-      titulo: "Solicita tu licencia online",
-      descripcion: "Registra tu solicitud desde cualquier lugar, paga en línea y da seguimiento a tu expediente.",
-      color: "#2563eb",
-    },
-    {
-      icono: "&#128260;",
-      titulo: "Renueva tu licencia",
-      descripcion: "Si tu licencia está por vencer o ya venció, renueva de manera rápida y sencilla.",
-      color: "#0f766e",
+      titulo: "1. Registrar / Hacer un Trámite",
+      descripcion: "Ingreso de solicitudes presenciales con validación automática RENIEC/SUNAT y carga de requisitos por giro comercial.",
+      color: "#16a34a",
     },
     {
       icono: "&#128269;",
-      titulo: "Consulta el estado de tu trámite",
-      descripcion: "Ingresa tu RUC y revisa en tiempo real el avance de tu solicitud.",
-      color: "#7c3aed",
+      titulo: "2. Consultar Estado del Trámite",
+      descripcion: "Búsqueda en tiempo real por N° de Expediente (EXP-XXXX), DNI o RUC para consultar el estado actual del trámite.",
+      color: "#2563eb",
+    },
+    {
+      icono: "&#128176;",
+      titulo: "3. Historial de Pagos y Comprobantes",
+      descripcion: "Registro de recaudación de aranceles de trámite (S/ 3.00), consulta de comprobantes emitidos e impresión de boletas.",
+      color: "#d97706",
     },
   ];
 
@@ -47,11 +47,8 @@ function LandingPage({ onLogin, onRegister }) {
             <span style={{ fontWeight: 800, fontSize: "16px" }}>Municipalidad de Trujillo</span>
           </div>
           <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-            <button type="button" onClick={onLogin} style={{ background: "rgba(255,255,255,0.12)", color: "white", border: "1px solid rgba(255,255,255,0.25)", padding: "10px 20px", fontSize: "14px" }}>
-              Iniciar sesión
-            </button>
-            <button type="button" onClick={onRegister} style={{ background: "white", color: "#1f3b57", padding: "10px 20px", fontSize: "14px" }}>
-              Registrarse
+            <button type="button" onClick={onLogin} style={{ background: "white", color: "#1f3b57", fontWeight: "bold", border: "none", padding: "10px 22px", fontSize: "14px", borderRadius: "8px" }}>
+              Ingresar al Sistema
             </button>
           </div>
         </div>
@@ -59,14 +56,14 @@ function LandingPage({ onLogin, onRegister }) {
 
       <section className="landing-hero">
         <div className="landing-hero-content">
-          <span className="eyebrow" style={{ background: "rgba(255,255,255,0.15)", color: "white" }}>Plataforma oficial</span>
+          <span className="eyebrow" style={{ background: "rgba(255,255,255,0.15)", color: "white" }}>Plataforma Oficial</span>
           <h1>Sistema Web de Gestión de<br />Licencias de Funcionamiento</h1>
           <p style={{ fontSize: "18px", color: "#93c5fd", maxWidth: "640px", margin: "0 auto 32px" }}>
-            Solicita, renueva y da seguimiento a tu licencia municipal de funcionamiento de manera 100% digital. También puedes realizar el trámite de forma presencial en nuestras oficinas.
+            Gestión integral de licencias de funcionamiento de la Municipalidad Provincial de Trujillo.
           </p>
           <div style={{ display: "flex", gap: "14px", justifyContent: "center", flexWrap: "wrap" }}>
-            <button type="button" onClick={onRegister} style={{ background: "white", color: "#1f3b57", padding: "16px 32px", fontSize: "16px", fontWeight: 700, borderRadius: "14px" }}>
-              Solicitar licencia
+            <button type="button" onClick={onLogin} style={{ background: "white", color: "#1f3b57", padding: "16px 32px", fontSize: "16px", fontWeight: 700, borderRadius: "14px" }}>
+              Acceder al Sistema Municipal
             </button>
           </div>
         </div>

@@ -6,18 +6,29 @@ import {
 import { crearNotificacion } from "../services/notificacionService";
 import { abrirPdf } from "../services/pdfService";
 import { useAuth } from "../context/AuthContext";
-import { formatearFechaLocal, calcularFecha30DiasMas } from "../config/inspeccionConfig";
+import {
+  formatearFechaLocal,
+  TIME_SLOTS,
+  esHorarioPasado,
+} from "../config/inspeccionConfig";
 
 function PanelInspector({ seccion }) {
   const { usuario } = useAuth();
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(false);
-  const [enviandoId, setEnviandoId] = useState("");
-  const [formularios, setFormularios] = useState({});
-  const [paso, setPaso] = useState("hoy");
-  const [detalleSolicitud, setDetalleSolicitud] = useState(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [paso, setPaso] = useState("inspecciones");
+  const [solicitudAtencion, setSolicitudAtencion] = useState(null);
+  const [tabModal, setTabModal] = useState("evaluacion"); // "evaluacion", "programacion", "documentos", "evidencias", "historial"
 
-  const obtenerFechaHoy = () => formatearFechaLocal(new Date());
+  // ESTADOS DEL FORMULARIO DE ATENCION
+  const [resultadoDecisión, setResultadoDecisión] = useState("aprobado"); // "aprobado", "observado", "rechazado"
+  const [observacionesTexto, setObservacionesTexto] = useState("");
+  const [evidencias, setEvidencias] = useState([]);
+  const [fechaVisita, setFechaVisita] = useState("");
+  const [horaVisita, setHoraVisita] = useState("10:00");
+  const [procesando, setProcesando] = useState(false);
 
   const cargarSolicitudes = async () => {
     try {
@@ -36,32 +47,6 @@ function PanelInspector({ seccion }) {
     cargarSolicitudes();
   }, []);
 
-  const fechaHoy = obtenerFechaHoy();
-
-  const pendientesHoy = useMemo(() => {
-    return solicitudes.filter((s) => {
-      if (s.fechaVisitaInspector !== fechaHoy) return false;
-      const insp = (s.inspeccion || "").toLowerCase();
-      const estado = (s.estado || "").toLowerCase();
-      if (insp === "aprobada" || insp === "rechazada" || insp === "reobservada") return false;
-      if (estado === "aprobado" || estado === "rechazado" || estado === "resultado enviado al funcionario") return false;
-      return true;
-    });
-  }, [solicitudes, fechaHoy]);
-
-  const realizadasHoy = useMemo(() => {
-    return solicitudes.filter((s) => {
-      if (s.fechaVisitaInspector !== fechaHoy) return false;
-      const insp = (s.inspeccion || "").toLowerCase();
-      return (
-        insp === "aprobada" ||
-        insp === "rechazada" ||
-        insp === "reobservada" ||
-        s.fechaInspeccion
-      );
-    });
-  }, [solicitudes, fechaHoy]);
-
   const formatearFechaHora = () => {
     return new Date().toLocaleString("es-PE", {
       day: "2-digit",
@@ -69,817 +54,739 @@ function PanelInspector({ seccion }) {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
     });
   };
 
-  const actualizarCampo = (id, campo, valor) => {
-    setFormularios((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], [campo]: valor },
-    }));
-  };
+  // COMPROBACIÓN DE ASIGNACIÓN ESTRICTA POR INSPECTOR
+  const esExpedienteDeEsteInspector = useCallback((s) => {
+    if (!usuario) return true;
+    const uidActual = (usuario.uid || "").toLowerCase();
+    const nombreActual = (usuario.nombre || usuario.email || "").toLowerCase();
 
-  const limpiarFormulario = (id) => {
-    setFormularios((prev) => {
-      const copia = { ...prev };
-      delete copia[id];
-      return copia;
+    const uidAsignado = (s.inspectorUid || s.inspectorAsignadoUid || "").toLowerCase();
+    const nombreAsignado = (s.inspectorNombre || "").toLowerCase();
+
+    // Si tiene un inspector asignado
+    if (uidAsignado) {
+      return uidAsignado === uidActual || uidActual.includes(uidAsignado) || uidAsignado.includes(uidActual);
+    }
+    if (nombreAsignado) {
+      return nombreAsignado.includes(nombreActual) || nombreActual.includes(nombreAsignado);
+    }
+    
+    return false;
+  }, [usuario]);
+
+  // CLASIFICACIÓN DE EXPEDIENTES RECIBIDOS Y ASIGNADOS AL INSPECTOR ACTIVO
+  const asignadasInspeccion = useMemo(() => {
+    return solicitudes.filter((s) => {
+      if (!esExpedienteDeEsteInspector(s)) return false;
+      const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
+      const estPago = (s.estadoPago || "").toLowerCase();
+      const esPagado = estPago === "confirmado" || e.includes("pagado") || e.includes("enviado");
+      return esPagado && !e.includes("aprobado") && !e.includes("rechazado");
     });
+  }, [solicitudes, esExpedienteDeEsteInspector]);
+
+  const inspeccionesHoy = useMemo(() => {
+    const hoyStr = formatearFechaLocal(new Date());
+    return solicitudes.filter((s) => {
+      if (!esExpedienteDeEsteInspector(s)) return false;
+      return s.fechaVisitaInspector === hoyStr;
+    });
+  }, [solicitudes, esExpedienteDeEsteInspector]);
+
+  const inspeccionesFinalizadas = useMemo(() => {
+    return solicitudes.filter((s) => {
+      if (!esExpedienteDeEsteInspector(s)) return false;
+      const e = (s.estado || "").toLowerCase();
+      return e.includes("aprobado") || e.includes("rechazado");
+    });
+  }, [solicitudes, esExpedienteDeEsteInspector]);
+
+  const solicitudesFiltradas = useMemo(() => {
+    return solicitudes.filter((s) => {
+      // 0. Solo ver expedientes de este inspector
+      if (!esExpedienteDeEsteInspector(s)) return false;
+
+      // 1. Filtro por Estado
+      const est = (s.estado || "").toLowerCase();
+      if (filtroEstado === "pendiente_programar") {
+        if (s.fechaVisitaInspector) return false;
+      } else if (filtroEstado === "programada") {
+        if (!s.fechaVisitaInspector || est.includes("aprobado") || est.includes("rechazado")) return false;
+      } else if (filtroEstado === "aprobada") {
+        if (!est.includes("aprobado")) return false;
+      } else if (filtroEstado === "observada") {
+        if (!est.includes("observada")) return false;
+      } else if (filtroEstado === "rechazada") {
+        if (!est.includes("rechazado")) return false;
+      }
+
+      // 2. Búsqueda por Código, DNI, RUC o Nombre
+      if (!busqueda.trim()) return true;
+      const q = busqueda.toLowerCase().trim();
+      const dni = (s.dniSolicitante || s.dni || "").toLowerCase();
+      const idExp = (s.id || "").toLowerCase();
+      const codExp = `exp-${idExp}`;
+      const ruc = (s.ruc || "").toLowerCase();
+      const nombreSol = [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante, s.nombreNegocio].filter(Boolean).join(" ").toLowerCase();
+
+      return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
+    });
+  }, [solicitudes, filtroEstado, busqueda, esExpedienteDeEsteInspector]);
+
+  // ABRIR MODAL DE ATENCIÓN DE INSPECCIÓN
+  const abrirModalAtencion = (solicitud) => {
+    setSolicitudAtencion(solicitud);
+    setResultadoDecisión("aprobado");
+    setObservacionesTexto(solicitud.observacionesInspector || "");
+    setEvidencias(solicitud.evidenciasInspector || []);
+    setFechaVisita(solicitud.fechaVisitaInspector || formatearFechaLocal(new Date()));
+    setHoraVisita(solicitud.horaVisitaInspector || "10:00");
+    setTabModal("evaluacion");
   };
 
+  // IMÁGENES DE EVIDENCIA EN BASE64
   const convertirImagenABase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        resolve({
-          nombre: file.name,
-          tipo: file.type,
-          tamano: file.size,
-          url: reader.result,
-        });
-      };
+      reader.onload = () => resolve({ nombre: file.name, url: reader.result });
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
   };
 
-  const validarImagenes = (id, archivos) => {
-    const actuales = formularios[id]?.evidencias || [];
-    const nuevas = Array.from(archivos || []);
-    if (nuevas.length === 0) return [];
-    if (actuales.length + nuevas.length > 2) {
-      alert("Solo puedes subir como máximo 2 fotos de evidencia.");
-      return [];
+  const handleSubirEvidencias = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    if (evidencias.length + files.length > 2) {
+      alert("Solo se pueden adjuntar hasta 2 fotografías de evidencia.");
+      return;
     }
-    if (nuevas.find((f) => !f.type.startsWith("image/"))) {
-      alert("Solo se permiten imágenes como evidencia.");
-      return [];
-    }
-    if (nuevas.find((f) => f.size > 500 * 1024)) {
-      alert("Cada imagen debe pesar como máximo 500 KB.");
-      return [];
-    }
-    return nuevas;
-  };
-
-  const manejarEvidencias = async (id, archivos) => {
-    const validas = validarImagenes(id, archivos);
-    if (validas.length === 0) return;
     try {
-      const convertidas = await Promise.all(validas.map(convertirImagenABase64));
-      const actuales = formularios[id]?.evidencias || [];
-      actualizarCampo(id, "evidencias", [...actuales, ...convertidas]);
+      const convertidas = await Promise.all(files.map(convertirImagenABase64));
+      setEvidencias((prev) => [...prev, ...convertidas]);
     } catch {
-      alert("No se pudieron cargar las imágenes.");
+      alert("Error al cargar fotografías.");
     }
   };
 
-  const quitarEvidencia = (id, index) => {
-    const actuales = formularios[id]?.evidencias || [];
-    actualizarCampo(id, "evidencias", actuales.filter((_, i) => i !== index));
+  const quitarEvidencia = (index) => {
+    setEvidencias((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const enviarResultado = async (solicitud) => {
-    const formulario = formularios[solicitud.id] || {};
-    const observacion = (formulario.observacion || "").trim();
-    const resultado = formulario.resultado || "";
-    const evidencias = formulario.evidencias || [];
-
-    if (enviandoId) return;
-    if (!observacion) {
-      alert("La observación del inspector es obligatoria.");
+  // PROGRAMAR VISITA DE INSPECCIÓN
+  const guardarProgramacionVisita = async () => {
+    if (!solicitudAtencion) return;
+    if (!fechaVisita || !horaVisita) {
+      alert("Seleccione fecha y hora de la inspección.");
       return;
     }
-    if (!resultado) {
-      alert("Debes elegir un resultado: Aprobado u Observado.");
-      return;
-    }
-    if (evidencias.length === 0) {
-      alert("Debes subir al menos una foto como evidencia.");
-      return;
-    }
-
-    const esReobservacion = (solicitud.cantidadReobservaciones || 0) >= 1;
-
+    setProcesando(true);
     try {
-      setEnviandoId(solicitud.id);
+      const fechaHoraActual = formatearFechaHora();
+      const slotObj = TIME_SLOTS.find((s) => s.value === horaVisita);
+      const horaLabel = slotObj ? slotObj.label : `${horaVisita} hrs`;
+      const nombreInspector = usuario?.nombre || usuario?.email || "Inspector Municipal";
 
-      if (resultado === "Aprobado" || resultado === "Cumple todos los requisitos") {
-        await actualizarSolicitud(solicitud.id, {
-          inspeccion: "Aprobada",
-          estadoInspeccion: "Realizada",
-          recomendacionInspector: "Aprobar",
-          observacionInspector: observacion,
-          evidenciasInspector: evidencias,
-          fechaInspeccion: formatearFechaHora(),
-          resultadoInspeccion: "Cumple todos los requisitos.",
-          estado: "Resultado enviado al funcionario",
-          estadoNormalizado: "REVISION_FUNCIONARIO",
-          inspectorNombre: usuario?.nombre || "Inspector",
-          inspectorUid: usuario?.uid || "",
-          historialInspecciones: [
-            ...(solicitud.historialInspecciones || []),
-            {
-              fechaRealizacion: formatearFechaHora(),
-              fechaVisita: solicitud.fechaVisitaInspector,
-              horaVisita: solicitud.horaVisitaInspector || solicitud.horaVisitaLabel,
-              resultado: "Cumple todos los requisitos",
-              observacion,
-              evidenciasCount: evidencias.length,
-              inspector: usuario?.nombre || "Inspector",
-              estadoInspeccion: "Realizada",
-            },
-          ],
-        });
+      const logEntrada = {
+        fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+        hora: fechaHoraActual.split(",")[1]?.trim() || "",
+        inspector: nombreInspector,
+        accion: "Programación de Inspección",
+        comentarios: `Visita agendada para el día ${fechaVisita} en el horario de ${horaLabel}.`,
+      };
 
-        await crearNotificacion(
-          solicitud.uidUsuario,
-          {
-            titulo: "Inspección aprobada",
-            descripcion: `El inspector aprobó las condiciones de su local (EXP-${solicitud.id}). Pendiente de decisión final del funcionario.`,
-            icono: "✅",
-          },
-          solicitud.correoUsuario
-        );
+      const cambios = {
+        fechaVisitaInspector: fechaVisita,
+        horaVisitaInspector: horaVisita,
+        horaVisitaLabel: horaLabel,
+        estadoInspeccion: "Programada",
+        inspeccion: "Programada",
+        estado: "Inspección programada",
+        estadoNormalizado: "INSPECCION_PROGRAMADA",
+        inspectorNombre: nombreInspector,
+        inspectorUid: usuario?.uid || "INSP-001",
+        historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
+      };
 
-        alert("Resultado de aprobación enviado al funcionario.");
-      } else {
-        const fechaOriginalStr = solicitud.fechaVisitaInspector || formatearFechaLocal(new Date());
-        const nuevaFecha = calcularFecha30DiasMas(fechaOriginalStr);
-        const mismaHoraVal = solicitud.horaVisitaInspector || "10:00";
-        const mismaHoraLabel = solicitud.horaVisitaLabel || "10:00 AM - 12:00 PM";
+      await actualizarSolicitud(solicitudAtencion.id, cambios);
 
-        await actualizarSolicitud(solicitud.id, {
-          inspeccion: "Reprogramada",
-          estadoInspeccion: "Reprogramada",
-          recomendacionInspector: "Reobservar",
-          observacionInspector: observacion,
-          evidenciasInspector: evidencias,
-          fechaInspeccion: formatearFechaHora(),
-          resultadoInspeccion: resultado,
-          estado: "No aprobada por inspección",
-          estadoNormalizado: "INSPECCION_REPROGRAMADA",
-          fechaVisitaInspector: nuevaFecha,
-          horaVisitaInspector: mismaHoraVal,
-          horaVisitaLabel: mismaHoraLabel,
-          inspectorNombre: usuario?.nombre || "Inspector",
-          inspectorUid: usuario?.uid || "",
-          historialInspecciones: [
-            ...(solicitud.historialInspecciones || []),
-            {
-              fechaRealizacion: formatearFechaHora(),
-              fechaOriginal: fechaOriginalStr,
-              horaOriginal: mismaHoraVal,
-              resultado,
-              observacion,
-              evidenciasCount: evidencias.length,
-              nuevaFechaReprogramada: nuevaFecha,
-              inspector: usuario?.nombre || "Inspector",
-              estadoInspeccion: "Realizada",
-            },
-          ],
-        });
+      await crearNotificacion(
+        solicitudAtencion.uidUsuario || "",
+        {
+          titulo: "Visita de Inspección Programada",
+          descripcion: `Su inspección técnica para el local EXP-${solicitudAtencion.id} ha sido programada para el ${fechaVisita} (${horaLabel}).`,
+          icono: "📅",
+        },
+        solicitudAtencion.correoUsuario || ""
+      );
 
-        await crearNotificacion(
-          solicitud.uidUsuario,
-          {
-            titulo: "Inspección no aprobada - Reprogramada a 30 días",
-            descripcion: `La inspección del local EXP-${solicitud.id} resultó en "${resultado}". Se ha reprogramado automáticamente para el ${nuevaFecha} a las ${mismaHoraLabel} con el mismo inspector.`,
-            icono: "📅",
-          },
-          solicitud.correoUsuario
-        );
+      alert(`Visita de inspección agendada para el ${fechaVisita} (${horaLabel}).`);
+      setSolicitudAtencion(null);
+      await cargarSolicitudes();
+    } catch (err) {
+      console.error(err);
+      alert("Error al programar visita: " + err.message);
+    } finally {
+      setProcesando(false);
+    }
+  };
 
-        alert(`Resultado enviado. Reprogramación automática registrada para el ${nuevaFecha} a las ${mismaHoraLabel}.`);
+  // GUARDAR RESULTADO FINAL DE LA INSPECCIÓN (APROBAR / RECHAZAR / SUBSANAR)
+  const guardarResultadoInspeccion = async () => {
+    if (!solicitudAtencion) return;
+    if (!observacionesTexto.trim()) {
+      alert("Por favor ingrese las observaciones o comentarios de la inspección.");
+      return;
+    }
+
+    setProcesando(true);
+    try {
+      const fechaHoraActual = formatearFechaHora();
+      const nombreInspector = usuario?.nombre || usuario?.email || "Inspector Municipal";
+      const uidInspector = usuario?.uid || "INSP-001";
+      let nuevoEstado = "Aprobado";
+      let estadoNorm = "APROBADO";
+      let codigoLicencia = null;
+      let accionLog = "Inspección Aprobada";
+
+      if (resultadoDecisión === "aprobado") {
+        codigoLicencia = "LIC-2026-" + Date.now().toString().slice(-6);
+        nuevoEstado = "Licencia aprobada";
+        estadoNorm = "APROBADO";
+        accionLog = "Inspección Aprobada - Licencia Emitida";
+      } else if (resultadoDecisión === "observado") {
+        nuevoEstado = "Inspección observada - Requerida subsanación";
+        estadoNorm = "INSPECCION_OBSERVADA";
+        accionLog = "Inspección Observada (Subsanación solicitada)";
+      } else if (resultadoDecisión === "rechazado") {
+        nuevoEstado = "Licencia rechazada por inspección";
+        estadoNorm = "RECHAZADO";
+        accionLog = "Inspección Rechazada";
       }
 
-      limpiarFormulario(solicitud.id);
+      const logEntrada = {
+        fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+        hora: fechaHoraActual.split(",")[1]?.trim() || "",
+        inspector: nombreInspector,
+        accion: accionLog,
+        comentarios: observacionesTexto.trim(),
+      };
+
+      const cambios = {
+        estado: nuevoEstado,
+        estadoNormalizado: estadoNorm,
+        inspeccion: resultadoDecisión === "aprobado" ? "Aprobada" : resultadoDecisión === "observado" ? "Observada" : "Rechazada",
+        estadoInspeccion: "Realizada",
+        resultadoInspeccion: resultadoDecisión.toUpperCase(),
+        observacionInspector: observacionesTexto.trim(),
+        evidenciasInspector: evidencias,
+        fechaInspeccionRealizada: fechaHoraActual,
+        inspectorNombre: nombreInspector,
+        inspectorUid: uidInspector,
+        numeroLicencia: codigoLicencia || solicitudAtencion.numeroLicencia || null,
+        fechaAprobacion: resultadoDecisión === "aprobado" ? fechaHoraActual : solicitudAtencion.fechaAprobacion || null,
+        historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
+      };
+
+      await actualizarSolicitud(solicitudAtencion.id, cambios);
+
+      await crearNotificacion(
+        solicitudAtencion.uidUsuario || "",
+        {
+          titulo: `Resultado de Inspección: ${resultadoDecisión.toUpperCase()}`,
+          descripcion: `Su expediente EXP-${solicitudAtencion.id} ha sido evaluado con resultado: ${nuevoEstado}.`,
+          icono: resultadoDecisión === "aprobado" ? "✅" : resultadoDecisión === "observado" ? "⚠️" : "❌",
+        },
+        solicitudAtencion.correoUsuario || ""
+      );
+
+      alert(`Resultado registrado con éxito. Estado: ${nuevoEstado}`);
+      setSolicitudAtencion(null);
       await cargarSolicitudes();
-    } catch (error) {
-      console.error(error);
-      alert(error.message || "No se pudo enviar el resultado.");
+    } catch (err) {
+      console.error(err);
+      alert("Error al registrar resultado de inspección: " + err.message);
     } finally {
-      setEnviandoId("");
+      setProcesando(false);
     }
-  };
-
-  const badgeClase = (estado = "") => {
-    const t = estado.toLowerCase();
-    if (t.includes("aprobada") || t.includes("aprobar") || t.includes("aprobado")) return "ok";
-    if (t.includes("rechazada") || t.includes("rechazar") || t.includes("rechazado")) return "danger";
-    if (t.includes("reobserva") || t.includes("observada") || t.includes("observado")) return "warning";
-    if (t.includes("pendiente")) return "neutral";
-    return "info";
-  };
-
-  const mostrarDocumentos = (s) => {
-    const archivos = s.archivosPdf || [];
-    if (archivos.length > 0) {
-      return (
-        <div className="documentos-lista">
-          {archivos.map((pdf, i) => (
-            <a
-              key={i}
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                abrirPdf(pdf.archivoUrl || pdf.url || pdf);
-              }}
-            >
-              PDF {i + 1}
-            </a>
-          ))}
-        </div>
-      );
-    }
-    if (s.archivoUrl) {
-      return (
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            abrirPdf(s.archivoUrl);
-          }}
-        >
-          Ver PDF
-        </a>
-      );
-    }
-    return "Sin PDF";
   };
 
   return (
     <div className="panel panel-inspector">
-      <div className="inspector-hero">
+      <div className="inspector-hero" style={{ background: "linear-gradient(135deg, #7c3aed 0%, #312e81 100%)" }}>
         <div>
-          <span className="eyebrow">Área de inspección municipal</span>
-          <h1>Panel Inspector</h1>
+          <span className="eyebrow">Municipalidad de Trujillo — Módulo de Inspección Técnica</span>
+          <h1>Panel Principal del Inspector Municipal</h1>
           <p>
-            Revisa las inspecciones programadas para HOY, sube evidencias y envía
-            tu recomendación al funcionario.
+            Recepción de expedientes post-pago, programación de visitas, revisión técnica documental (RENIEC/SUNAT), registro de visitas, evaluación (Aprobar/Rechazar/Subsanar), evidencias y trazabilidad auditada.
           </p>
         </div>
 
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <div className="hero-card">
-            <span
-              style={{
-                fontSize: "12px",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              Hoy
-            </span>
-            <strong style={{ fontSize: "28px" }}>{pendientesHoy.length}</strong>
-            <small>pendientes</small>
+            <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Pendientes</span>
+            <strong style={{ fontSize: "24px" }}>{asignadasInspeccion.length}</strong>
+            <small>expedientes</small>
           </div>
 
-          <button
-            type="button"
-            className="btn-outline-light"
-            onClick={cargarSolicitudes}
-            disabled={cargando || !!enviandoId}
-          >
-            {cargando ? "Actualizando..." : "Actualizar"}
+          <button type="button" className="btn-outline-light" onClick={cargarSolicitudes}>
+            {cargando ? "Actualizando..." : "🔄 Actualizar"}
           </button>
         </div>
       </div>
 
-      {pendientesHoy.length > 0 && (
-        <div
-          style={{
-            margin: "20px 34px 0",
-            padding: "16px 20px",
-            borderRadius: "14px",
-            background: "linear-gradient(135deg, #fef3c7, #fde68a)",
-            border: "1px solid #f59e0b",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-          }}
-        >
-          <span style={{ fontSize: "24px" }}>&#128276;</span>
-          <div>
-            <strong style={{ color: "#92400e", fontSize: "15px" }}>
-              Tienes {pendientesHoy.length} inspeccion
-              {pendientesHoy.length > 1 ? "es" : ""} pendiente
-              {pendientesHoy.length > 1 ? "s" : ""} para hoy
-            </strong>
-            <p
-              style={{
-                margin: "2px 0 0",
-                color: "#a16207",
-                fontSize: "13px",
-              }}
-            >
-              Revisa cada expediente, sube evidencias y envía tu recomendación.
-            </p>
-          </div>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px", marginBottom: "20px" }}>
+        <div className="stat-card" onClick={() => { setPaso("inspecciones"); setFiltroEstado("todos"); }} style={{ cursor: "pointer" }}>
+          <span>Expedientes Asignados</span>
+          <strong style={{ color: "#7c3aed" }}>{asignadasInspeccion.length}</strong>
+          <small>Recibidos post-pago</small>
         </div>
-      )}
-
-      <div className="stats-grid">
-        <div className="stat-card">
-          <span>Pendientes hoy</span>
-          <strong>{pendientesHoy.length}</strong>
-          <small>Por inspeccionar</small>
+        <div className="stat-card" onClick={() => setPaso("inspecciones-hoy")} style={{ cursor: "pointer" }}>
+          <span>Inspecciones Para Hoy</span>
+          <strong style={{ color: "#d97706" }}>{inspeccionesHoy.length}</strong>
+          <small>Programadas para hoy</small>
+        </div>
+        <div className="stat-card" onClick={() => setPaso("historial")} style={{ cursor: "pointer" }}>
+          <span>Inspecciones Evaluadas</span>
+          <strong style={{ color: "#16a34a" }}>{inspeccionesFinalizadas.length}</strong>
+          <small>Resultados emitidos</small>
         </div>
         <div className="stat-card">
-          <span>Realizadas hoy</span>
-          <strong>{realizadasHoy.length}</strong>
-          <small>Resultados enviados</small>
-        </div>
-        <div className="stat-card">
-          <span>Total solicitudes</span>
-          <strong>{solicitudes.length}</strong>
-          <small>En el sistema</small>
+          <span>Inspector Responsable</span>
+          <strong style={{ color: "#2563eb", fontSize: "16px" }}>{usuario?.nombre || "Inspector Municipal"}</strong>
+          <small>{usuario?.email || "Inspector de Licencias"}</small>
         </div>
       </div>
 
       <div className="tabs-panel">
         <button
           type="button"
-          className={paso === "hoy" ? "tab-active" : ""}
-          onClick={() => setPaso("hoy")}
+          className={paso === "inspecciones" ? "tab-active" : ""}
+          onClick={() => setPaso("inspecciones")}
         >
-          Pendientes de hoy ({pendientesHoy.length})
+          🔍 Expedientes Asignados ({asignadasInspeccion.length})
         </button>
         <button
           type="button"
-          className={paso === "realizadas" ? "tab-active" : ""}
-          onClick={() => setPaso("realizadas")}
+          className={paso === "inspecciones-hoy" ? "tab-active" : ""}
+          onClick={() => setPaso("inspecciones-hoy")}
         >
-          Realizadas hoy ({realizadasHoy.length})
+          📅 Inspecciones para Hoy ({inspeccionesHoy.length})
+        </button>
+        <button
+          type="button"
+          className={paso === "historial" ? "tab-active" : ""}
+          onClick={() => setPaso("historial")}
+        >
+          📜 Historial y Registro Auditado ({solicitudes.length})
         </button>
       </div>
 
-      {paso === "hoy" && (
-        <section className="section-card">
-          <div className="section-header">
-            <div>
-              <h2>Inspecciones pendientes</h2>
-              <p>
-                Solo se muestran las inspecciones programadas para hoy (
-                {fechaHoy}).
-              </p>
-            </div>
+      <section className="section-card">
+        <div className="section-header">
+          <div>
+            <h2>
+              {paso === "inspecciones"
+                ? "Gestión de Expedientes e Inspecciones Técnicas"
+                : paso === "inspecciones-hoy"
+                ? "Visitas de Inspección Programadas para Hoy"
+                : "Historial Auditado de Inspecciones"}
+            </h2>
+            <p>Visualiza datos de ciudadanos, RUC, PDFs adjuntos, programa visitas y registra la evaluación técnica.</p>
           </div>
+        </div>
 
-          {pendientesHoy.length === 0 ? (
-            <div className="empty-state">
-              <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128269;</div>
-              <h3>No tienes inspecciones pendientes para hoy</h3>
-              <p>
-                Las inspecciones programadas por el funcionario aparecerán aquí
-                el día que les toque.
-              </p>
-            </div>
-          ) : (
-            <div className="inspector-grid">
-              {pendientesHoy.map((solicitud) => {
-                const formulario = formularios[solicitud.id] || {};
-                const estaEnviando = enviandoId === solicitud.id;
-                const esReobservacion =
-                  (solicitud.cantidadReobservaciones || 0) >= 1;
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
+          <input
+            type="text"
+            placeholder="🔍 Buscar por código (EXP-XXXX), DNI, RUC o Nombre del establecimiento..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            style={{ flex: 1, minWidth: "240px", padding: "12px 18px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+          />
 
-                return (
-                  <article className="inspection-card" key={solicitud.id}>
-                    <div className="inspection-card-header">
-                      <div>
-                        <span className="badge info">{solicitud.id}</span>
-                        <h3>{solicitud.nombreNegocio}</h3>
-                        <p>{solicitud.razonSocial}</p>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        {esReobservacion && (
-                          <span
-                            className="badge warning"
-                            style={{ marginBottom: "4px" }}
-                          >
-                            2da oportunidad (
-                            {solicitud.cantidadReobservaciones} reobservación
-                            {solicitud.cantidadReobservaciones > 1 ? "es" : ""})
-                          </span>
-                        )}
-                        <span
-                          className={`badge ${
-                            solicitud.canalRegistro === "presencial"
-                              ? "info"
-                              : "ok"
-                          }`}
-                        >
-                          {solicitud.canalRegistro === "presencial"
-                            ? "Presencial"
-                            : "Online"}
-                        </span>
-                      </div>
-                    </div>
+          <select
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value)}
+            style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold", background: "#f8fafc", color: "#1e293b", minWidth: "200px" }}
+          >
+            <option value="todos">📌 Todos los estados</option>
+            <option value="pendiente_programar">⏳ Pendientes de Programar</option>
+            <option value="programada">📅 Programadas</option>
+            <option value="aprobada">✅ Aprobadas</option>
+            <option value="observada">⚠️ Observadas / Subsanación</option>
+            <option value="rechazada">❌ Rechazadas</option>
+          </select>
+        </div>
 
-                    <div className="inspection-details">
-                      <p>
-                        <strong>Responsable:</strong>{" "}
-                        {solicitud.nombreSolicitante || "N/A"}
-                      </p>
-                      <p>
-                        <strong>RUC:</strong> {solicitud.ruc}
-                      </p>
-                      <p>
-                        <strong>Dirección:</strong> {solicitud.direccion}
-                      </p>
-                      <p>
-                        <strong>Giro:</strong> {solicitud.giro}
-                      </p>
-                      <p>
-                        <strong>Tipo:</strong>{" "}
-                        {solicitud.tipoTramite || "Nueva licencia"}
-                      </p>
-                      <p>
-                        <strong>Hora visita:</strong>{" "}
-                        {solicitud.horaVisitaLabel ||
-                          solicitud.horaVisitaInspector ||
-                          "Sin hora definida"}
-                      </p>
-                      <p>
-                        <strong>Programado por:</strong>{" "}
-                        {solicitud.nombreProgramador || "Sistema"}
-                      </p>
-                      <div>
-                        <strong>Documentos:</strong>
-                        {mostrarDocumentos(solicitud)}
-                      </div>
-
-                      {esReobservacion &&
-                        solicitud.historialReobservaciones?.length > 0 && (
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              padding: "10px",
-                              background: "#fef3c7",
-                              borderRadius: "10px",
-                              border: "1px solid #fde68a",
-                            }}
-                          >
-                            <strong
-                              style={{ color: "#92400e", fontSize: "13px" }}
-                            >
-                              Observaciones anteriores:
-                            </strong>
-                            {solicitud.historialReobservaciones.map((obs, i) => (
-                              <p
-                                key={i}
-                                style={{
-                                  margin: "4px 0 0",
-                                  fontSize: "13px",
-                                  color: "#a16207",
-                                }}
-                              >
-                                {obs.fecha}: {obs.observacion}
-                                {obs.inspector && ` (${obs.inspector})`}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                    </div>
-
-                    <div className="inspection-form">
-                      <label>
-                        Observación del inspector *
-                        <textarea
-                          value={formulario.observacion || ""}
-                          onChange={(e) =>
-                            actualizarCampo(
-                              solicitud.id,
-                              "observacion",
-                              e.target.value
-                            )
-                          }
-                          placeholder="Describe las condiciones del local, cumplimiento de normativas..."
-                          rows="4"
-                          disabled={estaEnviando}
-                        />
-                      </label>
-
-                      <div
-                        className="drop-zone"
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          manejarEvidencias(solicitud.id, e.dataTransfer.files);
-                        }}
-                        onDragOver={(e) => e.preventDefault()}
-                      >
-                        <div
-                          style={{
-                            fontSize: "28px",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          &#128444;
-                        </div>
-                        <p>Evidencias fotográficas</p>
-                        <span>
-                          Máximo 2 fotos de 500 KB. Arrastra o selecciona.
-                        </span>
-                        <label className="file-label">
-                          Elegir fotos
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={(e) =>
-                              manejarEvidencias(solicitud.id, e.target.files)
-                            }
-                            disabled={estaEnviando}
-                            hidden
-                          />
-                        </label>
-                      </div>
-
-                      {formulario.evidencias?.length > 0 && (
-                        <div className="evidencias-preview">
-                          {formulario.evidencias.map((img, i) => (
-                            <div key={i} className="evidencia-item">
-                              <img src={img.url} alt={`Evidencia ${i + 1}`} />
-                              <small>{img.nombre}</small>
-                              <button
-                                type="button"
-                                className="btn-quitar"
-                                onClick={() =>
-                                  quitarEvidencia(solicitud.id, i)
-                                }
-                                disabled={estaEnviando}
-                              >
-                                Quitar
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <label>
-                        Resultado *
-                        <select
-                          value={formulario.resultado || ""}
-                          onChange={(e) =>
-                            actualizarCampo(
-                              solicitud.id,
-                              "resultado",
-                              e.target.value
-                            )
-                          }
-                          disabled={estaEnviando}
-                        >
-                          <option value="">-- Seleccionar resultado --</option>
-                          <option value="Cumple todos los requisitos">Cumple todos los requisitos (Aprobar)</option>
-                          <option value="Cumple parcialmente">Cumple parcialmente (Observar)</option>
-                          <option value="No cumple requisitos">No cumple requisitos (No aprobada)</option>
-                          <option value="Inspección incompleta">Inspección incompleta</option>
-                        </select>
-                      </label>
-                    </div>
-
-                    {esReobservacion && (
-                      <div
-                        style={{
-                          padding: "10px",
-                          background: "#fee2e2",
-                          borderRadius: "10px",
-                          border: "1px solid #fca5a5",
-                          marginBottom: "12px",
-                        }}
-                      >
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: "13px",
-                            color: "#991b1b",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          Esta es la 2da oportunidad. Si marcas "Observado"
-                          nuevamente, la solicitud será rechazada de forma
-                          automática y definitiva.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="inspection-actions">
-                      <button
-                        type="button"
-                        className="btn-info"
-                        onClick={() => setDetalleSolicitud(solicitud)}
-                      >
-                        Ver detalle
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-ok"
-                        onClick={() => enviarResultado(solicitud)}
-                        disabled={estaEnviando}
-                      >
-                        {estaEnviando ? "Enviando..." : "Enviar resultado"}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      )}
-
-      {paso === "realizadas" && (
-        <section className="section-card">
-          <div className="section-header">
-            <div>
-              <h2>Inspecciones realizadas hoy</h2>
-              <p>Resultados que has registrado como inspector hoy.</p>
-            </div>
+        {solicitudesFiltradas.length === 0 ? (
+          <div className="empty-state">
+            <div style={{ fontSize: "36px", marginBottom: "10px" }}>🔍</div>
+            <h3>No se encontraron expedientes asignados</h3>
+            <p>Ajusta el filtro o búsqueda para encontrar solicitudes.</p>
           </div>
+        ) : (
+          <div className="tabla-container">
+            <table className="modern-table">
+              <thead>
+                <tr>
+                  <th>Expediente</th>
+                  <th>Ciudadano / DNI</th>
+                  <th>Establecimiento / RUC</th>
+                  <th>Fecha Visita</th>
+                  <th>Estado Trámite</th>
+                  <th>Acción Principal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {solicitudesFiltradas.map((s) => {
+                  const nombreCiudadano =
+                    [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante].filter(Boolean).join(" ") ||
+                    "Solicitante";
 
-          {realizadasHoy.length === 0 ? (
-            <div className="empty-state">
-              <div style={{ fontSize: "36px", marginBottom: "10px" }}>&#128203;</div>
-              <h3>Aún no has registrado inspecciones hoy</h3>
-              <p>Cuando envíes un resultado, aparecerá aquí.</p>
-            </div>
-          ) : (
-            <div className="tabla-container">
-              <table className="modern-table">
-                <thead>
-                  <tr>
-                    <th>Expediente</th>
-                    <th>Negocio</th>
-                    <th>Recomendación</th>
-                    <th>Observación</th>
-                    <th>Evidencias</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {realizadasHoy.map((s) => (
+                  return (
                     <tr key={s.id}>
                       <td>
-                        <strong>{s.id}</strong>
-                        <small>RUC: {s.ruc}</small>
+                        <strong>EXP-{s.id}</strong>
+                        <small style={{ display: "block", color: "#64748b" }}>{s.fecha || "---"}</small>
+                      </td>
+                      <td>
+                        <strong>{nombreCiudadano}</strong>
+                        <small style={{ display: "block", color: "#475569" }}>DNI: {s.dniSolicitante || s.dni || "---"}</small>
                       </td>
                       <td>
                         <strong>{s.nombreNegocio}</strong>
-                        <small>{s.direccion}</small>
+                        <small style={{ display: "block", color: "#64748b" }}>RUC: {s.ruc}</small>
                       </td>
                       <td>
-                        <span
-                          className={`badge ${badgeClase(
-                            s.recomendacionInspector
-                          )}`}
-                        >
-                          {s.recomendacionInspector || "Sin recomendación"}
-                        </span>
-                      </td>
-                      <td style={{ maxWidth: "200px" }}>
-                        {s.observacionInspector || "Sin observación"}
-                      </td>
-                      <td>
-                        {s.evidenciasInspector?.length > 0 ? (
-                          <div className="evidencias-tabla">
-                            {s.evidenciasInspector.map((img, i) => (
-                              <span key={i} className="badge info">
-                                Foto {i + 1}
-                              </span>
-                            ))}
-                          </div>
+                        {s.fechaVisitaInspector ? (
+                          <span className="badge info">
+                            📅 {s.fechaVisitaInspector} ({s.horaVisitaLabel || s.horaVisitaInspector || "Por definir"})
+                          </span>
                         ) : (
-                          "Sin evidencias"
+                          <span className="badge warning">Por programar</span>
                         )}
                       </td>
                       <td>
-                        <span
-                          className={`badge ${badgeClase(s.inspeccion)}`}
-                        >
-                          {s.inspeccion || "Enviado"}
+                        <span className={`badge ${
+                          (s.estado || "").toLowerCase().includes("aprobado") ? "ok" :
+                          (s.estado || "").toLowerCase().includes("observada") ? "warning" :
+                          (s.estado || "").toLowerCase().includes("rechazado") ? "danger" : "info"
+                        }`}>
+                          {s.estado || "Asignado a Inspección"}
                         </span>
                       </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => abrirModalAtencion(s)}
+                          style={{ background: "#7c3aed", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: "700" }}
+                        >
+                          🔍 Atender Expediente
+                        </button>
+                      </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
-      {detalleSolicitud && (
+      {/* MODAL PRINCIPAL DEL INSPECTOR (REVISION, PROGRAMACION, EVALUACION, HISTORIAL) */}
+      {solicitudAtencion && (
         <div className="admin-form-modal" style={{ zIndex: 1000 }}>
-          <div
-            className="admin-form-card"
-            style={{ maxWidth: "600px", maxHeight: "85vh", overflowY: "auto" }}
-          >
-            <div className="admin-form-header">
-              <h3>Detalle Expediente {detalleSolicitud.id}</h3>
+          <div className="admin-form-card" style={{ maxWidth: "750px", maxHeight: "90vh", overflowY: "auto" }}>
+            <div className="admin-form-header" style={{ background: "#7c3aed", color: "white", padding: "16px 20px" }}>
+              <div>
+                <h3 style={{ color: "white", margin: 0 }}>🔍 Módulo de Inspección Técnica — EXP-{solicitudAtencion.id}</h3>
+                <small style={{ color: "#e0e7ff" }}>Establecimiento: {solicitudAtencion.nombreNegocio} (RUC: {solicitudAtencion.ruc})</small>
+              </div>
+              <button type="button" onClick={() => setSolicitudAtencion(null)} style={{ color: "white" }}>✕</button>
+            </div>
+
+            <div className="tabs-panel" style={{ padding: "12px 20px 0", borderBottom: "1px solid #cbd5e1" }}>
               <button
                 type="button"
-                onClick={() => setDetalleSolicitud(null)}
+                className={tabModal === "evaluacion" ? "tab-active" : ""}
+                onClick={() => setTabModal("evaluacion")}
               >
-                ✕
+                ⚖️ Registrar Resultado
               </button>
-            </div>
-            <div style={{ padding: "16px 0" }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "16px",
-                }}
-              >
-                <div>
-                  <h4
-                    style={{ margin: "0 0 6px", color: "#1f3b57", fontSize: "14px" }}
-                  >
-                    Establecimiento
-                  </h4>
-                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                    <strong>Nombre:</strong>{" "}
-                    {detalleSolicitud.nombreNegocio || "---"}
-                  </p>
-                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                    <strong>RUC:</strong> {detalleSolicitud.ruc || "---"}
-                  </p>
-                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                    <strong>Dirección:</strong>{" "}
-                    {detalleSolicitud.direccion || "---"}
-                  </p>
-                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                    <strong>Giro:</strong> {detalleSolicitud.giro || "---"}
-                  </p>
-                </div>
-                <div>
-                  <h4
-                    style={{ margin: "0 0 6px", color: "#1f3b57", fontSize: "14px" }}
-                  >
-                    Solicitante
-                  </h4>
-                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                    <strong>Nombre:</strong>{" "}
-                    {detalleSolicitud.nombreSolicitante || "---"}
-                  </p>
-                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                    <strong>Teléfono:</strong>{" "}
-                    {detalleSolicitud.telefonoSolicitante ||
-                      detalleSolicitud.telefono ||
-                      "---"}
-                  </p>
-                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                    <strong>Tipo trámite:</strong>{" "}
-                    {detalleSolicitud.tipoTramite || "Nueva licencia"}
-                  </p>
-                  <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                    <strong>Canal:</strong>{" "}
-                    {detalleSolicitud.canalRegistro === "presencial"
-                      ? "Presencial"
-                      : "Online"}
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ marginTop: "12px" }}>
-                <h4
-                  style={{ margin: "0 0 6px", color: "#1f3b57", fontSize: "14px" }}
-                >
-                  Documentos
-                </h4>
-                {mostrarDocumentos(detalleSolicitud)}
-              </div>
-
-              <div style={{ marginTop: "12px" }}>
-                <h4
-                  style={{ margin: "0 0 6px", color: "#1f3b57", fontSize: "14px" }}
-                >
-                  Programación
-                </h4>
-                <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                  <strong>Fecha visita:</strong>{" "}
-                  {detalleSolicitud.fechaVisitaInspector || "---"}
-                </p>
-                <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                  <strong>Hora visita:</strong>{" "}
-                  {detalleSolicitud.horaVisitaLabel ||
-                    detalleSolicitud.horaVisitaInspector ||
-                    "---"}
-                </p>
-                <p style={{ margin: "2px 0", fontSize: "13px" }}>
-                  <strong>Programado por:</strong>{" "}
-                  {detalleSolicitud.nombreProgramador || "Sistema"}
-                </p>
-              </div>
-            </div>
-            <div className="admin-form-actions">
               <button
                 type="button"
-                onClick={() => setDetalleSolicitud(null)}
+                className={tabModal === "programacion" ? "tab-active" : ""}
+                onClick={() => setTabModal("programacion")}
               >
-                Cerrar
+                📅 Programar Visita
               </button>
+              <button
+                type="button"
+                className={tabModal === "documentos" ? "tab-active" : ""}
+                onClick={() => setTabModal("documentos")}
+              >
+                📄 Datos y PDFs (RENIEC/SUNAT)
+              </button>
+              <button
+                type="button"
+                className={tabModal === "historial" ? "tab-active" : ""}
+                onClick={() => setTabModal("historial")}
+              >
+                📜 Historial Completo ({ (solicitudAtencion.historialAcciones || []).length })
+              </button>
+            </div>
+
+            <div style={{ padding: "20px" }}>
+              {tabModal === "evaluacion" && (
+                <div>
+                  <h4 style={{ color: "#1e293b", margin: "0 0 14px", fontSize: "15px" }}>Seleccione Resultado de la Evaluación Técnica:</h4>
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setResultadoDecisión("aprobado")}
+                      style={{
+                        padding: "14px",
+                        borderRadius: "10px",
+                        border: resultadoDecisión === "aprobado" ? "2px solid #16a34a" : "1px solid #cbd5e1",
+                        background: resultadoDecisión === "aprobado" ? "#f0fdf4" : "white",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                        color: resultadoDecisión === "aprobado" ? "#166534" : "#475569",
+                        textAlign: "center"
+                      }}
+                    >
+                      <div style={{ fontSize: "24px", marginBottom: "4px" }}>🟢</div>
+                      Aprobar Inspección
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setResultadoDecisión("observado")}
+                      style={{
+                        padding: "14px",
+                        borderRadius: "10px",
+                        border: resultadoDecisión === "observado" ? "2px solid #d97706" : "1px solid #cbd5e1",
+                        background: resultadoDecisión === "observado" ? "#fffbeb" : "white",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                        color: resultadoDecisión === "observado" ? "#b45309" : "#475569",
+                        textAlign: "center"
+                      }}
+                    >
+                      <div style={{ fontSize: "24px", marginBottom: "4px" }}>🟡</div>
+                      Solicitar Subsanación
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setResultadoDecisión("rechazado")}
+                      style={{
+                        padding: "14px",
+                        borderRadius: "10px",
+                        border: resultadoDecisión === "rechazado" ? "2px solid #dc2626" : "1px solid #cbd5e1",
+                        background: resultadoDecisión === "rechazado" ? "#fef2f2" : "white",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                        color: resultadoDecisión === "rechazado" ? "#991b1b" : "#475569",
+                        textAlign: "center"
+                      }}
+                    >
+                      <div style={{ fontSize: "24px", marginBottom: "4px" }}>🔴</div>
+                      Rechazar Inspección
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={{ display: "block", fontSize: "13.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
+                      Observaciones y Comentarios del Inspector *
+                    </label>
+                    <textarea
+                      rows="4"
+                      value={observacionesTexto}
+                      onChange={(e) => setObservacionesTexto(e.target.value)}
+                      placeholder="Ingrese los hallazgos de la inspección, estado del aforo, extintores, señalética o motivos de subsanación..."
+                      style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                    />
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                    <label style={{ display: "block", fontSize: "13.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
+                      📸 Adjuntar Fotografías de Evidencia (Máx 2 fotos):
+                    </label>
+
+                    {evidencias.length < 2 && (
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleSubirEvidencias}
+                        style={{ marginBottom: "12px" }}
+                      />
+                    )}
+
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      {evidencias.map((foto, idx) => (
+                        <div key={idx} style={{ position: "relative" }}>
+                          <img
+                            src={foto.url || foto}
+                            alt={`Evidencia ${idx + 1}`}
+                            style={{ width: "100px", height: "80px", objectFit: "cover", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => quitarEvidencia(idx)}
+                            style={{ position: "absolute", top: "-6px", right: "-6px", background: "#dc2626", color: "white", border: "none", borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="admin-form-actions" style={{ marginTop: "20px" }}>
+                    <button type="button" onClick={() => setSolicitudAtencion(null)} disabled={procesando}>Cancelar</button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={guardarResultadoInspeccion}
+                      disabled={procesando}
+                      style={{ background: "#7c3aed", color: "white" }}
+                    >
+                      {procesando ? "Guardando Resultado..." : "💾 Registrar Evaluación Final"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tabModal === "programacion" && (
+                <div>
+                  <h4 style={{ color: "#1e293b", margin: "0 0 14px", fontSize: "15px" }}>Programar Fecha y Hora de Inspección Física:</h4>
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
+                        Fecha de la Visita *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="DD/MM/YYYY (Ej. 25/07/2026)"
+                        value={fechaVisita}
+                        onChange={(e) => setFechaVisita(e.target.value)}
+                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
+                        Horario Disponible *
+                      </label>
+                      <select
+                        value={horaVisita}
+                        onChange={(e) => setHoraVisita(e.target.value)}
+                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                      >
+                        {TIME_SLOTS.map((slot) => (
+                          <option key={slot.value} value={slot.value}>
+                            {slot.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="admin-form-actions">
+                    <button type="button" onClick={() => setSolicitudAtencion(null)} disabled={procesando}>Cancelar</button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={guardarProgramacionVisita}
+                      disabled={procesando}
+                      style={{ background: "#0f766e", color: "white" }}
+                    >
+                      {procesando ? "Guardando Fecha..." : "📅 Confirmar Fecha de Inspección"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tabModal === "documentos" && (
+                <div>
+                  <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
+                    <h4 style={{ margin: "0 0 6px", color: "#1e293b", fontSize: "14px" }}>👤 Datos RENIEC — Ciudadano Solicitante</h4>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Nombre Completo:</strong> {[solicitudAtencion.nombresSolicitante, solicitudAtencion.apellidosSolicitante, solicitudAtencion.nombreSolicitante].filter(Boolean).join(" ")}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>DNI:</strong> {solicitudAtencion.dniSolicitante || solicitudAtencion.dni || "---"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Correo:</strong> {solicitudAtencion.correoUsuario || "---"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Teléfono:</strong> {solicitudAtencion.telefono || "---"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
+                    <h4 style={{ margin: "0 0 6px", color: "#1e293b", fontSize: "14px" }}>🏢 Datos SUNAT — Establecimiento Comercial</h4>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>RUC:</strong> {solicitudAtencion.ruc}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Nombre Comercial:</strong> {solicitudAtencion.nombreNegocio}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Razón Social:</strong> {solicitudAtencion.razonSocial || solicitudAtencion.nombreNegocio}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Giro Comercial:</strong> {solicitudAtencion.giro || "General"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Dirección Fiscal:</strong> {solicitudAtencion.direccion}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                    <h4 style={{ margin: "0 0 8px", color: "#1e293b", fontSize: "14px" }}>📄 Visor de Documentos PDF Adjuntados</h4>
+                    {(solicitudAtencion.archivosPdf || []).length === 0 ? (
+                      <p style={{ color: "#64748b", fontSize: "13px" }}>Sin documentos PDF adjuntos.</p>
+                    ) : (
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        {(solicitudAtencion.archivosPdf || []).map((pdf, idx) => (
+                          <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "white", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
+                            <span style={{ fontSize: "13px", color: "#334155" }}>📄 {pdf.nombre || pdf.archivoNombre || `Documento_${idx + 1}`}</span>
+                            <a
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                abrirPdf(pdf.archivoUrl || pdf.url || pdf);
+                              }}
+                              style={{ fontSize: "12.5px", color: "#2563eb", fontWeight: "bold" }}
+                            >
+                              Abrir PDF ↗
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {tabModal === "historial" && (
+                <div>
+                  <h4 style={{ color: "#1e293b", margin: "0 0 14px", fontSize: "15px" }}>Historial Auditado de Acciones en la Solicitud:</h4>
+                  
+                  {(solicitudAtencion.historialAcciones || []).length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
+                      <p>No hay acciones auditadas registradas en esta solicitud aún.</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: "10px" }}>
+                      {(solicitudAtencion.historialAcciones || []).map((h, idx) => (
+                        <div key={idx} style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                            <strong style={{ color: "#7c3aed", fontSize: "14px" }}>{h.accion || "Acción en Expediente"}</strong>
+                            <small style={{ color: "#64748b" }}>{h.fecha} {h.hora}</small>
+                          </div>
+                          <p style={{ margin: "4px 0", fontSize: "13.5px", color: "#334155" }}>{h.comentarios || h.observaciones}</p>
+                          <small style={{ color: "#475569", fontWeight: "600" }}>Responsable: {h.inspector || h.cajera || "Sistema"}</small>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

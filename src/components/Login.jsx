@@ -538,21 +538,14 @@ function Login({ onVolver, modoInicial }) {
                 <>
                   <div style={{ textAlign: "center", marginBottom: "24px" }}>
                     <h2 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "22px" }}>
-                      {modo === "login" ? "Iniciar sesión" : "Crear cuenta"}
+                      Acceso al Sistema Municipal
                     </h2>
                     <p style={{ margin: 0, color: "#64748b", fontSize: "14px" }}>
-                      {modo === "login"
-                        ? "Ingresa tus credenciales para acceder al sistema."
-                        : "Regístrate para comenzar a solicitar licencias."}
+                      Ingresa tus credenciales institucionales para acceder a tu panel.
                     </p>
                   </div>
 
-                  <div className="tabs">
-                    <button type="button" className={modo === "login" ? "active" : ""} onClick={() => { setModo("login"); setError(""); }}>Iniciar sesión</button>
-                    <button type="button" className={modo === "registro" ? "active" : ""} onClick={() => { setModo("registro"); setError(""); }}>Crear cuenta</button>
-                  </div>
-
-                  <form onSubmit={modo === "login" ? manejarLogin : manejarRegistro}>
+                  <form onSubmit={manejarLogin}>
                     {modo === "registro" && (
                       <div style={{ display: "grid", gap: "12px", marginBottom: "4px" }}>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -647,19 +640,6 @@ function Login({ onVolver, modoInicial }) {
                             required
                             minLength={6}
                           />
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#64748b", cursor: "pointer" }}>
-                            <input type="checkbox" style={{ width: "16px", height: "16px", accentColor: "#1f3b57" }} />
-                            Recordar sesión
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => { setMostrarRecuperar(true); setCorreoRecuperacion(correo); setError(""); }}
-                            style={{ background: "none", border: "none", color: "#2563eb", fontSize: "13px", cursor: "pointer", fontWeight: 600 }}
-                          >
-                            Olvidaste tu contraseña?
-                          </button>
                         </div>
                       </div>
                     )}

@@ -8,19 +8,18 @@ const AuthContext = createContext();
 export const normalizarRol = (rolRaw, email = "") => {
   if (!rolRaw) {
     const emailLow = String(email).toLowerCase();
-    if (emailLow.includes("cajero")) return "cajero";
-    if (emailLow.includes("funcionario")) return "funcionario";
-    if (emailLow.includes("inspector")) return "inspector";
+    if (emailLow.includes("cajer")) return "cajero";
+    if (emailLow.includes("inspector") || emailLow.includes("insp")) return "inspector";
     if (emailLow.includes("admin")) return "administrador";
-    return "negocio";
+    return "cajero";
   }
 
   const r = String(rolRaw).toLowerCase().trim();
   if (r.includes("cajer")) return "cajero";
-  if (r.includes("func")) return "funcionario";
   if (r.includes("insp")) return "inspector";
   if (r.includes("admin")) return "administrador";
-  if (r.includes("negoc") || r.includes("solic") || r.includes("ciudadan")) return "negocio";
+  if (r.includes("func")) return "administrador";
+  if (r.includes("negoc") || r.includes("solic") || r.includes("ciudadan")) return "cajero";
   return r;
 };
 

@@ -1,4 +1,4 @@
-export const MAX_INSPECCIONES_POR_DIA = 5;
+export const MAX_INSPECCIONES_POR_DIA = 4;
 
 export const TIME_SLOTS = [
   { value: "08:00", label: "08:00 AM - 10:00 AM", horaInicio: 8, minInicio: 0 },

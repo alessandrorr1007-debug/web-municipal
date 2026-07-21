@@ -34,8 +34,9 @@ import { obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
 
 const INSPECTORES_DEFAULT = [
   { uid: "INSP-001", nombre: "Inspector Carlos Ramírez", correo: "c.ramirez@munitrujillo.gob.pe", cargo: "Inspector de Defensa Civil" },
-  { uid: "INSP-002", nombre: "Inspectora María Torres", correo: "m.torres@munitrujillo.gob.pe", cargo: "Inspectora de Gestión Ambiental" },
-  { uid: "INSP-003", nombre: "Inspector Juan Mendoza", correo: "j.mendoza@munitrujillo.gob.pe", cargo: "Inspector de Licencias Comerciales" },
+  { uid: "INSP-002", nombre: "Inspectora Ana López", correo: "a.lopez@munitrujillo.gob.pe", cargo: "Inspectora de Seguridad Edil" },
+  { uid: "INSP-003", nombre: "Inspector Luis Mendoza", correo: "l.mendoza@munitrujillo.gob.pe", cargo: "Inspector de Licencias Comerciales" },
+  { uid: "INSP-004", nombre: "Inspectora María Torres", correo: "m.torres@munitrujillo.gob.pe", cargo: "Inspectora de Gestión Ambiental" },
 ];
 
 const MOTIVOS_RECHAZO_DOCS = [
@@ -519,20 +520,22 @@ function ModalDetalleExpediente({ solicitud, onCerrar, onRevisarDocs, onAgendar,
             </small>
           </div>
           <div className="det-footer-actions">
-            <button type="button" className="det-action-btn det-action-primary" onClick={onRevisarDocs} style={{ background: "#2563eb" }}>
-              📑 Revisar Documentos
-            </button>
-            {puedeAgendar && (
+            {onRevisarDocs && (
+              <button type="button" className="det-action-btn det-action-primary" onClick={onRevisarDocs} style={{ background: "#2563eb" }}>
+                📑 Revisar Documentos
+              </button>
+            )}
+            {puedeAgendar && onAgendar && (
               <button type="button" className="det-action-btn det-action-primary" onClick={onAgendar} style={{ background: "#0f766e" }}>
                 🔍 Asignar Inspección
               </button>
             )}
-            {puedeRechazar && (
+            {puedeRechazar && onRechazar && (
               <button type="button" className="det-action-btn det-action-danger" onClick={onRechazar}>
                 ❌ Rechazar
               </button>
             )}
-            {puedeAprobar && (
+            {puedeAprobar && onAprobar && (
               <button type="button" className="det-action-btn det-action-success" onClick={onAprobar}>
                 ✅ Aprobar Licencia
               </button>
@@ -1218,6 +1221,127 @@ function PanelFuncionario({ seccion }) {
   const [procesando, setProcesando] = useState(false);
   const [paso, setPaso] = useState(seccion || "solicitudes");
 
+  // ESTADOS Y LOGICA DE ASIGNACION DE INSPECTORES (MAX 4/DIA)
+  const [solicitudAsignarModal, setSolicitudAsignarModal] = useState(null);
+  const [fechaAsignacionModal, setFechaAsignacionModal] = useState(formatearFechaLocal(new Date()));
+  const [inspectorElegidoModal, setInspectorElegidoModal] = useState(null);
+  const [slotAsignarModal, setSlotAsignarModal] = useState("08:00");
+  const [fechaAgendaConsulta, setFechaAgendaConsulta] = useState(formatearFechaLocal(new Date()));
+
+  // Conteo dinámico de asignaciones por inspector en una fecha específica (Máx 4/día)
+  const obtenerConteoAsignaciones = useCallback((inspectorUid, fechaStr) => {
+    if (!fechaStr || !inspectorUid) return 0;
+    return solicitudes.filter((s) => {
+      const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
+      const esInspector = u === inspectorUid || u.includes(inspectorUid);
+      const esMismaFecha = s.fechaVisitaInspector === fechaStr;
+      const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
+      return esInspector && esMismaFecha && noCerrado;
+    }).length;
+  }, [solicitudes]);
+
+  const solicitudesPendientesAsignacion = useMemo(() => {
+    return solicitudes.filter((s) => {
+      const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
+      const estPago = (s.estadoPago || "").toLowerCase();
+      const esPagado = estPago === "confirmado" || e.includes("pagado") || e.includes("enviado");
+      const noTieneInspector = !s.inspectorUid && !s.inspectorNombre && s.estadoInspeccion !== "Programada";
+      const noCerrado = !e.includes("aprobado") && !e.includes("rechazado");
+      return esPagado && noTieneInspector && noCerrado;
+    });
+  }, [solicitudes]);
+
+  const solicitudesAsignadas = useMemo(() => {
+    return solicitudes.filter((s) => {
+      const e = (s.estado || "").toLowerCase();
+      const tieneInspector = (s.inspectorUid || s.inspectorNombre) && s.fechaVisitaInspector;
+      const noCerrado = !e.includes("aprobado") && !e.includes("rechazado");
+      return tieneInspector && noCerrado;
+    });
+  }, [solicitudes]);
+
+  // EJECUTAR ASIGNACIÓN O REASIGNACIÓN DE INSPECTOR
+  const ejecutarAsignacionInspector = async () => {
+    if (!solicitudAsignarModal || !inspectorElegidoModal || !fechaAsignacionModal || !slotAsignarModal) {
+      alert("Por favor seleccione la fecha, el inspector y el horario de inspección.");
+      return;
+    }
+
+    const cuposActuales = obtenerConteoAsignaciones(inspectorElegidoModal.uid || inspectorElegidoModal.nombre, fechaAsignacionModal);
+    if (cuposActuales >= 4) {
+      alert(`⚠️ El inspector ${inspectorElegidoModal.nombre} ya alcanzó el límite máximo de 4 inspecciones programadas para el día ${fechaAsignacionModal}. Seleccione otro inspector o cambie la fecha.`);
+      return;
+    }
+
+    setProcesando(true);
+    try {
+      const fechaHoraActual = new Date().toLocaleString("es-PE");
+      const nombreFuncionario = usuario?.nombre || usuario?.email || "Funcionario Municipal";
+      const slotObj = TIME_SLOTS.find((s) => s.value === slotAsignarModal);
+      const horaLabel = slotObj ? slotObj.label : `${slotAsignarModal} hrs`;
+
+      const esReasignacion = !!solicitudAsignarModal.inspectorUid;
+
+      const logEntrada = {
+        fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+        hora: fechaHoraActual.split(",")[1]?.trim() || "",
+        funcionario: nombreFuncionario,
+        accion: esReasignacion ? "Reasignación de Inspector" : "Asignación Oficial de Inspector",
+        comentarios: `${esReasignacion ? "Reasignado" : "Asignado"} a ${inspectorElegidoModal.nombre} (${inspectorElegidoModal.cargo || "Inspector"}) para la fecha ${fechaAsignacionModal} a las ${horaLabel}. Asignado por ${nombreFuncionario}.`,
+      };
+
+      const cambios = {
+        inspectorUid: inspectorElegidoModal.uid || inspectorElegidoModal.id,
+        inspectorAsignadoUid: inspectorElegidoModal.uid || inspectorElegidoModal.id,
+        inspectorNombre: inspectorElegidoModal.nombre,
+        fechaVisitaInspector: fechaAsignacionModal,
+        horaVisitaInspector: slotAsignarModal,
+        horaVisitaLabel: horaLabel,
+        estado: "Inspección programada",
+        estadoNormalizado: "INSPECCION_PROGRAMADA",
+        estadoInspeccion: "Programada",
+        inspeccion: "Programada",
+        asignadoPorFuncionario: nombreFuncionario,
+        fechaHoraAsignacion: fechaHoraActual,
+        historialAcciones: [...(solicitudAsignarModal.historialAcciones || []), logEntrada],
+      };
+
+      await actualizarSolicitud(solicitudAsignarModal.id, cambios);
+
+      // Notificación al Ciudadano
+      await crearNotificacion(
+        solicitudAsignarModal.uidUsuario || "",
+        {
+          titulo: "Inspección Programada",
+          descripcion: `Su inspección técnica para el local EXP-${solicitudAsignarModal.id} fue programada para el ${fechaAsignacionModal} (${horaLabel}) con el ${inspectorElegidoModal.nombre}.`,
+          icono: "📅",
+        },
+        solicitudAsignarModal.correoUsuario || ""
+      );
+
+      // Notificación al Inspector Asignado
+      await crearNotificacion(
+        inspectorElegidoModal.uid || "INSPECTOR",
+        {
+          titulo: "Nueva Inspección Asignada",
+          descripcion: `Se le ha asignado el expediente EXP-${solicitudAsignarModal.id} (${solicitudAsignarModal.nombreNegocio}) para el ${fechaAsignacionModal} en el horario ${horaLabel}.`,
+          icono: "🔍",
+        },
+        ""
+      );
+
+      alert(`✅ Inspección asignada exitosamente a ${inspectorElegidoModal.nombre} para el ${fechaAsignacionModal}.`);
+      setSolicitudAsignarModal(null);
+      setInspectorElegidoModal(null);
+      await cargarSolicitudes();
+    } catch (err) {
+      console.error(err);
+      alert("Error al asignar inspector: " + err.message);
+    } finally {
+      setProcesando(false);
+    }
+  };
+
   useEffect(() => {
     if (fechaSeleccionada) {
       obtenerHorariosOcupadosInspector(fechaSeleccionada, inspectorSeleccionadoUid).then((data) => {
@@ -1749,24 +1873,89 @@ function PanelFuncionario({ seccion }) {
     return <span className={`badge ${clase}`}>{insp}</span>;
   };
 
+  // CÁLCULO DE CIUDADANOS Y NEGOCIOS ÚNICOS PARA GESTIÓN ADMINISTRATIVA
+  const listaCiudadanos = useMemo(() => {
+    const mapa = new Map();
+    solicitudes.forEach((s) => {
+      const dni = s.dniSolicitante || s.dni || "SIN_DNI";
+      const nombre = [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante].filter(Boolean).join(" ") || "Ciudadano Registrado";
+      if (!mapa.has(dni)) {
+        mapa.set(dni, {
+          dni,
+          nombre,
+          correo: s.correoUsuario || s.correo || "---",
+          telefono: s.telefono || "---",
+          expedientes: [s],
+        });
+      } else {
+        mapa.get(dni).expedientes.push(s);
+      }
+    });
+    return Array.from(mapa.values());
+  }, [solicitudes]);
+
+  const listaNegocios = useMemo(() => {
+    const mapa = new Map();
+    solicitudes.forEach((s) => {
+      const ruc = s.ruc || "SIN_RUC";
+      if (!mapa.has(ruc)) {
+        mapa.set(ruc, {
+          ruc,
+          nombreNegocio: s.nombreNegocio || "---",
+          razonSocial: s.razonSocial || "---",
+          giro: s.giro || "General",
+          direccion: s.direccion || "---",
+          expedientes: [s],
+          estadoLicencia: s.estado || s.estadoPago || "Registrado",
+        });
+      } else {
+        mapa.get(ruc).expedientes.push(s);
+      }
+    });
+    return Array.from(mapa.values());
+  }, [solicitudes]);
+
+  const ciudadanosFiltrados = useMemo(() => {
+    if (!busqueda.trim()) return listaCiudadanos;
+    const q = busqueda.toLowerCase().trim();
+    return listaCiudadanos.filter(
+      (c) =>
+        c.dni.toLowerCase().includes(q) ||
+        c.nombre.toLowerCase().includes(q) ||
+        c.correo.toLowerCase().includes(q)
+    );
+  }, [listaCiudadanos, busqueda]);
+
+  const negociosFiltrados = useMemo(() => {
+    if (!busqueda.trim()) return listaNegocios;
+    const q = busqueda.toLowerCase().trim();
+    return listaNegocios.filter(
+      (n) =>
+        n.ruc.toLowerCase().includes(q) ||
+        n.nombreNegocio.toLowerCase().includes(q) ||
+        n.giro.toLowerCase().includes(q) ||
+        n.direccion.toLowerCase().includes(q)
+    );
+  }, [listaNegocios, busqueda]);
+
   return (
     <div className="panel panel-funcionario">
-      {/* HEADER CON IDENTIDAD INSTITUCIONAL */}
-      <div className="funcionario-hero">
+      {/* HEADER INSTITUCIONAL DEL FUNCIONARIO */}
+      <div className="funcionario-hero" style={{ background: "linear-gradient(135deg, #0f766e 0%, #1e293b 100%)" }}>
         <div>
-          <span className="eyebrow">WEB MUNICIPAL — Municipalidad de Trujillo</span>
-          <h1>Panel Funcionario — Sistema de Licencias v1.0</h1>
+          <span className="eyebrow">Municipalidad de Trujillo — Gestión Administrativa</span>
+          <h1>Panel de Consulta y Administración</h1>
           <p>
-            Gestión completa del flujo de expediente: recepción, validación de documentos, asignación de inspecciones y emisión de licencias.
+            Módulo de consulta de expedientes en solo lectura, gestión de datos de ciudadanos, padrón de negocios registrados, reportes y estadísticas municipales.
           </p>
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <div className="hero-card">
             <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Por Decidir
+              Total Expedientes
             </span>
-            <strong style={{ fontSize: "24px" }}>{stats.licenciasAprobadas}</strong>
-            <small>licencias emitidas</small>
+            <strong style={{ fontSize: "24px" }}>{stats.total}</strong>
+            <small>registrados</small>
           </div>
           <button type="button" className="btn-outline-light" onClick={cargarSolicitudes}>
             {cargando ? "Cargando..." : "🔄 Actualizar"}
@@ -1774,47 +1963,27 @@ function PanelFuncionario({ seccion }) {
         </div>
       </div>
 
-      {/* SECTION 10: DASHBOARD FUNCIONARIO (8 METRICS) */}
+      {/* METRICAS ADMINISTRATIVAS */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "12px", marginBottom: "20px" }}>
         <div className="stat-card">
           <span>Total Solicitudes</span>
-          <strong>{stats.total}</strong>
+          <strong style={{ color: "#0f766e" }}>{stats.total}</strong>
           <small>En el sistema</small>
         </div>
         <div className="stat-card">
-          <span>Esperando Pago</span>
-          <strong style={{ color: "#d97706" }}>{stats.esperandoPago}</strong>
-          <small>Pendientes en caja/web</small>
+          <span>Ciudadanos Registrados</span>
+          <strong style={{ color: "#2563eb" }}>{listaCiudadanos.length}</strong>
+          <small>Solicitantes activos</small>
         </div>
         <div className="stat-card">
-          <span>Revisión Documental</span>
-          <strong style={{ color: "#2563eb" }}>{stats.revisionDocumental}</strong>
-          <small>Documentos por verificar</small>
-        </div>
-        <div className="stat-card">
-          <span>Inspecciones Hoy</span>
-          <strong style={{ color: "#7c3aed" }}>{stats.inspeccionesHoy}</strong>
-          <small>Programadas para hoy</small>
-        </div>
-        <div className="stat-card">
-          <span>Inspecciones Pendientes</span>
-          <strong style={{ color: "#0f766e" }}>{stats.inspeccionesPendientes}</strong>
-          <small>Visitas agendadas</small>
+          <span>Negocios Registrados</span>
+          <strong style={{ color: "#7c3aed" }}>{listaNegocios.length}</strong>
+          <small>Padrón de locales</small>
         </div>
         <div className="stat-card">
           <span>Licencias Aprobadas</span>
           <strong style={{ color: "#16a34a" }}>{stats.licenciasAprobadas}</strong>
-          <small>Emitidas</small>
-        </div>
-        <div className="stat-card">
-          <span>Licencias Rechazadas</span>
-          <strong style={{ color: "#dc2626" }}>{stats.licenciasRechazadas}</strong>
-          <small>Observadas/Denegadas</small>
-        </div>
-        <div className="stat-card">
-          <span>Renovaciones Próximas</span>
-          <strong style={{ color: "#e11d48" }}>{stats.renovacionesProximas}</strong>
-          <small>Vencen en 30 días</small>
+          <small>Licencias emitidas</small>
         </div>
       </div>
 
@@ -1822,52 +1991,72 @@ function PanelFuncionario({ seccion }) {
       <div className="tabs-panel">
         <button
           type="button"
-          className={paso === "solicitudes" ? "tab-active" : ""}
+          className={paso === "solicitudes" || paso === "inicio" ? "tab-active" : ""}
           onClick={() => setPaso("solicitudes")}
         >
-          📋 Solicitudes Online & Presenciales
+          📋 Consulta de Expedientes (Solo Lectura)
         </button>
         <button
           type="button"
-          className={paso === "registro-presencial" ? "tab-active" : ""}
-          onClick={() => setPaso("registro-presencial")}
+          className={paso === "asignacion-inspecciones" ? "tab-active" : ""}
+          onClick={() => setPaso("asignacion-inspecciones")}
         >
-          📝 Registrar Solicitud Presencial
+          📅 Asignación de Inspectores ({solicitudesPendientesAsignacion.length})
         </button>
         <button
           type="button"
-          className={paso === "notificaciones" ? "tab-active" : ""}
-          onClick={() => setPaso("notificaciones")}
+          className={paso === "gestion-inspectores" ? "tab-active" : ""}
+          onClick={() => setPaso("gestion-inspectores")}
         >
-          🔔 Notificaciones ({solicitudes.filter(s => s.notificaciones?.some(n => !n.leida)).length})
+          💼 Gestión de Inspectores ({INSPECTORES_DEFAULT.length})
+        </button>
+        <button
+          type="button"
+          className={paso === "gestion-ciudadanos" ? "tab-active" : ""}
+          onClick={() => setPaso("gestion-ciudadanos")}
+        >
+          👤 Gestión de Ciudadanos ({listaCiudadanos.length})
+        </button>
+        <button
+          type="button"
+          className={paso === "gestion-negocios" ? "tab-active" : ""}
+          onClick={() => setPaso("gestion-negocios")}
+        >
+          🏢 Gestión de Negocios ({listaNegocios.length})
+        </button>
+        <button
+          type="button"
+          className={paso === "reportes" ? "tab-active" : ""}
+          onClick={() => setPaso("reportes")}
+        >
+          📊 Reportes Municipales
+        </button>
+        <button
+          type="button"
+          className={paso === "estadisticas" ? "tab-active" : ""}
+          onClick={() => setPaso("estadisticas")}
+        >
+          📈 Estadísticas y Métricas
         </button>
       </div>
 
-      {/* SECCIÓN: REGISTRO PRESENCIAL */}
-      {paso === "registro-presencial" && (
-        <FormularioSolicitudPresencial
-          onSolicitudCreada={cargarSolicitudes}
-          usuarioFuncionario={usuario}
-        />
-      )}
-
-      {/* SECCIÓN: LISTADO DE SOLICITUDES */}
-      {paso === "solicitudes" && (
+      {/* SECCIÓN 1: CONSULTA DE EXPEDIENTES (SOLO LECTURA) */}
+      {(paso === "solicitudes" || paso === "inicio") && (
         <section className="section-card">
           <div className="section-header">
             <div>
-              <h2>Gestión de Expedientes y Licencias</h2>
-              <p>Revisa solicitudes, valida documentos, asigna inspectores y emite licencias comerciales.</p>
+              <h2>Consulta General de Expedientes</h2>
+              <p>Visualización de estado, historial y documentos de expedientes (Modo Solo Lectura).</p>
             </div>
           </div>
 
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "16px" }}>
             <input
               type="text"
-              placeholder="Buscar por código de expediente, RUC, negocio o dirección..."
+              placeholder="🔍 Buscar por código (EXP-XXXX), DNI, RUC, negocio o ciudadano..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              style={{ flex: 1, minWidth: "200px", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+              style={{ flex: 1, minWidth: "220px", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
             />
             <select
               value={filtroEstado}
@@ -1891,7 +2080,7 @@ function PanelFuncionario({ seccion }) {
             <div className="empty-state">
               <div style={{ fontSize: "36px", marginBottom: "10px" }}>📋</div>
               <h3>No se encontraron expedientes</h3>
-              <p>No hay solicitudes que coincidan con los filtros seleccionados.</p>
+              <p>No hay solicitudes que coincidan con la búsqueda o filtro.</p>
             </div>
           ) : (
             <div className="tabla-container">
@@ -1899,89 +2088,46 @@ function PanelFuncionario({ seccion }) {
                 <thead>
                   <tr>
                     <th>Expediente</th>
-                    <th>Establecimiento</th>
-                    <th>Canal</th>
-                    <th>Pago</th>
+                    <th>Establecimiento / RUC</th>
+                    <th>Ciudadano / DNI</th>
+                    <th>Estado Pago</th>
                     <th>Inspección</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
+                    <th>Estado General</th>
+                    <th>Acción</th>
                   </tr>
                 </thead>
                 <tbody>
                   {solicitudesFiltradas.map((s) => {
+                    const nombreCiudadano =
+                      [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante].filter(Boolean).join(" ") ||
+                      "Solicitante";
+
                     return (
                       <tr key={s.id}>
                         <td>
                           <strong>EXP-{s.id}</strong>
-                          <small>RUC: {s.ruc || "---"}</small>
-                          <small>{s.fecha || "---"}</small>
+                          <small style={{ display: "block", color: "#64748b" }}>{s.fecha || "---"}</small>
                         </td>
                         <td>
                           <strong>{s.nombreNegocio || "---"}</strong>
-                          <small>{s.direccion || "---"}</small>
+                          <small style={{ display: "block", color: "#475569" }}>RUC: {s.ruc || "---"}</small>
                         </td>
                         <td>
-                          <span className={`badge ${s.canalRegistro === "presencial" ? "info" : "ok"}`}>
-                            {s.canalRegistro === "presencial" ? "Presencial" : "Online"}
-                          </span>
+                          <strong>{nombreCiudadano}</strong>
+                          <small style={{ display: "block", color: "#64748b" }}>DNI: {s.dniSolicitante || s.dni || "---"}</small>
                         </td>
                         <td>{badgePago(s)}</td>
                         <td>{badgeInspeccion(s)}</td>
                         <td>{badgeEstado(s)}</td>
                         <td>
-                          <div className="action-stack" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                            <button type="button" className="btn-info" onClick={() => setSolicitudDetalle(s)}>
-                              👁 Detalle
-                            </button>
-
-                            <button
-                              type="button"
-                              className="btn-primary"
-                              onClick={() => setSolicitudRevisarDocs(s)}
-                              style={{ background: "#2563eb", color: "white" }}
-                            >
-                              📑 Revisar Docs
-                            </button>
-
-                            {puedeAgendar(s) && (
-                              <button
-                                type="button"
-                                className="btn-primary"
-                                onClick={() => abrirAgendarModal(s)}
-                                style={{ background: "#0f766e", color: "white" }}
-                              >
-                                🔍 Asignar Inspección
-                              </button>
-                            )}
-
-                            {puedeReprogramar(s) && (
-                              <button type="button" className="btn-warning" onClick={() => abrirAgendarModal(s)}>
-                                📅 Reprogramar
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              className="btn-ok"
-                              onClick={() => setModalAprobar(s)}
-                              disabled={!puedeAprobar(s)}
-                            >
-                              ✅ Aprobar Licencia
-                            </button>
-
-                            {puedeRechazar(s) && (
-                              <button
-                                type="button"
-                                className="btn-danger"
-                                onClick={() => {
-                                  setModalRechazar(s);
-                                  setMotivoRechazo("");
-                                }}
-                              >
-                                ❌ Rechazar
-                              </button>
-                            )}
-                          </div>
+                          <button
+                            type="button"
+                            className="btn-info"
+                            onClick={() => setSolicitudDetalle(s)}
+                            style={{ background: "#0f766e", color: "white", padding: "8px 14px", borderRadius: "6px" }}
+                          >
+                            👁 Consultar Detalle
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1993,78 +2139,506 @@ function PanelFuncionario({ seccion }) {
         </section>
       )}
 
-      {/* SECCIÓN: NOTIFICACIONES */}
-      {paso === "notificaciones" && (
+      {/* SECCIÓN NUEVA: ASIGNACIÓN MANUAL DE INSPECTORES Y CONTROL DE CUPOS (MÁX 4/DÍA) */}
+      {paso === "asignacion-inspecciones" && (
         <section className="section-card">
           <div className="section-header">
             <div>
-              <h2>Notificaciones Emitidas a los Expedientes</h2>
-              <p>Seguimiento de mensajes enviados a los ciudadanos y solicitantes.</p>
+              <h2>📅 Asignación Manual de Inspecciones y Control de Cupos</h2>
+              <p>Asigne inspecciones a los inspectores municipales respetando el límite máximo de 4 inspecciones por día.</p>
             </div>
           </div>
 
-          {(() => {
-            const conNotificaciones = solicitudes.filter(
-              (s) => s.notificaciones && s.notificaciones.length > 0
-            );
+          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "14px 18px", borderRadius: "10px", marginBottom: "20px" }}>
+            <div style={{ fontWeight: "bold", color: "#166534", fontSize: "14.5px", marginBottom: "4px" }}>
+              ℹ️ Normativa Municipal de Inspecciones:
+            </div>
+            <p style={{ margin: 0, color: "#15803d", fontSize: "13.5px" }}>
+              Las solicitudes confirmadas en caja requieren asignación explícita de inspector. Cada inspector cuenta con un máximo estricto de <strong>4 inspecciones diarias</strong>. Si un inspector ya tiene 4 inspecciones asignadas para una fecha, la plataforma bloqueará automáticamente su asignación para dicho día.
+            </p>
+          </div>
 
-            if (conNotificaciones.length === 0) {
-              return (
-                <div className="empty-state">
-                  <div style={{ fontSize: "36px", marginBottom: "10px" }}>🔔</div>
-                  <h3>No hay notificaciones emitidas aún</h3>
-                  <p>Aparecerán cuando se notifique a los solicitantes.</p>
-                </div>
-              );
-            }
+          {/* SUB-SECCIÓN 1: SOLICITUDES PENDIENTES DE ASIGNACIÓN */}
+          <div style={{ marginBottom: "30px" }}>
+            <h3 style={{ color: "#0f766e", fontSize: "17px", borderBottom: "2px solid #ccfbf1", paddingBottom: "8px", marginBottom: "14px" }}>
+              📋 Solicitudes Pendientes de Asignación de Inspector ({solicitudesPendientesAsignacion.length})
+            </h3>
 
-            return (
+            {solicitudesPendientesAsignacion.length === 0 ? (
+              <div className="empty-state" style={{ padding: "24px" }}>
+                <div style={{ fontSize: "36px", marginBottom: "8px" }}>✅</div>
+                <h4>¡Todo al día! No hay solicitudes pendientes de asignación.</h4>
+                <p style={{ color: "#64748b", fontSize: "13.5px" }}>Todas las solicitudes pagadas cuentan con un inspector asignado.</p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="tabla-solicitudes">
+                  <thead>
+                    <tr>
+                      <th>Expediente</th>
+                      <th>Establecimiento</th>
+                      <th>Solicitante (DNI)</th>
+                      <th>Giro Comercial</th>
+                      <th>Fecha Pago</th>
+                      <th>Estado</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {solicitudesPendientesAsignacion.map((sol) => (
+                      <tr key={sol.id}>
+                        <td><strong>EXP-{sol.id}</strong></td>
+                        <td>
+                          <div><strong>{sol.nombreNegocio}</strong></div>
+                          <small style={{ color: "#64748b" }}>RUC: {sol.ruc}</small>
+                        </td>
+                        <td>
+                          <div>{sol.nombresSolicitante} {sol.apellidosSolicitante}</div>
+                          <small style={{ color: "#64748b" }}>DNI: {sol.dniSolicitante || sol.dni}</small>
+                        </td>
+                        <td>{sol.giro || "General"}</td>
+                        <td><small>{sol.fechaPago || "Confirmado"}</small></td>
+                        <td><span className="badge warning">Pendiente de Asignación</span></td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSolicitudAsignarModal(sol);
+                              setFechaAsignacionModal(formatearFechaLocal(new Date()));
+                              setInspectorElegidoModal(null);
+                            }}
+                            style={{
+                              background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)",
+                              color: "white",
+                              border: "none",
+                              padding: "8px 14px",
+                              borderRadius: "8px",
+                              fontWeight: "bold",
+                              cursor: "pointer",
+                              fontSize: "13px"
+                            }}
+                          >
+                            📅 Asignar Inspector
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* SUB-SECCIÓN 2: CALENDARIO Y AGENDA DE CUPOS POR INSPECTOR POR DÍA */}
+          <div style={{ marginBottom: "30px", background: "#f8fafc", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
               <div>
-                {conNotificaciones.map((s) => (
+                <h3 style={{ margin: 0, color: "#1e293b", fontSize: "17px" }}>
+                  📆 Agenda y Control de Cupos por Inspector
+                </h3>
+                <small style={{ color: "#64748b" }}>Consulte la carga de trabajo y disponibilidad de cada inspector por fecha seleccionada.</small>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <label style={{ fontWeight: "bold", fontSize: "13.5px", color: "#334155" }}>Seleccionar Fecha:</label>
+                <input
+                  type="text"
+                  placeholder="DD/MM/YYYY"
+                  value={fechaAgendaConsulta}
+                  onChange={(e) => setFechaAgendaConsulta(e.target.value)}
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", width: "130px", textAlign: "center", fontWeight: "bold" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setFechaAgendaConsulta(formatearFechaLocal(new Date()))}
+                  style={{ padding: "8px 12px", background: "#e2e8f0", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "12.5px", fontWeight: "600" }}
+                >
+                  Hoy
+                </button>
+              </div>
+            </div>
+
+            {/* GRID DE CARGA DE INSPECTORES */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
+              {INSPECTORES_DEFAULT.map((insp) => {
+                const asignaciones = obtenerConteoAsignaciones(insp.uid, fechaAgendaConsulta);
+                const porcentaje = Math.min((asignaciones / 4) * 100, 100);
+                const estaLleno = asignaciones >= 4;
+
+                return (
                   <div
-                    key={s.id}
+                    key={insp.uid}
                     style={{
+                      background: "white",
                       padding: "16px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "14px",
-                      marginBottom: "12px",
-                      background: "#f8fafc",
+                      borderRadius: "10px",
+                      border: estaLleno ? "2px solid #fca5a5" : "1px solid #cbd5e1",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.03)"
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                       <div>
-                        <strong>{s.nombreNegocio}</strong>
-                        <small style={{ marginLeft: "8px" }}>EXP-{s.id}</small>
+                        <strong style={{ fontSize: "14.5px", color: "#1e293b", display: "block" }}>{insp.nombre}</strong>
+                        <small style={{ color: "#64748b" }}>{insp.cargo}</small>
                       </div>
-                      <span className={`badge ${s.canalRegistro === "presencial" ? "info" : "ok"}`}>
-                        {s.canalRegistro === "presencial" ? "Presencial" : "Online"}
-                      </span>
-                    </div>
-                    {s.notificaciones.map((n, i) => (
-                      <div
-                        key={i}
+                      <span
                         style={{
-                          padding: "10px",
-                          background: "white",
-                          borderRadius: "10px",
-                          border: "1px solid #e2e8f0",
-                          marginTop: "8px",
+                          padding: "4px 8px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "bold",
+                          background: estaLleno ? "#fef2f2" : "#f0fdf4",
+                          color: estaLleno ? "#dc2626" : "#166534",
+                          border: estaLleno ? "1px solid #fecaca" : "1px solid #bbf7d0"
                         }}
                       >
-                        <strong style={{ color: "#1f3b57", fontSize: "14px" }}>
-                          {n.icono || "🔔"} {n.titulo}
-                        </strong>
-                        <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#475569" }}>
-                          {n.mensaje || n.descripcion}
-                        </p>
-                        <small style={{ color: "#94a3b8" }}>{n.fecha || n.fecha_hora}</small>
-                      </div>
-                    ))}
+                        {estaLleno ? "🔴 4/4 Lleno" : `🟢 ${asignaciones}/4 Cupos (${4 - asignaciones} disp.)`}
+                      </span>
+                    </div>
+
+                    {/* BARRA DE PROGRESO DE CUPOS */}
+                    <div style={{ background: "#e2e8f0", height: "8px", borderRadius: "4px", overflow: "hidden", marginBottom: "10px" }}>
+                      <div
+                        style={{
+                          width: `${porcentaje}%`,
+                          height: "100%",
+                          background: estaLleno ? "#dc2626" : asignaciones === 3 ? "#d97706" : "#16a34a",
+                          transition: "width 0.3s ease"
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ fontSize: "12.5px", color: "#475569" }}>
+                      <strong>Asignaciones para el {fechaAgendaConsulta}:</strong>
+                      {solicitudes.filter(s => (s.inspectorUid === insp.uid || s.inspectorNombre === insp.nombre) && s.fechaVisitaInspector === fechaAgendaConsulta).length === 0 ? (
+                        <p style={{ margin: "4px 0 0", color: "#94a3b8", italic: "true" }}>Sin visitas programadas</p>
+                      ) : (
+                        <ul style={{ margin: "6px 0 0", paddingLeft: "16px" }}>
+                          {solicitudes
+                            .filter(s => (s.inspectorUid === insp.uid || s.inspectorNombre === insp.nombre) && s.fechaVisitaInspector === fechaAgendaConsulta)
+                            .map(s => (
+                              <li key={s.id} style={{ marginBottom: "2px" }}>
+                                <strong>EXP-{s.id}</strong> — {s.nombreNegocio} ({s.horaVisitaLabel || s.horaVisitaInspector || "Por confirmar"})
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
-                ))}
+                );
+              })}
+            </div>
+          </div>
+
+          {/* SUB-SECCIÓN 3: REASIGNACIÓN DE INSPECTORES YA PROGRAMADOS */}
+          <div>
+            <h3 style={{ color: "#334155", fontSize: "16px", marginBottom: "12px" }}>
+              🔄 Expedientes Programados (Opción de Reasignación de Inspector)
+            </h3>
+
+            {solicitudesAsignadas.length === 0 ? (
+              <p style={{ color: "#64748b", fontSize: "13.5px" }}>No hay inspecciones programadas actualmente.</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="tabla-solicitudes">
+                  <thead>
+                    <tr>
+                      <th>Expediente</th>
+                      <th>Establecimiento</th>
+                      <th>Inspector Asignado</th>
+                      <th>Fecha Programada</th>
+                      <th>Horario</th>
+                      <th>Estado</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {solicitudesAsignadas.map((sol) => (
+                      <tr key={sol.id}>
+                        <td><strong>EXP-{sol.id}</strong></td>
+                        <td>{sol.nombreNegocio}</td>
+                        <td>
+                          <span style={{ color: "#7c3aed", fontWeight: "bold" }}>👤 {sol.inspectorNombre || "Inspector Asignado"}</span>
+                        </td>
+                        <td><strong>{sol.fechaVisitaInspector}</strong></td>
+                        <td><small>{sol.horaVisitaLabel || sol.horaVisitaInspector || "Definido"}</small></td>
+                        <td><span className="badge success">{sol.estado}</span></td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSolicitudAsignarModal(sol);
+                              setFechaAsignacionModal(sol.fechaVisitaInspector || formatearFechaLocal(new Date()));
+                              setInspectorElegidoModal(null);
+                            }}
+                            style={{
+                              background: "#f59e0b",
+                              color: "white",
+                              border: "none",
+                              padding: "6px 12px",
+                              borderRadius: "6px",
+                              fontWeight: "bold",
+                              cursor: "pointer",
+                              fontSize: "12.5px"
+                            }}
+                          >
+                            🔄 Reasignar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            );
-          })()}
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* SECCIÓN NUEVA: GESTIÓN DE INSPECTORES */}
+      {paso === "gestion-inspectores" && (
+        <section className="section-card">
+          <div className="section-header">
+            <div>
+              <h2>💼 Catálogo y Gestión de Inspectores Municipales</h2>
+              <p>Padrón del cuerpo técnico de inspectores, cargos, correos institucionales y estado de disponibilidad.</p>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginTop: "16px" }}>
+            {INSPECTORES_DEFAULT.map((insp) => {
+              const asignacionesHoy = obtenerConteoAsignaciones(insp.uid, formatearFechaLocal(new Date()));
+              const estaLleno = asignacionesHoy >= 4;
+
+              return (
+                <div
+                  key={insp.uid}
+                  style={{
+                    background: "white",
+                    padding: "20px",
+                    borderRadius: "12px",
+                    border: "1px solid #cbd5e1",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.04)"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "12px" }}>
+                    <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "#0f766e", color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "22px", fontWeight: "bold" }}>
+                      🔍
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, color: "#1e293b", fontSize: "15px" }}>{insp.nombre}</h4>
+                      <span style={{ fontSize: "12.5px", color: "#0f766e", fontWeight: "bold" }}>{insp.cargo}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: "13px", color: "#475569", marginBottom: "12px" }}>
+                    <p style={{ margin: "3px 0" }}><strong>UID:</strong> {insp.uid}</p>
+                    <p style={{ margin: "3px 0" }}><strong>Correo:</strong> {insp.correo}</p>
+                    <p style={{ margin: "3px 0" }}><strong>Límite Diario:</strong> 4 inspecciones por día</p>
+                  </div>
+
+                  <div style={{ padding: "10px 14px", borderRadius: "8px", background: estaLleno ? "#fef2f2" : "#f0fdf4", border: estaLleno ? "1px solid #fecaca" : "1px solid #bbf7d0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <small style={{ fontWeight: "bold", color: estaLleno ? "#dc2626" : "#166534" }}>Carga para Hoy:</small>
+                    <span style={{ fontSize: "12.5px", fontWeight: "bold", color: estaLleno ? "#dc2626" : "#166534" }}>
+                      {estaLleno ? "🔴 4/4 Lleno" : `🟢 ${asignacionesHoy}/4 Activas`}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* SECCIÓN 2: GESTIÓN DE CIUDADANOS */}
+      {paso === "gestion-ciudadanos" && (
+        <section className="section-card">
+          <div className="section-header">
+            <div>
+              <h2>Padrón y Gestión de Ciudadanos</h2>
+              <p>Consulta de solicitantes registrados, DNI, datos de contacto y trámites vinculados.</p>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "16px" }}>
+            <input
+              type="text"
+              placeholder="🔍 Buscar ciudadano por DNI, nombres, apellidos o correo electrónico..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+            />
+          </div>
+
+          {ciudadanosFiltrados.length === 0 ? (
+            <div className="empty-state">
+              <div style={{ fontSize: "36px", marginBottom: "10px" }}>👤</div>
+              <h3>No se encontraron ciudadanos</h3>
+              <p>No hay solicitantes registrados que coincidan con la búsqueda.</p>
+            </div>
+          ) : (
+            <div className="tabla-container">
+              <table className="modern-table">
+                <thead>
+                  <tr>
+                    <th>DNI / Identificación</th>
+                    <th>Nombres y Apellidos</th>
+                    <th>Correo Electrónico</th>
+                    <th>Teléfono</th>
+                    <th>Solicitudes Realizadas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ciudadanosFiltrados.map((c) => (
+                    <tr key={c.dni}>
+                      <td><strong>{c.dni}</strong></td>
+                      <td><strong>{c.nombre}</strong></td>
+                      <td>{c.correo}</td>
+                      <td>{c.telefono}</td>
+                      <td>
+                        <span className="badge info">{c.expedientes.length} expediente(s)</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* SECCIÓN 3: GESTIÓN DE NEGOCIOS */}
+      {paso === "gestion-negocios" && (
+        <section className="section-card">
+          <div className="section-header">
+            <div>
+              <h2>Padrón de Establecimientos Comercial</h2>
+              <p>Listado de negocios y empresas registradas con su estado actual de licencia.</p>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "16px" }}>
+            <input
+              type="text"
+              placeholder="🔍 Buscar negocio por RUC, nombre comercial, giro o dirección..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+            />
+          </div>
+
+          {negociosFiltrados.length === 0 ? (
+            <div className="empty-state">
+              <div style={{ fontSize: "36px", marginBottom: "10px" }}>🏢</div>
+              <h3>No se encontraron negocios</h3>
+              <p>No hay establecimientos que coincidan con el filtro.</p>
+            </div>
+          ) : (
+            <div className="tabla-container">
+              <table className="modern-table">
+                <thead>
+                  <tr>
+                    <th>RUC</th>
+                    <th>Nombre Comercial / Razón Social</th>
+                    <th>Giro Comercial</th>
+                    <th>Dirección</th>
+                    <th>Historial de Trámites</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {negociosFiltrados.map((n) => (
+                    <tr key={n.ruc}>
+                      <td><strong>{n.ruc}</strong></td>
+                      <td>
+                        <strong>{n.nombreNegocio}</strong>
+                        {n.razonSocial && n.razonSocial !== n.nombreNegocio && (
+                          <small style={{ display: "block", color: "#64748b" }}>{n.razonSocial}</small>
+                        )}
+                      </td>
+                      <td><span className="badge neutral">{n.giro}</span></td>
+                      <td>{n.direccion}</td>
+                      <td>
+                        <span className="badge ok">{n.expedientes.length} trámite(s)</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* SECCIÓN 4: REPORTES MUNICIPALES */}
+      {paso === "reportes" && (
+        <section className="section-card">
+          <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h2>Reportes Consolidados de Licencias</h2>
+              <p>Resumen gerencial de trámites procesados, estado de atención y recaudación.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              style={{ padding: "8px 16px", background: "#0f766e", color: "white", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer" }}
+            >
+              🖨️ Imprimir Reporte
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginTop: "16px" }}>
+            <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
+              <h3 style={{ margin: "0 0 10px", fontSize: "15px", color: "#1e293b" }}>📊 Resumen General de Trámites</h3>
+              <p style={{ margin: "4px 0", fontSize: "13.5px" }}><strong>Total Expedientes:</strong> {stats.total}</p>
+              <p style={{ margin: "4px 0", fontSize: "13.5px" }}><strong>Licencias Emitidas:</strong> {stats.licenciasAprobadas}</p>
+              <p style={{ margin: "4px 0", fontSize: "13.5px" }}><strong>Solicitudes Rechazadas/Observadas:</strong> {stats.licenciasRechazadas}</p>
+              <p style={{ margin: "4px 0", fontSize: "13.5px" }}><strong>En Inspección:</strong> {stats.inspeccionesPendientes}</p>
+            </div>
+
+            <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
+              <h3 style={{ margin: "0 0 10px", fontSize: "15px", color: "#1e293b" }}>👥 Padrón Administrativo</h3>
+              <p style={{ margin: "4px 0", fontSize: "13.5px" }}><strong>Ciudadanos Registrados:</strong> {listaCiudadanos.length}</p>
+              <p style={{ margin: "4px 0", fontSize: "13.5px" }}><strong>Establecimientos Registrados:</strong> {listaNegocios.length}</p>
+              <p style={{ margin: "4px 0", fontSize: "13.5px" }}><strong>Solicitudes Presenciales:</strong> {solicitudes.filter(s => s.canalRegistro === "presencial").length}</p>
+              <p style={{ margin: "4px 0", fontSize: "13.5px" }}><strong>Solicitudes Online:</strong> {solicitudes.filter(s => s.canalRegistro !== "presencial").length}</p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* SECCIÓN 5: ESTADÍSTICAS Y MÉTRICAS */}
+      {paso === "estadisticas" && (
+        <section className="section-card">
+          <div className="section-header">
+            <div>
+              <h2>Estadísticas e Indicadores Municipales</h2>
+              <p>Métricas operativas del flujo de atención y emisión de licencias comerciales.</p>
+            </div>
+          </div>
+
+          <div className="stats-grid" style={{ marginTop: "16px" }}>
+            <div className="stat-card">
+              <span>Porcentaje de Aprobación</span>
+              <strong style={{ color: "#16a34a" }}>
+                {stats.total > 0 ? ((stats.licenciasAprobadas / stats.total) * 100).toFixed(1) : 0}%
+              </strong>
+              <small>De expedientes procesados</small>
+            </div>
+            <div className="stat-card">
+              <span>Canal Digital</span>
+              <strong style={{ color: "#2563eb" }}>
+                {stats.total > 0 ? ((solicitudes.filter(s => s.canalRegistro !== "presencial").length / stats.total) * 100).toFixed(1) : 0}%
+              </strong>
+              <small>Trámites online</small>
+            </div>
+            <div className="stat-card">
+              <span>Canal Presencial</span>
+              <strong style={{ color: "#d97706" }}>
+                {stats.total > 0 ? ((solicitudes.filter(s => s.canalRegistro === "presencial").length / stats.total) * 100).toFixed(1) : 0}%
+              </strong>
+              <small>Atención en ventanilla</small>
+            </div>
+          </div>
         </section>
       )}
 
@@ -2338,6 +2912,164 @@ function PanelFuncionario({ seccion }) {
               >
                 {procesando ? "Asignando..." : "🚀 Asignar Inspección"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ASIGNACIÓN MANUAL DE INSPECTOR CON LÍMITE DE 4 CUPOS POR DÍA */}
+      {solicitudAsignarModal && (
+        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.7)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999 }}>
+          <div className="modal-content" style={{ maxWidth: "680px", width: "90%", background: "white", borderRadius: "14px", overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" }}>
+            <div className="modal-header" style={{ background: "linear-gradient(135deg, #0f766e 0%, #1e293b 100%)", color: "white", padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0, fontSize: "18px" }}>
+                📅 Asignación Manual de Inspector — EXP-{solicitudAsignarModal.id}
+              </h3>
+              <button
+                type="button"
+                className="btn-cerrar"
+                onClick={() => setSolicitudAsignarModal(null)}
+                style={{ color: "white", background: "none", border: "none", fontSize: "20px", cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: "24px" }}>
+              {/* DATOS DE LA SOLICITUD */}
+              <div style={{ background: "#f8fafc", padding: "14px 18px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "13.5px" }}>
+                  <div><strong>Establecimiento:</strong> {solicitudAsignarModal.nombreNegocio}</div>
+                  <div><strong>RUC:</strong> {solicitudAsignarModal.ruc}</div>
+                  <div><strong>Solicitante:</strong> {solicitudAsignarModal.nombresSolicitante} {solicitudAsignarModal.apellidosSolicitante}</div>
+                  <div><strong>DNI:</strong> {solicitudAsignarModal.dniSolicitante || solicitudAsignarModal.dni}</div>
+                  <div><strong>Giro Comercial:</strong> {solicitudAsignarModal.giro || "General"}</div>
+                  <div><strong>Dirección:</strong> {solicitudAsignarModal.direccion}</div>
+                </div>
+              </div>
+
+              {/* PASO 1: SELECCIONAR FECHA */}
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#1e293b", marginBottom: "6px" }}>
+                  1. Fecha de Inspección Técnica (DD/MM/YYYY):
+                </label>
+                <input
+                  type="text"
+                  placeholder="DD/MM/YYYY"
+                  value={fechaAsignacionModal}
+                  onChange={(e) => setFechaAsignacionModal(e.target.value)}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold" }}
+                />
+              </div>
+
+              {/* PASO 2: SELECCIONAR INSPECTOR (DISPONIBILIDAD CON LÍMITE DE 4/DÍA) */}
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#1e293b", marginBottom: "8px" }}>
+                  2. Seleccionar Inspector (Verifique Cupos para el {fechaAsignacionModal}):
+                </label>
+
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {INSPECTORES_DEFAULT.map((insp) => {
+                    const cuposUsados = obtenerConteoAsignaciones(insp.uid, fechaAsignacionModal);
+                    const estaLleno = cuposUsados >= 4;
+                    const esSeleccionado = inspectorElegidoModal?.uid === insp.uid;
+
+                    return (
+                      <div
+                        key={insp.uid}
+                        onClick={() => {
+                          if (estaLleno) {
+                            alert(`⚠️ El inspector ${insp.nombre} ha completado el máximo de 4 inspecciones para el día ${fechaAsignacionModal}. Elija otro inspector.`);
+                            return;
+                          }
+                          setInspectorElegidoModal(insp);
+                        }}
+                        style={{
+                          display: "flex",
+                          justify: "space-between",
+                          alignItems: "center",
+                          padding: "12px 16px",
+                          borderRadius: "10px",
+                          border: esSeleccionado ? "2px solid #0f766e" : estaLleno ? "1px solid #fca5a5" : "1px solid #cbd5e1",
+                          background: esSeleccionado ? "#f0fdf4" : estaLleno ? "#fef2f2" : "white",
+                          cursor: estaLleno ? "not-allowed" : "pointer",
+                          opacity: estaLleno ? 0.7 : 1,
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: "bold", color: esSeleccionado ? "#0f766e" : "#1e293b", fontSize: "14px" }}>
+                            {insp.nombre} {esSeleccionado && "✓ (Seleccionado)"}
+                          </div>
+                          <small style={{ color: "#64748b" }}>{insp.cargo} — {insp.correo}</small>
+                        </div>
+
+                        <div>
+                          <span
+                            style={{
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "bold",
+                              background: estaLleno ? "#fee2e2" : "#dcfce7",
+                              color: estaLleno ? "#991b1b" : "#166534",
+                              border: estaLleno ? "1px solid #fca5a5" : "1px solid #86efac"
+                            }}
+                          >
+                            {estaLleno ? "🔴 4/4 Lleno (Sin cupos)" : `🟢 ${cuposUsados}/4 Cupos (${4 - cuposUsados} disp.)`}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* PASO 3: SELECCIONAR HORARIO */}
+              <div style={{ marginBottom: "24px" }}>
+                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#1e293b", marginBottom: "6px" }}>
+                  3. Seleccionar Rango Horario:
+                </label>
+                <select
+                  value={slotAsignarModal}
+                  onChange={(e) => setSlotAsignarModal(e.target.value)}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                >
+                  {TIME_SLOTS.map((slot) => (
+                    <option key={slot.value} value={slot.value}>
+                      {slot.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* BOTONES DE ACCIÓN */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+                <button
+                  type="button"
+                  onClick={() => setSolicitudAsignarModal(null)}
+                  style={{ padding: "10px 18px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "white", cursor: "pointer", fontWeight: "bold" }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={ejecutarAsignacionInspector}
+                  disabled={procesando || !inspectorElegidoModal || !fechaAsignacionModal}
+                  style={{
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)",
+                    color: "white",
+                    fontWeight: "bold",
+                    cursor: (!inspectorElegidoModal || procesando) ? "not-allowed" : "pointer",
+                    opacity: (!inspectorElegidoModal || procesando) ? 0.6 : 1
+                  }}
+                >
+                  {procesando ? "Procesando..." : "🚀 Confirmar Asignación Oficial"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -56,24 +56,56 @@ class ErrorBoundary extends Component {
             <h2 style={{ color: "#1f3b57", marginBottom: "8px", fontSize: "20px" }}>
               Ocurrió un error inesperado
             </h2>
-            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "16px", lineHeight: 1.6 }}>
               El sistema encontró un problema al cargar. Por favor, intenta recargar la página.
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                background: "#1f3b57",
-                color: "white",
-                border: "none",
-                padding: "12px 28px",
-                borderRadius: "10px",
-                fontSize: "14px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Recargar página
-            </button>
+
+            {this.state.error && (
+              <div style={{ background: "#fef2f2", color: "#b91c1c", padding: "12px", borderRadius: "8px", fontSize: "12px", textAlign: "left", marginBottom: "20px", overflowX: "auto", fontFamily: "monospace" }}>
+                <strong>Detalle del error:</strong>
+                <pre style={{ margin: "6px 0 0", whitespace: "pre-wrap" }}>{this.state.error.toString()}</pre>
+                {this.state.error.stack && (
+                  <pre style={{ margin: "6px 0 0", fontSize: "10px", opacity: 0.8, whitespace: "pre-wrap" }}>{this.state.error.stack}</pre>
+                )}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+              <button
+                onClick={() => window.location.reload()}
+                style={{
+                  background: "#1f3b57",
+                  color: "white",
+                  border: "none",
+                  padding: "12px 24px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                🔄 Recargar página
+              </button>
+
+              <button
+                onClick={() => {
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  window.location.href = "/";
+                }}
+                style={{
+                  background: "#dc2626",
+                  color: "white",
+                  border: "none",
+                  padding: "12px 24px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                🧹 Limpiar y Restablecer
+              </button>
+            </div>
           </div>
         </div>
       );

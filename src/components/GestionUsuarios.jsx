@@ -32,11 +32,11 @@ function GestionUsuarios({ usuarios, onRecargar, solicitudes = [] }) {
     cargo: "",
     areaTrabajo: "Gerencia de Desarrollo Económico Local",
     zonaAsignada: "Sector 1 - Centro Histórico",
-    rol: "funcionario",
+    rol: "cajero",
     password: "",
   });
 
-  const rolesInternos = ["funcionario", "inspector", "cajero", "administrador", "negocio"];
+  const rolesInternos = ["cajero", "inspector", "administrador", "negocio"];
 
   const usuariosFiltrados = usuarios.filter((u) => {
     if (filtroRol !== "todos" && u.rol !== filtroRol) return false;
