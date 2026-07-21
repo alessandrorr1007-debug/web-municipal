@@ -21,7 +21,37 @@ const generarIdExpediente = () => {
   return "EXP-" + Date.now().toString().slice(-8);
 };
 
+export const sanitizarSolicitudPayload = (solicitud) => {
+  if (!solicitud) return solicitud;
+  const copia = JSON.parse(JSON.stringify(solicitud));
+
+  const limpiarLista = (arr) => {
+    if (!Array.isArray(arr)) return arr;
+    return arr.map((pdf) => {
+      if (!pdf) return pdf;
+      const url = pdf.archivoUrl || pdf.url || "";
+      if (typeof url === "string" && url.startsWith("data:") && url.length > 200000) {
+        const previewUrl = url.slice(0, 40000) + "...[PDF_DOCUMENTO_ADJUNTO]";
+        return {
+          ...pdf,
+          archivoUrl: previewUrl,
+          url: previewUrl,
+          esTruncado: true,
+          tamanoEstimado: `${(url.length / 1024 / 1024).toFixed(2)} MB`,
+        };
+      }
+      return pdf;
+    });
+  };
+
+  if (copia.archivosPdf) copia.archivosPdf = limpiarLista(copia.archivosPdf);
+  if (copia.archivosPresenciales) copia.archivosPresenciales = limpiarLista(copia.archivosPresenciales);
+
+  return copia;
+};
+
 export const guardarSolicitud = async (solicitud) => {
+  const solicitudLimpia = sanitizarSolicitudPayload(solicitud);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -30,33 +60,49 @@ export const guardarSolicitud = async (solicitud) => {
     const response = await fetch(`${API_URL}/api/solicitudes`, {
       method: "POST",
       headers,
-      body: JSON.stringify(solicitud),
+      body: JSON.stringify(solicitudLimpia),
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
     const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error(`El servidor no devolvió una respuesta JSON válida (código HTTP: ${response.status}).`);
+    if (response.ok && contentType && contentType.includes("application/json")) {
+      const data = await response.json();
+      return {
+        id: data.idSolicitud || solicitudLimpia.id,
+        ...solicitudLimpia,
+      };
     }
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || data.message || "Error al guardar la solicitud.");
-    }
+    // Fallback: Guardado directo en Firestore si el backend responde con error de status o no-JSON (Ej. 413)
+    console.warn(`[guardarSolicitud] Servidor devolvió HTTP ${response.status}. Utilizando respaldo directo a Firestore...`);
+    const docId = String(solicitudLimpia.id || Date.now().toString().slice(-6));
+    await setDoc(doc(db, COLLECTION_NAME, docId), {
+      ...solicitudLimpia,
+      creadoEn: serverTimestamp(),
+    });
 
     return {
-      id: data.idSolicitud,
-      ...solicitud,
+      id: docId,
+      ...solicitudLimpia,
     };
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === "AbortError") {
-      throw new Error("Tiempo de espera agotado al comunicarse con el servidor para guardar la solicitud.");
+    console.warn("[guardarSolicitud] Fallo en API POST. Utilizando respaldo directo a Firestore...", error.message);
+    try {
+      const docId = String(solicitudLimpia.id || Date.now().toString().slice(-6));
+      await setDoc(doc(db, COLLECTION_NAME, docId), {
+        ...solicitudLimpia,
+        creadoEn: serverTimestamp(),
+      });
+      return {
+        id: docId,
+        ...solicitudLimpia,
+      };
+    } catch (fsError) {
+      throw new Error(`Error al registrar la solicitud: ${fsError.message}`);
     }
-    throw error;
   }
 };
 
