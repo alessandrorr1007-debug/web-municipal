@@ -117,11 +117,16 @@ function PanelInspector({ seccion }) {
     });
   }, [solicitudes, esExpedienteDeEsteInspector]);
 
-  const solicitudesFiltradas = useMemo(() => {
-    return solicitudes.filter((s) => {
-      // 0. Solo ver expedientes de este inspector
-      if (!esExpedienteDeEsteInspector(s)) return false;
+  const esHistorial = seccion === "historial" || seccion === "historial-inspecciones";
 
+  const solicitudesFiltradas = useMemo(() => {
+    const listaBase = esHistorial
+      ? inspeccionesFinalizadas
+      : paso === "inspecciones-hoy"
+      ? inspeccionesHoy
+      : asignadasInspeccion;
+
+    return listaBase.filter((s) => {
       // 1. Filtro por Estado
       const est = (s.estado || "").toLowerCase();
       if (filtroEstado === "pendiente_programar") {
@@ -147,17 +152,17 @@ function PanelInspector({ seccion }) {
 
       return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
     });
-  }, [solicitudes, filtroEstado, busqueda, esExpedienteDeEsteInspector]);
+  }, [solicitudes, filtroEstado, busqueda, esHistorial, paso, asignadasInspeccion, inspeccionesHoy, inspeccionesFinalizadas]);
 
   // ABRIR MODAL DE ATENCIÓN DE INSPECCIÓN
-  const abrirModalAtencion = (solicitud) => {
+  const abrirModalAtencion = (solicitud, tabInicial = "evaluacion") => {
     setSolicitudAtencion(solicitud);
     setResultadoDecisión("aprobado");
-    setObservacionesTexto(solicitud.observacionesInspector || "");
-    setEvidencias(solicitud.evidenciasInspector || []);
+    setObservacionesTexto("");
+    setEvidencias([]);
     setFechaVisita(solicitud.fechaVisitaInspector || formatearFechaLocal(new Date()));
     setHoraVisita(solicitud.horaVisitaInspector || "10:00");
-    setTabModal("evaluacion");
+    setTabModal(tabInicial);
   };
 
   // IMÁGENES DE EVIDENCIA EN BASE64
@@ -233,29 +238,33 @@ function PanelInspector({ seccion }) {
       await crearNotificacion(
         solicitudAtencion.uidUsuario || "",
         {
-          titulo: "Visita de Inspección Programada",
-          descripcion: `Su inspección técnica para el local EXP-${solicitudAtencion.id} ha sido programada para el ${fechaVisita} (${horaLabel}).`,
+          titulo: "📅 Inspección Técnica Programada",
+          descripcion: `Su inspección técnica para el expediente EXP-${solicitudAtencion.id} fue agendada para el ${fechaVisita} (${horaLabel}).`,
           icono: "📅",
         },
         solicitudAtencion.correoUsuario || ""
       );
 
-      alert(`Visita de inspección agendada para el ${fechaVisita} (${horaLabel}).`);
+      alert(`Inspección programada para el ${fechaVisita} a las ${horaLabel}.`);
       setSolicitudAtencion(null);
       await cargarSolicitudes();
     } catch (err) {
       console.error(err);
-      alert("Error al programar visita: " + err.message);
+      alert("Error al programar la inspección: " + err.message);
     } finally {
       setProcesando(false);
     }
   };
 
-  // GUARDAR RESULTADO FINAL DE LA INSPECCIÓN (APROBAR / RECHAZAR / SUBSANAR)
+  // EVALUAR E INSPECCIONAR (APROBAR / OBSERVADA / RECHAZADA)
   const guardarResultadoInspeccion = async () => {
     if (!solicitudAtencion) return;
-    if (!observacionesTexto.trim()) {
-      alert("Por favor ingrese las observaciones o comentarios de la inspección.");
+    if (!resultadoDecisión) {
+      alert("Seleccione una decisión (Aprobado, Observado o Rechazado).");
+      return;
+    }
+    if ((resultadoDecisión === "observado" || resultadoDecisión === "rechazado") && !observacionesTexto.trim()) {
+      alert("Ingrese las observaciones o motivos detallados del informe técnico.");
       return;
     }
 
@@ -263,48 +272,38 @@ function PanelInspector({ seccion }) {
     try {
       const fechaHoraActual = formatearFechaHora();
       const nombreInspector = usuario?.nombre || usuario?.email || "Inspector Municipal";
-      const uidInspector = usuario?.uid || "INSP-001";
-      let nuevoEstado = "Aprobado";
-      let estadoNorm = "APROBADO";
-      let codigoLicencia = null;
-      let accionLog = "Inspección Aprobada";
 
-      if (resultadoDecisión === "aprobado") {
-        codigoLicencia = "LIC-2026-" + Date.now().toString().slice(-6);
-        nuevoEstado = "Licencia aprobada";
-        estadoNorm = "APROBADO";
-        accionLog = "Inspección Aprobada - Licencia Emitida";
-      } else if (resultadoDecisión === "observado") {
-        nuevoEstado = "Inspección observada - Requerida subsanación";
-        estadoNorm = "INSPECCION_OBSERVADA";
-        accionLog = "Inspección Observada (Subsanación solicitada)";
+      let nuevoEstado = "Inspección aprobada";
+      let nuevoEstadoNorm = "INSPECCION_APROBADA";
+
+      if (resultadoDecisión === "observado") {
+        nuevoEstado = "Inspección observada";
+        nuevoEstadoNorm = "INSPECCION_OBSERVADA";
       } else if (resultadoDecisión === "rechazado") {
-        nuevoEstado = "Licencia rechazada por inspección";
-        estadoNorm = "RECHAZADO";
-        accionLog = "Inspección Rechazada";
+        nuevoEstado = "Inspección rechazada";
+        nuevoEstadoNorm = "INSPECCION_RECHAZADA";
       }
 
       const logEntrada = {
         fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
         hora: fechaHoraActual.split(",")[1]?.trim() || "",
         inspector: nombreInspector,
-        accion: accionLog,
-        comentarios: observacionesTexto.trim(),
+        accion: `Evaluación Técnica: ${resultadoDecisión.toUpperCase()}`,
+        comentarios: observacionesTexto || `Inspección dictaminada como ${resultadoDecisión.toUpperCase()}.`,
+        evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
       };
 
       const cambios = {
+        estadoInspeccion: nuevoEstado,
+        inspeccion: nuevoEstado,
         estado: nuevoEstado,
-        estadoNormalizado: estadoNorm,
-        inspeccion: resultadoDecisión === "aprobado" ? "Aprobada" : resultadoDecisión === "observado" ? "Observada" : "Rechazada",
-        estadoInspeccion: "Realizada",
-        resultadoInspeccion: resultadoDecisión.toUpperCase(),
-        observacionInspector: observacionesTexto.trim(),
+        estadoNormalizado: nuevoEstadoNorm,
+        resultadoInspeccion: resultadoDecisión,
+        observacionesInspector: observacionesTexto,
         evidenciasInspector: evidencias,
-        fechaInspeccionRealizada: fechaHoraActual,
+        fechaEvaluacionInspector: fechaHoraActual,
         inspectorNombre: nombreInspector,
-        inspectorUid: uidInspector,
-        numeroLicencia: codigoLicencia || solicitudAtencion.numeroLicencia || null,
-        fechaAprobacion: resultadoDecisión === "aprobado" ? fechaHoraActual : solicitudAtencion.fechaAprobacion || null,
+        inspectorUid: usuario?.uid || "INSP-001",
         historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
       };
 
@@ -333,19 +332,25 @@ function PanelInspector({ seccion }) {
 
   return (
     <div className="panel panel-inspector">
-      <div className="inspector-hero" style={{ background: "linear-gradient(135deg, #7c3aed 0%, #312e81 100%)" }}>
+      <div className="inspector-hero" style={{ background: esHistorial ? "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)" : "linear-gradient(135deg, #7c3aed 0%, #312e81 100%)" }}>
         <div>
           <span className="eyebrow">Municipalidad de Trujillo — Módulo de Inspección Técnica</span>
-          <h1>Panel Principal del Inspector Municipal</h1>
+          <h1>{esHistorial ? "📈 Historial de Inspecciones Atendidas" : "🔍 Inspecciones Asignadas y Programadas"}</h1>
           <p>
-            Recepción de expedientes post-pago, programación de visitas, revisión técnica documental (RENIEC/SUNAT), registro de visitas, evaluación (Aprobar/Rechazar/Subsanar), evidencias y trazabilidad auditada.
+            {esHistorial
+              ? "Registro auditado de expedientes e inspecciones evaluadas con dictamen técnico emitido y evidencias adjuntas."
+              : "Expedientes recibidos post-pago, programación de visitas técnicas en terreno y evaluación técnica documental."}
           </p>
         </div>
 
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <div className="hero-card">
-            <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Pendientes</span>
-            <strong style={{ fontSize: "24px" }}>{asignadasInspeccion.length}</strong>
+            <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {esHistorial ? "Atendidas" : "Pendientes"}
+            </span>
+            <strong style={{ fontSize: "24px" }}>
+              {esHistorial ? inspeccionesFinalizadas.length : asignadasInspeccion.length}
+            </strong>
             <small>expedientes</small>
           </div>
 
@@ -356,17 +361,17 @@ function PanelInspector({ seccion }) {
       </div>
 
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px", marginBottom: "20px" }}>
-        <div className="stat-card" onClick={() => { setPaso("inspecciones"); setFiltroEstado("todos"); }} style={{ cursor: "pointer" }}>
+        <div className="stat-card" style={{ background: !esHistorial && paso === "inspecciones" ? "#f3e8ff" : "white" }}>
           <span>Expedientes Asignados</span>
           <strong style={{ color: "#7c3aed" }}>{asignadasInspeccion.length}</strong>
           <small>Recibidos post-pago</small>
         </div>
-        <div className="stat-card" onClick={() => setPaso("inspecciones-hoy")} style={{ cursor: "pointer" }}>
+        <div className="stat-card" style={{ background: !esHistorial && paso === "inspecciones-hoy" ? "#fef3c7" : "white" }}>
           <span>Inspecciones Para Hoy</span>
           <strong style={{ color: "#d97706" }}>{inspeccionesHoy.length}</strong>
           <small>Programadas para hoy</small>
         </div>
-        <div className="stat-card" onClick={() => setPaso("historial")} style={{ cursor: "pointer" }}>
+        <div className="stat-card" style={{ background: esHistorial ? "#dcfce7" : "white" }}>
           <span>Inspecciones Evaluadas</span>
           <strong style={{ color: "#16a34a" }}>{inspeccionesFinalizadas.length}</strong>
           <small>Resultados emitidos</small>
@@ -378,41 +383,40 @@ function PanelInspector({ seccion }) {
         </div>
       </div>
 
-      <div className="tabs-panel">
-        <button
-          type="button"
-          className={paso === "inspecciones" ? "tab-active" : ""}
-          onClick={() => setPaso("inspecciones")}
-        >
-          🔍 Expedientes Asignados ({asignadasInspeccion.length})
-        </button>
-        <button
-          type="button"
-          className={paso === "inspecciones-hoy" ? "tab-active" : ""}
-          onClick={() => setPaso("inspecciones-hoy")}
-        >
-          📅 Inspecciones para Hoy ({inspeccionesHoy.length})
-        </button>
-        <button
-          type="button"
-          className={paso === "historial" ? "tab-active" : ""}
-          onClick={() => setPaso("historial")}
-        >
-          📜 Historial y Registro Auditado ({solicitudes.length})
-        </button>
-      </div>
+      {!esHistorial && (
+        <div className="tabs-panel">
+          <button
+            type="button"
+            className={paso === "inspecciones" ? "tab-active" : ""}
+            onClick={() => setPaso("inspecciones")}
+          >
+            🔍 Expedientes Asignados ({asignadasInspeccion.length})
+          </button>
+          <button
+            type="button"
+            className={paso === "inspecciones-hoy" ? "tab-active" : ""}
+            onClick={() => setPaso("inspecciones-hoy")}
+          >
+            📅 Inspecciones para Hoy ({inspeccionesHoy.length})
+          </button>
+        </div>
+      )}
 
       <section className="section-card">
         <div className="section-header">
           <div>
             <h2>
-              {paso === "inspecciones"
-                ? "Gestión de Expedientes e Inspecciones Técnicas"
+              {esHistorial
+                ? "Registro Histórico de Inspecciones Evaluadas"
                 : paso === "inspecciones-hoy"
                 ? "Visitas de Inspección Programadas para Hoy"
-                : "Historial Auditado de Inspecciones"}
+                : "Gestión de Expedientes Asignados a Inspección"}
             </h2>
-            <p>Visualiza datos de ciudadanos, RUC, PDFs adjuntos, programa visitas y registra la evaluación técnica.</p>
+            <p>
+              {esHistorial
+                ? "Consulta el dictamen final, observaciones registradas, fotografías adjuntas y la trazabilidad de cada inspección atendida."
+                : "Visualiza datos de la empresa, programa la fecha/hora de visita o registra la evaluación técnica."}
+            </p>
           </div>
         </div>
 
@@ -431,8 +435,8 @@ function PanelInspector({ seccion }) {
             style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold", background: "#f8fafc", color: "#1e293b", minWidth: "200px" }}
           >
             <option value="todos">📌 Todos los estados</option>
-            <option value="pendiente_programar">⏳ Pendientes de Programar</option>
-            <option value="programada">📅 Programadas</option>
+            {!esHistorial && <option value="pendiente_programar">⏳ Pendientes de Programar</option>}
+            {!esHistorial && <option value="programada">📅 Programadas</option>}
             <option value="aprobada">✅ Aprobadas</option>
             <option value="observada">⚠️ Observadas / Subsanación</option>
             <option value="rechazada">❌ Rechazadas</option>
@@ -441,9 +445,9 @@ function PanelInspector({ seccion }) {
 
         {solicitudesFiltradas.length === 0 ? (
           <div className="empty-state">
-            <div style={{ fontSize: "36px", marginBottom: "10px" }}>🔍</div>
-            <h3>No se encontraron expedientes asignados</h3>
-            <p>Ajusta el filtro o búsqueda para encontrar solicitudes.</p>
+            <div style={{ fontSize: "36px", marginBottom: "10px" }}>{esHistorial ? "📈" : "🔍"}</div>
+            <h3>{esHistorial ? "No se encontraron inspecciones atendidas" : "No se encontraron expedientes pendientes"}</h3>
+            <p>{esHistorial ? "Las inspecciones que evalúes y finalices aparecerán registradas en esta sección." : "Ajusta la búsqueda o el filtro de estado."}</p>
           </div>
         ) : (
           <div className="tabla-container">
@@ -454,8 +458,8 @@ function PanelInspector({ seccion }) {
                   <th>Ciudadano / DNI</th>
                   <th>Establecimiento / RUC</th>
                   <th>Fecha Visita</th>
-                  <th>Estado Trámite</th>
-                  <th>Acción Principal</th>
+                  <th>Dictamen / Estado</th>
+                  <th>Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -497,14 +501,25 @@ function PanelInspector({ seccion }) {
                         </span>
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={() => abrirModalAtencion(s)}
-                          style={{ background: "#7c3aed", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: "700" }}
-                        >
-                          🔍 Atender Expediente
-                        </button>
+                        {esHistorial ? (
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => abrirModalAtencion(s, "historial")}
+                            style={{ background: "#312e81", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: "700" }}
+                          >
+                            👁️ Ver Detalles
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => abrirModalAtencion(s, "evaluacion")}
+                            style={{ background: "#7c3aed", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: "700" }}
+                          >
+                            🔍 Atender Expediente
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
