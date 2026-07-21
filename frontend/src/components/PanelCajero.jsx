@@ -600,6 +600,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       alert("⚠️ Debe consultar y validar el RUC del establecimiento mediante SUNAT antes de continuar.");
       return;
     }
+    const rucDuplicado = solicitudes.find((s) => s.ruc === rucForm.trim() && !["Rechazado", "Licencia rechazada"].includes(s.estado));
+    if (rucDuplicado) {
+      const expLimpio = String(rucDuplicado.id).replace(/^EXP-/, "");
+      alert(`🚫 No es posible registrar la solicitud.\n\nEl RUC ${rucForm} (${nombreNegocioForm}) ya tiene un expediente activo registrado en el sistema (EXP-${expLimpio}).\n\nSolo se permite una solicitud por RUC.`);
+      return;
+    }
     if (!esJurisdiccionTrujillo) {
       alert("Este establecimiento no pertenece a la jurisdicción de la Municipalidad Provincial de Trujillo. Solo es posible registrar solicitudes para establecimientos ubicados en la provincia de Trujillo.");
       return;
@@ -815,7 +821,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
               <div style={{ background: "#f8fafc", padding: "20px 24px", borderRadius: "12px", border: "1px solid #e2e8f0", textAlign: "left", display: "grid", gap: "10px", marginBottom: "24px" }}>
                 <p style={{ margin: 0, fontSize: "14.5px", color: "#0f172a" }}>
-                  <strong>Código de Expediente:</strong> <span style={{ color: "#2563eb", fontWeight: "800", fontSize: "16px" }}>EXP-{resultadoRegistroExitoso.id}</span>
+                  <strong>Código de Expediente:</strong> <span style={{ color: "#2563eb", fontWeight: "800", fontSize: "16px" }}>EXP-{String(resultadoRegistroExitoso.id).replace(/^EXP-/, "")}</span>
                 </p>
                 <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}>
                   <strong>Código de Operación / Boleta:</strong> {resultadoRegistroExitoso.codComprobante}
@@ -1173,6 +1179,31 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         </div>
                       </div>
                     )}
+
+                    {/* ALERTA DE RECHAZO POR RUC DUPLICADO */}
+                    {(() => {
+                      const dupRuc = rucValidado && solicitudes.find((s) => s.ruc === rucForm.trim() && !["Rechazado", "Licencia rechazada"].includes(s.estado));
+                      if (!dupRuc) return null;
+                      const expLimpio = String(dupRuc.id).replace(/^EXP-/, "");
+                      return (
+                        <div style={{ background: "#fef2f2", border: "1.5px solid #dc2626", color: "#991b1b", padding: "16px 20px", borderRadius: "14px", marginTop: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                            <span style={{ fontSize: "22px", lineHeight: "1" }}>🚫</span>
+                            <div>
+                              <strong style={{ fontSize: "14px", display: "block", marginBottom: "4px" }}>
+                                RUC Ya Registrado en el Sistema
+                              </strong>
+                              <p style={{ margin: "0 0 6px", fontSize: "13px", lineHeight: "1.5" }}>
+                                El RUC <strong>{rucForm}</strong> ({nombreNegocioForm}) ya cuenta con un expediente registrado: <strong>EXP-{expLimpio}</strong> (Estado: {dupRuc.estado || "En trámite"}).
+                              </p>
+                              <p style={{ margin: 0, fontSize: "12.5px", fontWeight: "bold" }}>
+                                No se permite registrar más de una solicitud por RUC.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -1301,6 +1332,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         if (pasoActual === 3) {
                           if (!rucValidado) {
                             alert("⚠️ Debe consultar y validar el RUC en SUNAT para continuar.");
+                            return;
+                          }
+                          const dupRucNav = solicitudes.find((s) => s.ruc === rucForm.trim() && !["Rechazado", "Licencia rechazada"].includes(s.estado));
+                          if (dupRucNav) {
+                            const expLimpioNav = String(dupRucNav.id).replace(/^EXP-/, "");
+                            alert(`🚫 No es posible continuar con el trámite.\n\nEl RUC ${rucForm} ya cuenta con la solicitud EXP-${expLimpioNav} registrada en el sistema.\n\nNo se permite registrar más de una solicitud por RUC.`);
                             return;
                           }
                           if (!esJurisdiccionTrujillo) {
@@ -1508,7 +1545,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   return (
                     <tr key={s.id}>
                       <td>
-                        <strong>EXP-{s.id}</strong>
+                        <strong>EXP-{String(s.id).replace(/^EXP-/, "")}</strong>
                         <small style={{ display: "block", color: "#64748b" }}>{s.fecha || "---"}</small>
                       </td>
                       <td>

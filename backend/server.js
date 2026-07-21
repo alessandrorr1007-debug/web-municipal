@@ -244,13 +244,21 @@ app.post("/api/solicitudes", verificarToken, async (req, res) => {
   try {
     const solicitud = req.body;
 
-    const estadoSunat = (solicitud.estadoSunat || "").toUpperCase().trim();
-    const condicionSunat = (solicitud.condicionSunat || "").toUpperCase().trim();
-    if (estadoSunat && condicionSunat && (estadoSunat !== "ACTIVO" || condicionSunat !== "HABIDO")) {
-      return res.status(400).json({
-        error: "Solicitud bloqueada por SUNAT",
-        detalle: `El contribuyente tiene Estado="${estadoSunat}" y Condición="${condicionSunat}". Se requiere Estado=ACTIVO y Condición=HABIDO.`,
-      });
+    const rucVal = (solicitud.ruc || "").trim();
+    if (rucVal) {
+      try {
+        const snapRuc = await getDocs(query(collection(db, "solicitudes"), where("ruc", "==", rucVal)));
+        const existRuc = snapRuc.docs.map((d) => d.data()).find((s) => !["Rechazado", "Licencia rechazada"].includes(s.estado));
+        if (existRuc) {
+          const expId = String(existRuc.id).replace(/^EXP-/, "");
+          return res.status(400).json({
+            error: "RUC Ya Registrado",
+            detalle: `El RUC ${rucVal} (${existRuc.nombreNegocio || "Establecimiento"}) ya cuenta con una solicitud registrada (EXP-${expId}). No se permiten solicitudes duplicadas para el mismo RUC.`,
+          });
+        }
+      } catch (rucErr) {
+        console.warn("[API SOLICITUDES] Aviso consulta RUC duplicado:", rucErr.message);
+      }
     }
 
     const id = generarIdExpediente();
