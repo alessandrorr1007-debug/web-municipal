@@ -1027,25 +1027,22 @@ app.post("/api/email-change/verificar-codigo-nuevo", verificarToken, async (req,
   res.json({ success: true, mensaje: "Ambos correos verificados correctamente." });
 });
 
-app.post("/api/email/enviar-notificacion", verificarToken, async (req, res) => {
-  const { correoUsuario, titulo, descripcion } = req.body;
-  if (!correoUsuario || !titulo || !descripcion) {
-    return res.status(400).json({ error: "Faltan correoUsuario, titulo o descripcion." });
+app.post("/api/email/enviar-notificacion", verificarTokenOpcional, async (req, res) => {
+  const { correoUsuario, titulo, descripcion, html } = req.body;
+  if (!correoUsuario || !titulo) {
+    return res.status(400).json({ error: "Faltan correoUsuario o titulo." });
   }
 
   try {
     let subject = titulo;
-    
-    // Standardize subjects based on requirements
-    if (titulo.toLowerCase().includes("registrada")) {
-      subject = "Solicitud registrada correctamente";
-    } else if (titulo.toLowerCase().includes("pago confirmado")) {
-      subject = "Pago confirmado";
-    } else if (titulo.toLowerCase().includes("comprobante generado")) {
-      subject = "Comprobante generado";
+
+    if (titulo.toLowerCase().includes("registrad")) {
+      subject = `Confirmación de Solicitud — ${titulo}`;
+    } else if (titulo.toLowerCase().includes("pago")) {
+      subject = `Comprobante de Pago — ${titulo}`;
     }
 
-    await emailProvider.sendEmail(correoUsuario, subject, descripcion);
+    await emailProvider.sendEmail(correoUsuario, subject, descripcion || subject, html);
     res.json({ success: true, mensaje: "Correo de notificación enviado correctamente." });
   } catch (err) {
     console.error("[API NOTIFICACION CORREO] Error al enviar email:", err.message);

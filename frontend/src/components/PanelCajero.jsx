@@ -714,12 +714,53 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const solicitudCompleta = { ...nuevaSolicitudPresencial, id: idReal };
 
       if (correoForm) {
+        const expIdLimpio = String(solicitudCompleta.id).replace(/^EXP-/, "");
+        const htmlCorreo = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden;">
+            <div style="background: #1e3a8a; padding: 24px; text-align: center; color: white;">
+              <h2 style="margin: 0; font-size: 20px;">📜 Confirmación de Registro y Pago de Licencia</h2>
+              <p style="margin: 6px 0 0; font-size: 14px; opacity: 0.9;">Expediente N° EXP-${expIdLimpio}</p>
+            </div>
+            <div style="padding: 24px; color: #334155; font-size: 14px; line-height: 1.6;">
+              <p style="margin: 0 0 16px;">Estimado(a) <strong>${nombresForm} ${apellidosForm}</strong> (DNI: ${dniForm}),</p>
+              <p style="margin: 0 0 20px;">Su solicitud de Licencia de Funcionamiento ha sido registrada y pagada exitosamente en ventanilla municipal.</p>
+
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="margin: 0 0 10px; color: #166534;">💳 Comprobante de Pago</h4>
+                <p style="margin: 4px 0;"><strong>Derecho de Trámite:</strong> S/ ${MONTO_TRAMITE.toFixed(2)}</p>
+                <p style="margin: 4px 0;"><strong>N° de Boleta:</strong> ${codComprobante}</p>
+                <p style="margin: 4px 0;"><strong>Método de Pago:</strong> ${metodoPagoSeleccionado}</p>
+                <p style="margin: 4px 0;"><strong>Fecha y Hora:</strong> ${fechaHoraActual}</p>
+              </div>
+
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="margin: 0 0 10px; color: #0f172a;">🏢 Establecimiento Comercial</h4>
+                <p style="margin: 4px 0;"><strong>Nombre Comercial:</strong> ${nombreNegocioForm}</p>
+                <p style="margin: 4px 0;"><strong>RUC:</strong> ${rucForm}</p>
+                <p style="margin: 4px 0;"><strong>Dirección Fiscal:</strong> ${direccionForm}</p>
+              </div>
+
+              <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 10px; color: #1e40af;">📅 Programación de Inspección Técnica</h4>
+                <p style="margin: 4px 0; color: #1e3a8a;"><strong>Fecha de Visita:</strong> ${fechaInspeccion}</p>
+                <p style="margin: 4px 0; color: #1e3a8a;"><strong>Horario Asignado:</strong> ${horaLabel}</p>
+                <p style="margin: 4px 0; color: #1e3a8a;"><strong>Inspector Asignado:</strong> ${inspectorElegido.nombre}</p>
+              </div>
+
+              <p style="margin: 0; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+                Municipalidad Provincial de Trujillo — Sistema de Licencias Municipal
+              </p>
+            </div>
+          </div>
+        `;
+
         await crearNotificacion(
-          solicitudCompleta.uidUsuario || "",
+          solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
           {
-            titulo: "Registro Presencial y Pago Confirmado",
-            descripcion: `Se registró su solicitud presencial EXP-${solicitudCompleta.id}. Pago de S/ ${MONTO_TRAMITE.toFixed(2)} procesado. Inspección asignada a ${inspectorElegido.nombre} el ${fechaInspeccion} (${horaLabel}).`,
+            titulo: `Registro Presencial y Pago Confirmado — EXP-${expIdLimpio}`,
+            descripcion: `Se registró su solicitud presencial EXP-${expIdLimpio}. Pago de S/ ${MONTO_TRAMITE.toFixed(2)} procesado (${codComprobante}). Inspección asignada a ${inspectorElegido.nombre} el ${fechaInspeccion} (${horaLabel}).`,
             icono: "📜",
+            html: htmlCorreo,
           },
           correoForm
         );
