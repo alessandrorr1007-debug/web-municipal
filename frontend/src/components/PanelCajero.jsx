@@ -763,7 +763,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           <h1>
             {seccion === "nueva-solicitud" && "➕ Registro Presencial de Solicitud"}
             {seccion === "consulta-expedientes" && "🔍 Consulta de Estado de Trámites"}
-            {seccion === "historial" && "🧾 Historial de Pagos y Comprobantes"}
+            {seccion === "historial" && "📈 Historial de Solicitudes"}
           </h1>
           <p>
             Recepción de solicitudes presenciales, verificación documental, cobro del derecho de trámite (S/ 3.00), emisión de boleta de caja y derivación al Inspector.
@@ -1334,7 +1334,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         <section className="section-card">
           <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <h2>{seccion === "historial" ? "🧾 Historial de Pagos" : "🔍 Consulta y Estado de Trámites"}</h2>
+              <h2>{seccion === "historial" ? "📈 Historial de Solicitudes" : "🔍 Consulta y Estado de Trámites"}</h2>
               <p>Busca expedientes por Código (EXP-XXXX), DNI del ciudadano, RUC o Nombre del establecimiento.</p>
             </div>
           </div>
@@ -1607,6 +1607,34 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 <p style={{ margin: "4px 0", fontSize: "13.5px" }}>
                   <strong>Dirección:</strong> {solicitudVerDetalle.direccion}
                 </p>
+              </div>
+
+              <div style={{ background: "#f0fdf4", padding: "14px", borderRadius: "10px", border: "1.5px solid #bbf7d0", marginBottom: "16px" }}>
+                <h4 style={{ margin: "0 0 8px", color: "#166534", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  💳 Información del Pago de Tasa y Boleta
+                </h4>
+                <p style={{ margin: "4px 0", fontSize: "13.5px", color: "#14532d" }}>
+                  <strong>Estado de Pago:</strong> <span style={{ fontWeight: "800", color: solicitudVerDetalle.estadoPago === "Confirmado" ? "#16a34a" : "#d97706" }}>{solicitudVerDetalle.estadoPago || "Pendiente"}</span>
+                </p>
+                <p style={{ margin: "4px 0", fontSize: "13.5px", color: "#14532d" }}>
+                  <strong>Monto Cobrado:</strong> S/ {Number(solicitudVerDetalle.montoPagado || MONTO_TRAMITE).toFixed(2)}
+                </p>
+                <p style={{ margin: "4px 0", fontSize: "13.5px", color: "#14532d" }}>
+                  <strong>Método de Pago:</strong> {solicitudVerDetalle.metodoPago || "Efectivo en Caja Municipal"}
+                </p>
+                <p style={{ margin: "4px 0", fontSize: "13.5px", color: "#14532d" }}>
+                  <strong>N° de Comprobante / Boleta:</strong> {solicitudVerDetalle.comprobantePago || solicitudVerDetalle.numeroOperacion || `BOL-CAJA-2026-${solicitudVerDetalle.id}`}
+                </p>
+                {solicitudVerDetalle.fechaPago && (
+                  <p style={{ margin: "4px 0", fontSize: "13.5px", color: "#14532d" }}>
+                    <strong>Fecha y Hora de Pago:</strong> {solicitudVerDetalle.fechaPago}
+                  </p>
+                )}
+                {solicitudVerDetalle.cajeraResponsable && (
+                  <p style={{ margin: "4px 0", fontSize: "13.5px", color: "#14532d" }}>
+                    <strong>Cajero Responsable:</strong> {solicitudVerDetalle.cajeraResponsable}
+                  </p>
+                )}
               </div>
 
               <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "16px" }}>

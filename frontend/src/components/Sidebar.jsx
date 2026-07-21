@@ -43,7 +43,7 @@ const titulos = {
   "gestion-inspectores": "Gestión de Inspectores",
   "gestion-negocios": "Gestión de Negocios",
   notificaciones: "Notificaciones",
-  historial: "Historial de Pagos",
+  historial: "Historial de Solicitudes",
   estadisticas: "Estadísticas",
   reportes: "Reportes",
   "mi-cuenta": "Mi Cuenta",
