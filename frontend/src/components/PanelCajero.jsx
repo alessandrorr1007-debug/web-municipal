@@ -715,36 +715,31 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
       if (correoForm) {
         const expIdLimpio = String(solicitudCompleta.id).replace(/^EXP-/, "");
-        const htmlCorreo = `
+
+        // CORREO 1: NOTIFICACIÓN DE REGISTRO DE SOLICITUD
+        const htmlNotificacionSolicitud = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden;">
             <div style="background: #1e3a8a; padding: 24px; text-align: center; color: white;">
-              <h2 style="margin: 0; font-size: 20px;">📜 Confirmación de Registro y Pago de Licencia</h2>
+              <h2 style="margin: 0; font-size: 20px;">📝 Registro Exitoso de Solicitud de Licencia</h2>
               <p style="margin: 6px 0 0; font-size: 14px; opacity: 0.9;">Expediente N° EXP-${expIdLimpio}</p>
             </div>
             <div style="padding: 24px; color: #334155; font-size: 14px; line-height: 1.6;">
               <p style="margin: 0 0 16px;">Estimado(a) <strong>${nombresForm} ${apellidosForm}</strong> (DNI: ${dniForm}),</p>
-              <p style="margin: 0 0 20px;">Su solicitud de Licencia de Funcionamiento ha sido registrada y pagada exitosamente en ventanilla municipal.</p>
-
-              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                <h4 style="margin: 0 0 10px; color: #166534;">💳 Comprobante de Pago</h4>
-                <p style="margin: 4px 0;"><strong>Derecho de Trámite:</strong> S/ ${MONTO_TRAMITE.toFixed(2)}</p>
-                <p style="margin: 4px 0;"><strong>N° de Boleta:</strong> ${codComprobante}</p>
-                <p style="margin: 4px 0;"><strong>Método de Pago:</strong> ${metodoPagoSeleccionado}</p>
-                <p style="margin: 4px 0;"><strong>Fecha y Hora:</strong> ${fechaHoraActual}</p>
-              </div>
-
+              <p style="margin: 0 0 16px;">Se ha registrado exitosamente su <strong>Solicitud de Licencia de Funcionamiento Presencial</strong> en el Módulo de Atención de la Municipalidad Provincial de Trujillo.</p>
+              
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                <h4 style="margin: 0 0 10px; color: #0f172a;">🏢 Establecimiento Comercial</h4>
+                <h4 style="margin: 0 0 10px; color: #0f172a;">🏢 Datos de la Empresa y Local</h4>
                 <p style="margin: 4px 0;"><strong>Nombre Comercial:</strong> ${nombreNegocioForm}</p>
+                <p style="margin: 4px 0;"><strong>Razón Social:</strong> ${razonSocialForm || nombreNegocioForm}</p>
                 <p style="margin: 4px 0;"><strong>RUC:</strong> ${rucForm}</p>
                 <p style="margin: 4px 0;"><strong>Dirección Fiscal:</strong> ${direccionForm}</p>
               </div>
 
               <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                <h4 style="margin: 0 0 10px; color: #1e40af;">📅 Programación de Inspección Técnica</h4>
+                <h4 style="margin: 0 0 10px; color: #1e40af;">📅 Inspección Técnica Programada</h4>
                 <p style="margin: 4px 0; color: #1e3a8a;"><strong>Fecha de Visita:</strong> ${fechaInspeccion}</p>
                 <p style="margin: 4px 0; color: #1e3a8a;"><strong>Horario Asignado:</strong> ${horaLabel}</p>
-                <p style="margin: 4px 0; color: #1e3a8a;"><strong>Inspector Asignado:</strong> ${inspectorElegido.nombre}</p>
+                <p style="margin: 4px 0; color: #1e3a8a;"><strong>Inspector Municipal:</strong> ${inspectorElegido.nombre}</p>
               </div>
 
               <p style="margin: 0; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 12px;">
@@ -754,13 +749,87 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           </div>
         `;
 
+        // CORREO 2: BOLETA DE VENTA ELECTRÓNICA OFICIAL (SUNAT)
+        const htmlBoletaElectronica = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 2px solid #0f172a; border-radius: 10px; padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
+              <div>
+                <h2 style="margin: 0; color: #0f172a; font-size: 18px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                <span style="font-size: 11px; color: #475569; font-weight: bold; display: block; margin-top: 2px;">Módulo de Atención y Caja Municipal</span>
+                <span style="font-size: 11px; color: #64748b;">RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
+              </div>
+              <div style="border: 2px solid #0f172a; padding: 10px 16px; text-align: center; border-radius: 6px; background: #f8fafc;">
+                <span style="font-weight: 800; font-size: 13px; display: block; color: #0f172a;">BOLETA DE VENTA ELECTRÓNICA</span>
+                <span style="font-size: 14px; font-weight: 800; color: #dc2626;">N° ${codComprobante}</span>
+              </div>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 14px; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
+              <p style="margin: 3px 0;"><strong>Fecha y Hora de Emisión:</strong> ${fechaHoraActual}</p>
+              <p style="margin: 3px 0;"><strong>Señor(es):</strong> ${nombresForm} ${apellidosForm}</p>
+              <p style="margin: 3px 0;"><strong>DNI / RUC:</strong> ${rucForm || dniForm}</p>
+              <p style="margin: 3px 0;"><strong>Establecimiento:</strong> ${nombreNegocioForm} (${direccionForm})</p>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+              <thead>
+                <tr style="background: #0f172a; color: white;">
+                  <th style="padding: 8px; text-align: center; width: 10%;">CANT</th>
+                  <th style="padding: 8px; text-align: left;">DESCRIPCIÓN</th>
+                  <th style="padding: 8px; text-align: right; width: 20%;">P. UNIT</th>
+                  <th style="padding: 8px; text-align: right; width: 20%;">IMPORTE</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 10px; text-align: center; font-weight: bold;">1</td>
+                  <td style="padding: 10px;">Derecho de Trámite — Licencia Municipal de Funcionamiento (EXP-${expIdLimpio})</td>
+                  <td style="padding: 10px; text-align: right;">S/ 3.00</td>
+                  <td style="padding: 10px; text-align: right; font-weight: bold;">S/ 3.00</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+              <div style="font-size: 12px; color: #475569;">
+                <p style="margin: 2px 0;"><strong>MÉTODO DE PAGO:</strong> ${metodoPagoSeleccionado.toUpperCase()}</p>
+                <p style="margin: 2px 0;"><strong>CAJERO:</strong> ${nombreCajera.toUpperCase()}</p>
+              </div>
+              <table style="width: 220px; font-size: 13px; text-align: right;">
+                <tr><td>OP. GRAVADA:</td><td style="font-weight: bold;">S/ 2.54</td></tr>
+                <tr><td>I.G.V. (18%):</td><td style="font-weight: bold;">S/ 0.46</td></tr>
+                <tr><td>DESCUENTO:</td><td style="font-weight: bold;">S/ 0.00</td></tr>
+                <tr style="font-size: 15px; border-top: 1.5px solid #0f172a;"><td style="padding-top: 6px; font-weight: 800;">TOTAL A PAGAR:</td><td style="padding-top: 6px; font-weight: 900; color: #16a34a;">S/ 3.00</td></tr>
+              </table>
+            </div>
+
+            <div style="text-align: center; border-top: 1px solid #cbd5e1; padding-top: 14px; font-size: 11.5px; color: #64748b;">
+              <p style="margin: 0 0 4px; font-weight: bold;">Representación impresa del comprobante de venta electrónico.</p>
+              <p style="margin: 0; color: #16a34a; font-weight: 800;">¡Gracias por su preferencia!</p>
+            </div>
+          </div>
+        `;
+
+        // ENVIAR CORREO 1: CONFIRMACIÓN DE SOLICITUD
         await crearNotificacion(
           solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
           {
-            titulo: `Registro Presencial y Pago Confirmado — EXP-${expIdLimpio}`,
-            descripcion: `Se registró su solicitud presencial EXP-${expIdLimpio}. Pago de S/ ${MONTO_TRAMITE.toFixed(2)} procesado (${codComprobante}). Inspección asignada a ${inspectorElegido.nombre} el ${fechaInspeccion} (${horaLabel}).`,
-            icono: "📜",
-            html: htmlCorreo,
+            titulo: `Nueva Solicitud Registrada — EXP-${expIdLimpio}`,
+            descripcion: `Se registró su solicitud presencial EXP-${expIdLimpio}. Inspección asignada a ${inspectorElegido.nombre} el ${fechaInspeccion} (${horaLabel}).`,
+            icono: "📝",
+            html: htmlNotificacionSolicitud,
+          },
+          correoForm
+        );
+
+        // ENVIAR CORREO 2: BOLETA DE VENTA ELECTRÓNICA
+        await crearNotificacion(
+          solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
+          {
+            titulo: `Boleta de Venta Electrónica — N° ${codComprobante}`,
+            descripcion: `Comprobante de pago N° ${codComprobante} emitido por S/ 3.00 (${metodoPagoSeleccionado}).`,
+            icono: "💳",
+            html: htmlBoletaElectronica,
           },
           correoForm
         );

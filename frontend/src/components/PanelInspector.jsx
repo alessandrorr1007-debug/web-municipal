@@ -298,15 +298,99 @@ function PanelInspector({ seccion }) {
 
       await actualizarSolicitud(solicitudAtencion.id, cambios);
 
-      await crearNotificacion(
-        solicitudAtencion.uidUsuario || "",
-        {
-          titulo: `Resultado de Inspección: ${resultadoDecisión.toUpperCase()}`,
-          descripcion: `Su expediente EXP-${solicitudAtencion.id} ha sido evaluado con resultado: ${nuevoEstado}.`,
-          icono: resultadoDecisión === "aprobado" ? "✅" : resultadoDecisión === "observado" ? "⚠️" : "❌",
-        },
-        solicitudAtencion.correoUsuario || ""
-      );
+      const expLimpio = String(solicitudAtencion.id).replace(/^EXP-/, "");
+
+      if (resultadoDecisión === "aprobado" && solicitudAtencion.correoUsuario) {
+        const numLicenciaStr = `00${expLimpio.slice(-6)} - 2026 MPT-GDEL-SGLC`;
+        const fechaHoyFormateada = `Trujillo, ${new Date().toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })}`;
+
+        const htmlLicenciaOficial = `
+          <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #0f172a; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
+            <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
+              <h2 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 900; letter-spacing: 1px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+              <span style="font-size: 11.5px; color: #475569; font-weight: bold; text-transform: uppercase;">Gerencia de Desarrollo Económico Local — Subgerencia de Licencias y Comercialización</span>
+              
+              <div style="margin-top: 16px; background: #f8fafc; border: 1.5px solid #0f172a; padding: 12px; border-radius: 8px;">
+                <h1 style="margin: 0; color: #1e3a8a; font-size: 21px; font-weight: 900;">LICENCIA DE FUNCIONAMIENTO</h1>
+                <p style="margin: 4px 0 0; font-size: 15px; font-weight: 800; color: #dc2626;">Nro. ${numLicenciaStr}</p>
+                <small style="color: #475569; font-weight: bold;">(Ley N° 28976 — Marco Único de Licencias de Funcionamiento)</small>
+              </div>
+            </div>
+
+            <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
+              <p style="margin: 0 0 16px; font-style: italic; text-align: justify; color: #475569;">
+                Visto el Expediente N° <strong>EXP-${expLimpio}</strong> y habiéndose cumplido con los requisitos exigidos por el TÚO de la Ley N° 28976 y las Ordenanzas Municipales vigentes, habiendo obtenido informe de inspección técnica <strong>CONFORME Y APROBADO</strong>, la Municipalidad Provincial de Trujillo otorga la presente Licencia Municipal de Funcionamiento a favor de:
+              </p>
+
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;">
+                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0; width: 40%;">Titular / Solicitante:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #0f172a;">${solicitudAtencion.nombresSolicitante || ""} ${solicitudAtencion.apellidosSolicitante || ""} ${solicitudAtencion.nombreSolicitante || ""}</td></tr>
+                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Doc. Identidad / RUC:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.ruc || solicitudAtencion.dniSolicitante || solicitudAtencion.dni}</td></tr>
+                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Representante Legal:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.nombreSolicitante || "Titular Representante"}</td></tr>
+                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Doc. Identidad (DNI):</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.dniSolicitante || solicitudAtencion.dni || "---"}</td></tr>
+                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Nombre Comercial:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #1e3a8a;">${solicitudAtencion.nombreNegocio}</td></tr>
+                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Dirección del Local:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.direccion}</td></tr>
+                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Giro Autorizado:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.giro || "Comercio / Servicios"}</td></tr>
+                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Zonificación:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">Comercial Vecinal (CZ)</td></tr>
+                <tr><td style="padding: 8px 12px; font-weight: bold;">Área del Establecimiento:</td><td style="padding: 8px 12px;">Hasta 100.00 m²</td></tr>
+              </table>
+
+              <div style="text-align: right; margin-bottom: 20px; font-weight: bold; color: #0f172a;">
+                ${fechaHoyFormateada}
+              </div>
+
+              <div style="background: #fffbe6; border: 1.5px solid #ffe58f; padding: 14px; border-radius: 8px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 6px; color: #d46b08; font-size: 13.5px; font-weight: 800;">PROHIBICIONES AL ESTABLECIMIENTO</h4>
+                <ol style="margin: 0; padding-left: 18px; font-size: 12px; color: #873800; line-height: 1.5;">
+                  <li>Prohibido generar ruidos nocivos o molestos que excedan los decibelios permitidos por ordenanza municipal.</li>
+                  <li>Prohibido la ocupación no autorizada de la vía pública o veredas con mercadería o mobiliario.</li>
+                  <li>Prohibida la venta de bebidas alcohólicas a menores de edad (Ley N° 28681).</li>
+                  <li>Prohibido alterar el giro comercial autorizado sin la debida ampliación de licencia municipal.</li>
+                </ol>
+              </div>
+
+              <div style="text-align: center; background: #eff6ff; border: 1.5px dashed #3b82f6; padding: 12px; border-radius: 8px; margin-bottom: 24px;">
+                <strong style="color: #1d4ed8; font-size: 13px; letter-spacing: 0.5px;">
+                  ES OBLIGATORIO QUE SE EXHIBA EN UN LUGAR VISIBLE DEL ESTABLECIMIENTO
+                </strong>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px; border-top: 1px solid #cbd5e1; padding-top: 20px;">
+                <div>
+                  <small style="color: #64748b; font-weight: bold; display: block;">SUBGERENCIA DE LICENCIAS Y COMERCIALIZACIÓN</small>
+                  <span style="font-size: 12px; color: #94a3b8;">Gerencia de Desarrollo Económico Local</span>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-family: cursive, sans-serif; font-size: 20px; color: #1e3a8a; margin-bottom: -2px;">Vicky Mori del Águila</div>
+                  <div style="font-size: 11px; font-weight: bold; color: #0f172a; border-top: 1px solid #0f172a; padding-top: 2px;">
+                    SUB GERENTE DE LICENCIAS MUNICIPALES
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        await crearNotificacion(
+          solicitudAtencion.uidUsuario || "CIUDADANO",
+          {
+            titulo: `📜 Licencia de Funcionamiento Emitida — N° ${numLicenciaStr}`,
+            descripcion: `¡Felicidades! Su inspección fue APROBADA y se ha emitido la Licencia de Funcionamiento Oficial N° ${numLicenciaStr} para su establecimiento ${solicitudAtencion.nombreNegocio}.`,
+            icono: "📜",
+            html: htmlLicenciaOficial,
+          },
+          solicitudAtencion.correoUsuario
+        );
+      } else {
+        await crearNotificacion(
+          solicitudAtencion.uidUsuario || "",
+          {
+            titulo: `Resultado de Inspección: ${resultadoDecisión.toUpperCase()}`,
+            descripcion: `Su expediente EXP-${expLimpio} ha sido evaluado con resultado: ${nuevoEstado}.`,
+            icono: resultadoDecisión === "aprobado" ? "✅" : resultadoDecisión === "observado" ? "⚠️" : "❌",
+          },
+          solicitudAtencion.correoUsuario || ""
+        );
+      }
 
       alert(`Resultado registrado con éxito. Estado: ${nuevoEstado}`);
       setSolicitudAtencion(null);
