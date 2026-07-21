@@ -35,6 +35,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [errorFechaRange, setErrorFechaRange] = useState("");
   const [solicitudCobro, setSolicitudCobro] = useState(null);
   const [solicitudVerDetalle, setSolicitudVerDetalle] = useState(null);
+  const [solicitudVerBoleta, setSolicitudVerBoleta] = useState(null);
   const [solicitudRenovacion, setSolicitudRenovacion] = useState(null);
   const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("Efectivo en Caja Municipal");
   const [comprobanteGenerado, setComprobanteGenerado] = useState(null);
@@ -2079,6 +2080,16 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             👁 Verificar Detalle
                           </button>
 
+                          {esPagado && (
+                            <button
+                              type="button"
+                              onClick={() => setSolicitudVerBoleta(s)}
+                              style={{ background: "#0f172a", color: "white", padding: "6px 10px", borderRadius: "6px", fontSize: "12.5px", fontWeight: "bold", border: "none", cursor: "pointer" }}
+                            >
+                              🧾 Verificar Boleta
+                            </button>
+                          )}
+
                           {!esPagado ? (
                             <button
                               type="button"
@@ -2188,6 +2199,18 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     <strong>Cajero Responsable:</strong> {solicitudVerDetalle.cajeraResponsable}
                   </p>
                 )}
+                <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #a7f3d0" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sol = solicitudVerDetalle;
+                      setSolicitudVerBoleta(sol);
+                    }}
+                    style={{ background: "#0f172a", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", border: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                  >
+                    🧾 Verificar Boleta Electrónica
+                  </button>
+                </div>
               </div>
 
               <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "16px" }}>
@@ -2217,7 +2240,17 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               </div>
             </div>
 
-            <div className="admin-form-actions">
+            <div className="admin-form-actions" style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const sol = solicitudVerDetalle;
+                  setSolicitudVerBoleta(sol);
+                }}
+                style={{ background: "#0f172a", color: "white", padding: "10px 18px", borderRadius: "8px", fontWeight: "bold", fontSize: "13.5px", cursor: "pointer", border: "none" }}
+              >
+                🧾 Verificar Boleta
+              </button>
               <button type="button" onClick={() => setSolicitudVerDetalle(null)}>Cerrar</button>
               {solicitudVerDetalle.estadoPago !== "Confirmado" && (
                 <button
@@ -2234,6 +2267,142 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   💰 Proceder al Cobro (S/ 3.00)
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VERIFICACIÓN DE BOLETA / COMPROBANTE DE VENTA ELECTRÓNICO */}
+      {solicitudVerBoleta && (
+        <div className="admin-form-modal" style={{ zIndex: 1100 }}>
+          <div className="admin-form-card" style={{ maxWidth: "680px", maxHeight: "90vh", overflowY: "auto", padding: "24px" }}>
+            <div className="admin-form-header" style={{ marginBottom: "20px" }}>
+              <h3>🧾 Comprobante de Venta Electrónico — EXP-{String(solicitudVerBoleta.id).replace(/^EXP-/, "")}</h3>
+              <button type="button" onClick={() => setSolicitudVerBoleta(null)}>✕</button>
+            </div>
+
+            {/* ESTILO DE IMPRESIÓN EXCLUSIVA */}
+            <style>{`
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #comprobante-modal-impresion, #comprobante-modal-impresion * {
+                  visibility: visible !important;
+                }
+                #comprobante-modal-impresion {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  border: 2px solid #0f172a !important;
+                  box-shadow: none !important;
+                  margin: 0 !important;
+                  padding: 20px !important;
+                }
+              }
+            `}</style>
+
+            {/* COMPROBANTE OFICIAL ESTILO SUNAT */}
+            <div id="comprobante-modal-impresion" style={{ background: "#ffffff", border: "2px solid #0f172a", borderRadius: "14px", padding: "24px", textAlign: "left", boxShadow: "0 4px 16px rgba(0,0,0,0.06)", marginBottom: "20px" }}>
+              {/* ENCABEZADO */}
+              <div style={{ background: "#0f172a", color: "white", padding: "14px 20px", borderRadius: "8px", textAlign: "center", marginBottom: "20px" }}>
+                <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "900", letterSpacing: "0.5px" }}>MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                <span style={{ fontSize: "11px", opacity: 0.9, textTransform: "uppercase", fontWeight: "bold", letterSpacing: "0.5px", display: "block", marginTop: "2px" }}>
+                  Módulo de Atención y Caja Municipal
+                </span>
+                <span style={{ fontSize: "10.5px", opacity: 0.75, display: "block", marginTop: "2px" }}>RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
+              </div>
+
+              {/* NUMERACIÓN DE COMPROBANTE */}
+              <div style={{ border: "2px solid #0f172a", padding: "12px 18px", textAlign: "center", borderRadius: "8px", background: "#f8fafc", marginBottom: "20px" }}>
+                <span style={{ fontWeight: "900", fontSize: "15px", display: "block", color: "#0f172a", letterSpacing: "0.5px" }}>
+                  {(solicitudVerBoleta.tipoComprobante || ((solicitudVerBoleta.comprobantePago || "").includes("FACTURA") ? "FACTURA ELECTRÓNICA" : "BOLETA DE VENTA ELECTRÓNICA")).toUpperCase()}
+                </span>
+                <span style={{ fontSize: "16px", fontWeight: "900", color: "#dc2626" }}>
+                  N° {solicitudVerBoleta.numeroOperacion || solicitudVerBoleta.comprobantePago || `B001-${String(solicitudVerBoleta.id).replace(/^EXP-/, "")}`}
+                </span>
+                <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#475569" }}>Fecha: {solicitudVerBoleta.fechaPago || solicitudVerBoleta.fechaSolicitud || "21/7/2026"}</p>
+              </div>
+
+              {/* DATOS CONTRIBUYENTE */}
+              <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "10px", padding: "16px", marginBottom: "20px" }}>
+                <h4 style={{ margin: "0 0 10px", color: "#0f172a", fontSize: "14px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "6px" }}>
+                  🏢 Información del Contribuyente y Establecimiento
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "13px" }}>
+                  <p style={{ margin: 0 }}><strong>Nombre Legal / Razón Social:</strong> {solicitudVerBoleta.razonSocial || solicitudVerBoleta.nombreNegocio}</p>
+                  <p style={{ margin: 0 }}><strong>Nombre Comercial:</strong> {solicitudVerBoleta.nombreNegocio}</p>
+                  <p style={{ margin: 0 }}><strong>Número de RUC:</strong> {solicitudVerBoleta.ruc}</p>
+                  <p style={{ margin: 0 }}><strong>Dirección Fiscal:</strong> {solicitudVerBoleta.direccion}</p>
+                  <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Solicitante:</strong> {[solicitudVerBoleta.nombresSolicitante, solicitudVerBoleta.apellidosSolicitante, solicitudVerBoleta.nombreSolicitante].filter(Boolean).join(" ")} (DNI: {solicitudVerBoleta.dniSolicitante || solicitudVerBoleta.dni})</p>
+                </div>
+              </div>
+
+              {/* GRILLA TABULAR */}
+              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "20px", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ background: "#0f172a", color: "white" }}>
+                    <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "center", width: "12%" }}>CANT</th>
+                    <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "left" }}>DESCRIPCIÓN</th>
+                    <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "right", width: "20%" }}>P. UNIT</th>
+                    <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "right", width: "20%" }}>IMPORTE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: "1px solid #cbd5e1" }}>
+                    <td style={{ padding: "12px", textAlign: "center", fontWeight: "bold" }}>1</td>
+                    <td style={{ padding: "12px" }}>
+                      <strong>Derecho de Trámite — {solicitudVerBoleta.tipoTramite || "Nueva Licencia de Funcionamiento"}</strong>
+                      <small style={{ display: "block", color: "#64748b" }}>Expediente N° EXP-{String(solicitudVerBoleta.id).replace(/^EXP-/, "")}</small>
+                    </td>
+                    <td style={{ padding: "12px", textAlign: "right" }}>S/ {Number(solicitudVerBoleta.montoPagado || MONTO_TRAMITE).toFixed(2)}</td>
+                    <td style={{ padding: "12px", textAlign: "right", fontWeight: "800", color: "#0f172a" }}>S/ {Number(solicitudVerBoleta.montoPagado || MONTO_TRAMITE).toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* RESUMEN FINANCIERO */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
+                <div style={{ fontSize: "12px", color: "#334155" }}>
+                  <p style={{ margin: "2px 0" }}><strong>MÉTODO DE PAGO:</strong> {(solicitudVerBoleta.metodoPago || "BILLETERA DIGITAL (YAPE / PLIN)").toUpperCase()}</p>
+                  <p style={{ margin: "2px 0" }}><strong>CAJERA:</strong> {(solicitudVerBoleta.cajeraResponsable || solicitudVerBoleta.usuarioCajero || "CAJERA MUNICIPAL").toUpperCase()}</p>
+                </div>
+                <table style={{ width: "210px", fontSize: "13.5px" }}>
+                  <tbody>
+                    <tr><td style={{ color: "#475569" }}>OP. GRAVADA:</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 2.54</td></tr>
+                    <tr><td style={{ color: "#475569" }}>I.G.V. (18%):</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 0.46</td></tr>
+                    <tr style={{ fontSize: "16px", borderTop: "1.5px solid #0f172a" }}>
+                      <td style={{ paddingTop: "6px", fontWeight: "900", color: "#0f172a" }}>TOTAL A PAGAR:</td>
+                      <td style={{ paddingTop: "6px", textAlign: "right", fontWeight: "900", color: "#16a34a" }}>S/ {Number(solicitudVerBoleta.montoPagado || MONTO_TRAMITE).toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* PIE LEGAL */}
+              <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: "14px", fontSize: "12px", color: "#64748b", textAlign: "center" }}>
+                <p style={{ margin: "0 0 4px", fontWeight: "bold" }}>Representación impresa del comprobante de venta electrónico.</p>
+                <p style={{ margin: 0, color: "#16a34a", fontWeight: "800", fontSize: "13px" }}>¡Gracias por su preferencia!</p>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{ padding: "10px 20px", background: "#0f766e", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}
+              >
+                🖨️ Imprimir Boleta
+              </button>
+              <button
+                type="button"
+                onClick={() => setSolicitudVerBoleta(null)}
+                style={{ padding: "10px 20px", background: "#64748b", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
