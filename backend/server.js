@@ -433,34 +433,53 @@ app.get("/api/config/payment-config", (req, res) => {
   });
 });
 
-app.get("/api/documento-proxy", verificarToken, async (req, res) => {
+app.get("/api/documento-proxy", verificarTokenOpcional, async (req, res) => {
+  const logPrefix = `[DOCUMENTO-PROXY ${new Date().toISOString()}]`;
   try {
     const { url } = req.query;
 
+    console.log(`${logPrefix} Solicitud recibida. URL: "${url || ""}"`);
+
     if (!url) {
-      return res.status(400).json({ error: "Parámetro 'url' requerido." });
+      console.warn(`${logPrefix} Error 400: Parámetro 'url' no proporcionado.`);
+      return res.status(400).json({ error: "Parámetro 'url' requerido.", codigoError: "URL_REQUERIDA" });
     }
 
     let parsedUrl;
     try {
       parsedUrl = new URL(url);
     } catch {
-      return res.status(400).json({ error: "URL inválida." });
+      console.warn(`${logPrefix} Error 400: URL malformada: "${url}"`);
+      return res.status(400).json({ error: "La URL del documento es inválida.", codigoError: "URL_INVALIDA" });
     }
 
-    const allowedHosts = ["res.cloudinary.com", "firebasestorage.googleapis.com"];
-    if (!allowedHosts.includes(parsedUrl.hostname)) {
-      return res.status(403).json({ error: "Dominio no permitido." });
+    const allowedHosts = [
+      "res.cloudinary.com",
+      "firebasestorage.googleapis.com",
+      "storage.googleapis.com",
+      "cloudinary.com",
+      "localhost"
+    ];
+
+    const esDominioPermitido = allowedHosts.some(host => parsedUrl.hostname.includes(host));
+
+    if (!esDominioPermitido) {
+      console.warn(`${logPrefix} Error 403: Dominio no permitido: "${parsedUrl.hostname}"`);
+      return res.status(403).json({ error: `Dominio '${parsedUrl.hostname}' no permitido para proxy de documentos.`, codigoError: "DOMINIO_NO_PERMITIDO" });
     }
+
+    console.log(`${logPrefix} Solicitando documento a servidor remoto (${parsedUrl.hostname})...`);
 
     const response = await axios.get(url, {
       responseType: "stream",
-      timeout: 15000,
+      timeout: 20000,
       headers: { Accept: "*/*" },
     });
 
-    const contentType = response.headers["content-type"] || "application/octet-stream";
+    const contentType = response.headers["content-type"] || "application/pdf";
     const contentLength = response.headers["content-length"];
+
+    console.log(`${logPrefix} Documento obtenido exitosamente. Status: ${response.status}, Content-Type: "${contentType}", Length: ${contentLength || "desconocido"} bytes.`);
 
     res.setHeader("Content-Type", contentType);
     if (contentLength) {
@@ -468,22 +487,26 @@ app.get("/api/documento-proxy", verificarToken, async (req, res) => {
     }
     res.setHeader("Cache-Control", "private, max-age=300");
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
 
     response.data.pipe(res);
   } catch (error) {
-    console.error("=== ERROR EN PROXY DE DOCUMENTO ===");
-    console.error("URL:", req.query.url);
-    console.error("Status:", error.response?.status);
-    console.error("Message:", error.message);
+    console.error(`${logPrefix} ERROR AL OBTENER DOCUMENTO:`, error.message);
+    if (error.response) {
+      console.error(`${logPrefix} Estado HTTP Remoto: ${error.response.status}`);
+    }
+
+    res.setHeader("Access-Control-Allow-Origin", "*");
 
     if (error.response?.status === 404) {
-      return res.status(404).json({ error: "El documento no fue encontrado en el servidor remoto." });
+      return res.status(404).json({ error: "El archivo PDF no existe o fue eliminado del almacenamiento (Error 404).", codigoError: "NOT_FOUND" });
     }
     if (error.response?.status === 401 || error.response?.status === 403) {
-      return res.status(401).json({ error: "El documento no está disponible actualmente." });
+      return res.status(403).json({ error: "Acceso denegado al archivo PDF. Permisos insuficientes o enlace privado (Error 403).", codigoError: "FORBIDDEN" });
     }
 
-    res.status(502).json({ error: "No se pudo obtener el documento. Intente más tarde." });
+    return res.status(500).json({ error: `Error del servidor al recuperar el documento: ${error.message}`, codigoError: "SERVER_ERROR" });
   }
 });
 
