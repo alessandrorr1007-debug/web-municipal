@@ -317,11 +317,6 @@ function PanelInspector({ seccion }) {
       }
     }
 
-    if (evidencias.length === 0) {
-      alert("Es OBLIGATORIO adjuntar al menos una (1) fotografía como evidencia técnica de la inspección.");
-      return;
-    }
-
     setProcesando(true);
     try {
       const fechaHoraActual = formatearFechaHora();
@@ -652,7 +647,7 @@ function PanelInspector({ seccion }) {
                             {s.planoUrl && (
                               <button
                                 type="button"
-                                onClick={() => abrirPdf(s.planoUrl)}
+                                onClick={() => setDocumentoPdfVisor({ url: s.planoUrl, nombre: `Plano del Local — EXP-${String(s.id).replace(/^EXP-/, "")}` })}
                                 style={{ background: "#2563eb", color: "white", border: "none", padding: "4px 10px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer" }}
                               >
                                 📐 Ver Plano del Local
@@ -941,40 +936,7 @@ function PanelInspector({ seccion }) {
                     />
                   </div>
 
-                  <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                    <label style={{ display: "block", fontSize: "13.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                      📸 Adjuntar Fotografías de Evidencia (Máx 2 fotos):
-                    </label>
 
-                    {evidencias.length < 2 && (
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleSubirEvidencias}
-                        style={{ marginBottom: "12px" }}
-                      />
-                    )}
-
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                      {evidencias.map((foto, idx) => (
-                        <div key={idx} style={{ position: "relative" }}>
-                          <img
-                            src={foto.url || foto}
-                            alt={`Evidencia ${idx + 1}`}
-                            style={{ width: "100px", height: "80px", objectFit: "cover", borderRadius: "8px", border: "1px solid #cbd5e1" }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => quitarEvidencia(idx)}
-                            style={{ position: "absolute", top: "-6px", right: "-6px", background: "#dc2626", color: "white", border: "none", borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
 
                   <div className="admin-form-actions" style={{ marginTop: "20px" }}>
                     <button type="button" onClick={() => setSolicitudAtencion(null)} disabled={procesando}>Cancelar</button>
