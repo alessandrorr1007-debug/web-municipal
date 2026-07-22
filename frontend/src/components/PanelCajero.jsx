@@ -43,7 +43,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [documentoPdfVisor, setDocumentoPdfVisor] = useState(null);
   const [solicitudRenovacion, setSolicitudRenovacion] = useState(null);
   const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("Efectivo en Caja Municipal");
-  const [montoRecibidoInput, setMontoRecibidoInput] = useState("10.00");
+  const [montoRecibidoInput, setMontoRecibidoInput] = useState("");
   const [comprobanteGenerado, setComprobanteGenerado] = useState(null);
   const [procesando, setProcesando] = useState(false);
 
@@ -480,7 +480,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       return;
     }
 
-    if (metodoPagoSeleccionado.toLowerCase().includes("flow")) {
+    if (!metodoPagoSeleccionado.toLowerCase().includes("efectivo")) {
       setProcesando(true);
       try {
         const idExpLimpio = String(solicitudCobro.id).replace(/^EXP-/, "");
@@ -2039,7 +2039,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                               className="btn-ok"
                               onClick={() => {
                                 setSolicitudCobro(s);
-                                setMetodoPagoSeleccionado("Efectivo en caja");
+                                setMetodoPagoSeleccionado("Efectivo en Caja Municipal");
+                                setMontoRecibidoInput("");
                               }}
                               style={{ background: "#16a34a", color: "white", padding: "6px 14px", borderRadius: "6px", fontWeight: "700", fontSize: "13px" }}
                             >
@@ -2177,7 +2178,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     const sol = solicitudVerDetalle;
                     setSolicitudVerDetalle(null);
                     setSolicitudCobro(sol);
-                    setMetodoPagoSeleccionado("Efectivo en caja");
+                    setMetodoPagoSeleccionado("Efectivo en Caja Municipal");
+                    setMontoRecibidoInput("");
                   }}
                   style={{ background: "#16a34a", color: "white" }}
                 >
