@@ -903,7 +903,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             usuario: nombreCajera,
             rol: "Cajera",
             accion: "Cobro de tasa y programación de inspección",
-            comentarios: `Pago de S/ ${MONTO_TRAMITE.toFixed(2)} registrado (${metodoPagoSeleccionado}). ${esEfectivo ? `Recibido: S/ ${montoRecibidoNum.toFixed(2)}, Vuelto: S/ ${vueltoCalculado.toFixed(2)}. ` : ''}Boleta: ${codComprobante}. Visita asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion} a las ${horaLabel}.`,
+            comentarios: `Pago de S/ ${MONTO_TRAMITE.toFixed(2)} registrado (${metodoPagoSeleccionado}). ${esEfectivo ? `Recibido: S/ ${montoRecibidoNum.toFixed(2)}, Vuelto: S/ ${vueltoCalculado.toFixed(2)}. ` : ''}Boleta: ${codComprobante}. Visita asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion}.`,
           },
         ],
       };
@@ -1079,8 +1079,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               ? `Registro Presencial, Emisión de ${nombreComprobanteTitulo} y Asignación de Inspector`
               : `Registro Presencial con Pago Pendiente vía Billetera Digital (Flow)`,
             comentarios: esEfectivo
-              ? `Registro presencial en ventanilla (${tipoTramiteSeleccionado}). Pago de S/ ${MONTO_TRAMITE.toFixed(2)} registrado (${metodoPagoSeleccionado}). ${nombreComprobanteTitulo}: ${codComprobante}. Visita asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion} a las ${horaLabel}.`
-              : `Registro presencial en ventanilla (${tipoTramiteSeleccionado}). Pago de S/ ${MONTO_TRAMITE.toFixed(2)} pendiente vía pasarela Flow. Visita pre-asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion} a las ${horaLabel}.`,
+              ? `Registro presencial en ventanilla (${tipoTramiteSeleccionado}). Pago de S/ ${MONTO_TRAMITE.toFixed(2)} registrado (${metodoPagoSeleccionado}). ${nombreComprobanteTitulo}: ${codComprobante}. Visita asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion}.`
+              : `Registro presencial en ventanilla (${tipoTramiteSeleccionado}). Pago de S/ ${MONTO_TRAMITE.toFixed(2)} pendiente vía pasarela Flow. Visita pre-asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion}.`,
           },
         ],
       };
@@ -1777,8 +1777,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         titulo: "⚠️ Observado (Segunda visita del inspector - Última oportunidad)",
         badgeColor: "#6b21a8",
         badgeBg: "#f3e8ff",
-        proximaFechaInspeccion: s.fechaSegundaVisita || s.fechaReinspeccion || s.fechaVisitaInspector || s.fechaInspeccion || "Por asignar",
-        horaInspeccion: s.horaVisitaLabel || s.horaVisitaInspector || ""
+        proximaFechaInspeccion: s.fechaSegundaVisita || s.fechaReinspeccion || s.fechaVisitaInspector || s.fechaInspeccion || "Por asignar"
       };
     }
 
@@ -1788,8 +1787,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       titulo: "⏳ Pendiente (Espera a su primera visita)",
       badgeColor: "#1e40af",
       badgeBg: "#dbeafe",
-      fechaInspeccion: s.fechaVisitaInspector || s.fechaInspeccion || s.fechaSolicitud || "Por asignar",
-      horaInspeccion: s.horaVisitaLabel || s.horaVisitaInspector || ""
+      fechaInspeccion: s.fechaVisitaInspector || s.fechaInspeccion || s.fechaSolicitud || "Por asignar"
     };
   };
 
@@ -2672,7 +2670,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏢 RUC de la Empresa:</strong> {s.ruc}</p>
                           <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏪 Nombre Comercial / Razón Social:</strong> {s.nombreNegocio || s.razonSocial}</p>
                           <p style={{ margin: "10px 0 0", fontSize: "16px", color: "#1e40af", fontWeight: "800" }}>
-                            📅 <strong>Fecha de Inspección (1ra Visita):</strong> {estInfo.fechaInspeccion} {estInfo.horaInspeccion ? `(${estInfo.horaInspeccion})` : ""}
+                            📅 <strong>Fecha de Inspección (1ra Visita):</strong> {estInfo.fechaInspeccion}
                           </p>
                         </div>
                       )}
@@ -2682,7 +2680,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏢 RUC de la Empresa:</strong> {s.ruc}</p>
                           <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏪 Nombre Comercial / Razón Social:</strong> {s.nombreNegocio || s.razonSocial}</p>
                           <p style={{ margin: "10px 0 0", fontSize: "16px", color: "#6b21a8", fontWeight: "800" }}>
-                            📅 <strong>Próxima Fecha de Inspección (Segunda visita - Última oportunidad):</strong> {estInfo.proximaFechaInspeccion} {estInfo.horaInspeccion ? `(${estInfo.horaInspeccion})` : ""}
+                            📅 <strong>Próxima Fecha de Inspección (Segunda visita - Última oportunidad):</strong> {estInfo.proximaFechaInspeccion}
                           </p>
                         </div>
                       )}
