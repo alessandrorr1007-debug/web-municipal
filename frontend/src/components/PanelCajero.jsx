@@ -6,6 +6,7 @@ import {
 } from "../services/solicitudService";
 import { crearNotificacion } from "../services/notificacionService";
 import { abrirPdf } from "../services/pdfService";
+import { crearOrdenFlow } from "../services/pagoService";
 import { consultarDni } from "../services/dniService";
 import { consultarRuc } from "../services/rucService";
 import { GROS_DISPONIBLES, obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
@@ -839,6 +840,29 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         solicitudCompleta
       };
 
+      if (metodoPagoSeleccionado.includes("Flow")) {
+        try {
+          const flowOrder = await crearOrdenFlow({
+            solicitudId: String(solicitudCompleta.id),
+            amount: MONTO_TRAMITE,
+            email: correoForm || `${rucForm}@empresa.pe`,
+            buyerName: nombreNegocioForm || razonSocialForm || "Contribuyente",
+            subject: `Derecho de Trámite Licencia EXP-${String(solicitudCompleta.id).replace(/^EXP-/, "")}`,
+          });
+
+          if (flowOrder && flowOrder.paymentUrl) {
+            alert(`💳 Redirigiendo a la pasarela de pagos oficial Flow.cl para procesar el pago real de S/ ${MONTO_TRAMITE.toFixed(2)}...`);
+            window.location.href = flowOrder.paymentUrl;
+            return;
+          }
+        } catch (flowErr) {
+          console.error("Error al iniciar orden de pago Flow:", flowErr);
+          alert("⚠️ Error al conectar con la pasarela Flow.cl: " + flowErr.message);
+          setProcesando(false);
+          return;
+        }
+      }
+
       setComprobanteGenerado(solicitudCompleta);
       setResultadoRegistroExitoso(resExito);
       await cargarSolicitudes();
@@ -1646,6 +1670,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           >
                             <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
                             <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
+                            <option value="Pago Online Real con Flow (Flow.cl)">💳 Pago Online Real con Flow (Flow.cl)</option>
                           </select>
                         </div>
                       </div>
@@ -1671,17 +1696,23 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       style={{
                         width: "100%",
                         padding: "16px",
-                        background: "linear-gradient(90deg, #16a34a, #059669)",
+                        background: metodoPagoSeleccionado.includes("Flow")
+                          ? "linear-gradient(90deg, #2563eb, #1d4ed8)"
+                          : "linear-gradient(90deg, #16a34a, #059669)",
                         color: "white",
                         border: "none",
                         borderRadius: "14px",
                         fontSize: "16.5px",
                         fontWeight: "800",
                         cursor: "pointer",
-                        boxShadow: "0 4px 14px rgba(22, 163, 74, 0.3)"
+                        boxShadow: "0 4px 14px rgba(0, 0, 0, 0.15)"
                       }}
                     >
-                      {procesando ? "Procesando Registro Presencial..." : "💰 Confirmar Pago (S/ 3.00) y Registrar Solicitud"}
+                      {procesando
+                        ? "Procesando..."
+                        : metodoPagoSeleccionado.includes("Flow")
+                        ? "💳 Pagar S/ 3.00 con Flow.cl ➔"
+                        : "💰 Confirmar Pago (S/ 3.00) y Registrar Solicitud"}
                     </button>
                   </div>
                 )}
