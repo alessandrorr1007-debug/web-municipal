@@ -2493,11 +2493,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   )}
                 </div>
               ) : (
-                <div style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: "14px 16px", borderRadius: "10px", marginBottom: "16px" }}>
-                  <p style={{ margin: "2px 0", fontSize: "13px", color: "#1e3a8a" }}><strong>Método de Pago:</strong> {metodoPagoSeleccionado}</p>
-                  <p style={{ margin: "2px 0", fontSize: "13px", color: "#1e3a8a" }}><strong>Estado del Pago:</strong> <span style={{ color: "#16a34a", fontWeight: "bold" }}>Pago confirmado</span></p>
-                  <p style={{ margin: "2px 0", fontSize: "13.5px", color: "#1e3a8a" }}><strong>Código de Transacción:</strong> TX-{Date.now().toString().slice(-8)}</p>
-                  <p style={{ margin: "2px 0", fontSize: "12.5px", color: "#64748b" }}>Fecha y Hora: {formatearFechaHora()}</p>
+                <div style={{ background: "#f0fdf4", border: "1.5px solid #bbf7d0", padding: "14px 16px", borderRadius: "10px", marginBottom: "16px" }}>
+                  <p style={{ margin: "2px 0", fontSize: "13.5px", color: "#14532d", fontWeight: "bold" }}>📱 Pasarela en Línea de Pago Billetera Digital (Flow)</p>
+                  <p style={{ margin: "4px 0 0", fontSize: "12.5px", color: "#475569" }}>
+                    Al pulsar el botón, el sistema te redirigirá a la pasarela segura oficial de <strong>Flow.cl</strong> para procesar el pago de <strong>S/ {MONTO_TRAMITE.toFixed(2)}</strong> mediante Yape, Plin o Tarjeta.
+                  </p>
                 </div>
               )}
 
@@ -2576,7 +2576,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   color: "white"
                 }}
               >
-                {procesando ? "Procesando Cobro y Asignación..." : "✅ Confirmar Pago y Programar Inspección"}
+                {procesando
+                  ? "Conectando con Pasarela Flow..."
+                  : metodoPagoSeleccionado.toLowerCase().includes("efectivo")
+                  ? "✅ Confirmar Pago en Efectivo y Programar"
+                  : "🌐 Ir a Pasarela de Pago Billetera Digital (Flow)"}
               </button>
             </div>
           </div>
