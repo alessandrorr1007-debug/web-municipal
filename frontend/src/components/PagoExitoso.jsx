@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { verificarPagoFlow } from "../services/pagoService";
+import { buscarSiguienteDisponibilidad } from "../config/inspeccionConfig";
+import { obtenerSolicitudes } from "../services/solicitudService";
 
 const MONTO_TRAMITE = 3;
 
@@ -48,19 +50,46 @@ export default function PagoExitoso({ onRedirect }) {
             const solicitudId = resultado.commerceOrder;
 
             try {
+              console.log("[PagoExitoso] Buscando siguiente cupo disponible para inspección...");
+              let datosInspeccion = {};
+              try {
+                const todasSol = await obtenerSolicitudes();
+                const resSlot = buscarSiguienteDisponibilidad(todasSol);
+                if (resSlot.exito) {
+                  datosInspeccion = {
+                    estado: "Inspección programada",
+                    estadoNormalizado: "INSPECCION_PROGRAMADA",
+                    inspeccion: "Programada",
+                    inspectorUid: resSlot.inspector.uid || resSlot.inspector.id,
+                    inspectorAsignadoUid: resSlot.inspector.uid || resSlot.inspector.id,
+                    inspectorNombre: resSlot.inspector.nombre,
+                    fechaVisitaInspector: resSlot.fechaInspeccion,
+                    horaVisitaInspector: resSlot.slotInspeccion,
+                    horaVisitaLabel: resSlot.horaLabel,
+                  };
+                }
+              } catch (slotErr) {
+                console.warn("[PagoExitoso] Error al buscar cupo libre:", slotErr);
+              }
+
+              const expClean = String(solicitudId).replace(/^EXP-/, "");
               console.log("[PagoExitoso] Actualizando Firestore...");
-              await updateDoc(doc(db, "solicitudes", solicitudId), {
+              await updateDoc(doc(db, "solicitudes", expClean), {
                 estadoPago: "Confirmado",
                 pago: "Confirmado",
                 metodoPago: "Flow",
-                comprobantePago: "Pago confirmado vía Flow",
+                tipoComprobante: "Boleta de Venta Electrónica",
+                comprobantePago: `Boleta Electrónica N° B001-${expClean}`,
+                numeroOperacion: `B001-${expClean}`,
                 montoPagado: resultado.amount || MONTO_TRAMITE,
                 pagoId: String(resultado.flowOrder || token),
                 pagoEstadoDetalle: "approved",
                 flowToken: token,
+                fechaPago: new Date().toLocaleString("es-PE"),
                 actualizadoEn: new Date().toISOString(),
+                ...datosInspeccion,
               });
-              console.log("[PagoExitoso] Firestore actualizado OK");
+              console.log("[PagoExitoso] Firestore actualizado OK con fecha inspección:", datosInspeccion.fechaVisitaInspector);
             } catch (fireErr) {
               console.error("[PagoExitoso] Error actualizando Firestore:", fireErr);
             }

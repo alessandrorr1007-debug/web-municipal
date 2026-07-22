@@ -737,41 +737,59 @@ app.post("/api/pagos/flow/crear-orden", verificarToken, async (req, res) => {
       return res.status(400).json({ error: "Faltan parámetros requeridos: commerceOrder, amount, email." });
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ error: "El correo electrónico no tiene un formato válido." });
+    let emailFinal = String(email || "").trim().toLowerCase();
+    const userPart = emailFinal.split("@")[0] || "";
+    if (!emailFinal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailFinal) || userPart.length < 3) {
+      if (emailFinal.includes("@")) {
+        const [u, domain] = emailFinal.split("@");
+        emailFinal = `ciudadano.${u || "usuario"}@${domain || "munitrujillo.gob.pe"}`;
+      } else {
+        emailFinal = "contribuyente@munitrujillo.gob.pe";
+      }
     }
 
-    const params = {
-      apiKey: FLOW_API_KEY,
-      commerceOrder: String(commerceOrder),
-      subject: subject || "Derecho de trámite - Licencia Municipal",
-      currency: "PEN",
-      amount: Number(amount),
-      email,
-      urlConfirmation: urlConfirmation || `${MUNICIPALIDAD_CONFIG.url}/api/pagos/flow/callback`,
-      urlReturn: urlReturn || `${MUNICIPALIDAD_CONFIG.url}/pago-exitoso`,
+    const realizarPeticionFlow = async (emailTarget) => {
+      const params = {
+        apiKey: FLOW_API_KEY,
+        commerceOrder: String(commerceOrder),
+        subject: subject || "Derecho de trámite - Licencia Municipal",
+        currency: "PEN",
+        amount: Number(amount),
+        email: emailTarget,
+        urlConfirmation: urlConfirmation || `${MUNICIPALIDAD_CONFIG.url}/api/pagos/flow/callback`,
+        urlReturn: urlReturn || `${MUNICIPALIDAD_CONFIG.url}/pago-exitoso`,
+      };
+
+      const s = flowSign(params);
+      const data = flowBuildBody(params);
+
+      return await axios.post(
+        `${FLOW_BASE_URL}/payment/create`,
+        `${data}&s=${s}`,
+        {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          timeout: 15000,
+        }
+      );
     };
 
     console.log("[FLOW] === CREANDO ORDEN ===");
     console.log("[FLOW] apiKey length:", FLOW_API_KEY.length);
-    console.log("[FLOW] apiKey prefix:", FLOW_API_KEY.substring(0, 6) + "...");
-    console.log("[FLOW] secretKey loaded:", !!FLOW_SECRET_KEY, "(length:", FLOW_SECRET_KEY.length + ")");
-    console.log("[FLOW] params:", JSON.stringify({ ...params, apiKey: "(hidden)" }, null, 2));
+    console.log("[FLOW] emailTarget:", emailFinal);
 
-    const s = flowSign(params);
-    const data = flowBuildBody(params);
-
-    console.log("[FLOW] signature:", s);
-    console.log("[FLOW] body preview:", data.substring(0, 100) + "...");
-
-    const response = await axios.post(
-      `${FLOW_BASE_URL}/payment/create`,
-      `${data}&s=${s}`,
-      {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        timeout: 15000,
+    let response;
+    try {
+      response = await realizarPeticionFlow(emailFinal);
+    } catch (errFirst) {
+      const errDataStr = JSON.stringify(errFirst.response?.data || "");
+      console.warn("[FLOW] Intento inicial falló:", errDataStr);
+      if (errDataStr.includes("1620") || errDataStr.includes("not valid") || errDataStr.includes("userEmail")) {
+        console.warn("[FLOW] Reintentando con email institucional seguro por error de validación Flow...");
+        response = await realizarPeticionFlow("contribuyente@munitrujillo.gob.pe");
+      } else {
+        throw errFirst;
       }
-    );
+    }
 
     const { url, token } = response.data;
     if (!url || !token) {
@@ -855,6 +873,8 @@ app.post("/api/pagos/flow/callback", express.urlencoded({ extended: false }), as
         await updateDoc(solicitudRef, {
             estadoPago: "Confirmado",
             pago: "Confirmado",
+            estado: "Inspección programada",
+            estadoNormalizado: "INSPECCION_PROGRAMADA",
             metodoPago: "Flow",
             comprobantePago: "Pago confirmado vía Flow",
             montoPagado: paymentData.amount || MONTO_TRAMITE,

@@ -948,10 +948,45 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
 
       console.log("[FLOW] Solicitud guardada:", nueva.id);
 
+      const htmlCorreoNuevaSolicitud = `
+        <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 2px solid #0f172a; border-radius: 12px; overflow: hidden;">
+          <div style="background-color: #0f172a; padding: 20px; text-align: center; color: #ffffff;">
+            <h2 style="margin: 0; font-size: 18px; font-weight: 900; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+            <span style="font-size: 12px; color: #38bdf8; font-weight: bold; display: block; margin-top: 4px;">Confirmación de Solicitud de Licencia Municipal — EXP-${nueva.id}</span>
+          </div>
+          <div style="padding: 24px; color: #334155; font-size: 14px; line-height: 1.6;">
+            <p style="margin: 0 0 16px;">Estimado(a) <strong>${nombresSolicitante} ${apellidosSolicitante}</strong> (DNI: ${dniSolicitante}),</p>
+            <p style="margin: 0 0 16px;">Se ha registrado exitosamente su solicitud de <strong>${form.tipoTramite || "Licencia Municipal de Funcionamiento"}</strong> vía el Portal Web Municipal.</p>
+
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+              <h4 style="margin: 0 0 10px; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px;">🏢 Datos del Contribuyente y Local Comercial</h4>
+              <p style="margin: 4px 0;"><strong>Código Expediente:</strong> EXP-${nueva.id}</p>
+              <p style="margin: 4px 0;"><strong>Nombre Comercial:</strong> ${form.nombreNegocio}</p>
+              <p style="margin: 4px 0;"><strong>Razón Social:</strong> ${form.razonSocial || form.nombreNegocio}</p>
+              <p style="margin: 4px 0;"><strong>RUC del Local:</strong> ${form.ruc}</p>
+              <p style="margin: 4px 0;"><strong>Dirección Fiscal / Local:</strong> ${form.direccion}</p>
+              <p style="margin: 4px 0;"><strong>Giro / Actividad Económica:</strong> ${form.giro || "General"}</p>
+              <p style="margin: 4px 0;"><strong>Correo Electrónico:</strong> ${emailUsuario}</p>
+            </div>
+
+            <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+              <h4 style="margin: 0 0 10px; color: #1e40af; border-bottom: 1px solid #bfdbfe; padding-bottom: 4px;">💳 Estado del Trámite</h4>
+              <p style="margin: 4px 0; color: #1e3a8a;"><strong>Estado del Pago:</strong> Pendiente de Pago vía Pasarela Digital (Flow)</p>
+              <p style="margin: 4px 0; color: #1e3a8a;"><strong>Monto a Cancelar:</strong> S/ 3.00 (Derecho de Trámite)</p>
+            </div>
+
+            <p style="margin: 0; text-align: center; font-size: 11.5px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+              Municipalidad Provincial de Trujillo — Gerencia de Desarrollo Económico Local
+            </p>
+          </div>
+        </div>
+      `;
+
       await crearNotificacion(usuario?.uid, {
-        titulo: "Solicitud registrada",
-        descripcion: `Su solicitud EXP-${nueva.id} de Licencia de Funcionamiento se ha registrado correctamente. Pendiente de pago.`,
+        titulo: `Solicitud Registrada — EXP-${nueva.id}`,
+        descripcion: `Su solicitud EXP-${nueva.id} de Licencia de Funcionamiento se ha registrado correctamente.`,
         icono: "📝",
+        html: htmlCorreoNuevaSolicitud,
       }, emailUsuario);
 
       const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Ciudadano";

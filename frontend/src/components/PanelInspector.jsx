@@ -133,7 +133,7 @@ function PanelInspector({ seccion }) {
     return true;
   }, [usuario]);
 
-  // CLASIFICACIÓN DE EXPEDIENTES PROGRAMADOS STRICTAMENTE PARA HOY
+  // CLASIFICACIÓN DE EXPEDIENTES PROGRAMADOS STRICTAMENTE PARA EL MISMO DÍA (HOY)
   const inspeccionesPendientes = useMemo(() => {
     const hoyNorm = normalizarFechaString(formatearFechaLocal(new Date()));
 
@@ -141,10 +141,18 @@ function PanelInspector({ seccion }) {
       if (!esExpedienteDeEsteInspector(s)) return false;
 
       const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
-      // Solo mostrar expedientes que aún NO han sido evaluados
-      if (e.includes("aprobado") || e.includes("rechazado")) return false;
+      // 1. Excluir expedientes aprobados, rechazados definitivamente o con licencia emitida
+      if (e.includes("aprobado") || e.includes("rechazado definitivamente") || e.includes("licencia emitida")) return false;
 
-      const fechaSolNorm = normalizarFechaString(s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "");
+      // 2. Excluir expedientes que YA fueron evaluados el día de hoy
+      if (s.fechaEvaluacionInspector) {
+        const fechaEvalNorm = normalizarFechaString(s.fechaEvaluacionInspector);
+        if (fechaEvalNorm === hoyNorm) return false;
+      }
+
+      // 3. FILTRO ESTRICTO DEL MISMO DÍA (HOY): Reaparece SOLO cuando hoy es igual a la fechaVisitaInspector (p.ej. luego de 30 días)
+      const fechaVisitaStr = s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "";
+      const fechaSolNorm = normalizarFechaString(fechaVisitaStr);
       return fechaSolNorm === hoyNorm;
     });
   }, [solicitudes, esExpedienteDeEsteInspector]);
@@ -158,17 +166,6 @@ function PanelInspector({ seccion }) {
   }, [solicitudes, esExpedienteDeEsteInspector]);
 
   const esHistorial = seccion === "historial" || seccion === "historial-inspecciones";
-
-  const inspeccionesHoy = useMemo(() => {
-    const hoyNorm = normalizarFechaString(formatearFechaLocal(new Date()));
-    return solicitudes.filter((s) => {
-      if (!esExpedienteDeEsteInspector(s)) return false;
-      const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
-      if (e.includes("aprobado") || e.includes("rechazado")) return false;
-      const fechaSolNorm = normalizarFechaString(s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "");
-      return fechaSolNorm === hoyNorm;
-    });
-  }, [solicitudes, esExpedienteDeEsteInspector]);
 
   const solicitudesFiltradas = useMemo(() => {
     if (!esHistorial) {
@@ -295,15 +292,19 @@ function PanelInspector({ seccion }) {
     }
   };
 
-  // EVALUAR E INSPECCIONAR (APROBAR / OBSERVADA / RECHAZADA)
+  // EVALUAR E INSPECCIONAR (APROBAR VS RECHAZAR CON 1ER INTENTO A 30 DÍAS / 2DO INTENTO CANCELACIÓN)
   const guardarResultadoInspeccion = async () => {
     if (!solicitudAtencion) return;
     if (!resultadoDecisión) {
-      alert("Seleccione una decisión (Aprobado, Observado o Rechazado).");
+      alert("Seleccione una decisión (Aprobar o Rechazar Inspección).");
       return;
     }
-    if ((resultadoDecisión === "observado" || resultadoDecisión === "rechazado") && !observacionesTexto.trim()) {
-      alert("Ingrese las observaciones o motivos detallados del informe técnico.");
+    if (!observacionesTexto.trim()) {
+      alert("Es OBLIGATORIO ingresar las observaciones o informe técnico del inspector.");
+      return;
+    }
+    if (evidencias.length === 0) {
+      alert("Es OBLIGATORIO adjuntar al menos una (1) fotografía como evidencia técnica de la inspección.");
       return;
     }
 
@@ -311,143 +312,256 @@ function PanelInspector({ seccion }) {
     try {
       const fechaHoraActual = formatearFechaHora();
       const nombreInspector = usuario?.nombre || usuario?.email || "Inspector Municipal";
-
-      let nuevoEstado = "Inspección aprobada";
-      let nuevoEstadoNorm = "INSPECCION_APROBADA";
-
-      if (resultadoDecisión === "observado") {
-        nuevoEstado = "Inspección observada";
-        nuevoEstadoNorm = "INSPECCION_OBSERVADA";
-      } else if (resultadoDecisión === "rechazado") {
-        nuevoEstado = "Inspección rechazada";
-        nuevoEstadoNorm = "INSPECCION_RECHAZADA";
-      }
-
-      const logEntrada = {
-        fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
-        hora: fechaHoraActual.split(",")[1]?.trim() || "",
-        inspector: nombreInspector,
-        accion: `Evaluación Técnica: ${resultadoDecisión.toUpperCase()}`,
-        comentarios: observacionesTexto || `Inspección dictaminada como ${resultadoDecisión.toUpperCase()}.`,
-        evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
-      };
-
-      const cambios = {
-        estadoInspeccion: nuevoEstado,
-        inspeccion: nuevoEstado,
-        estado: nuevoEstado,
-        estadoNormalizado: nuevoEstadoNorm,
-        resultadoInspeccion: resultadoDecisión,
-        observacionesInspector: observacionesTexto,
-        evidenciasInspector: evidencias,
-        fechaEvaluacionInspector: fechaHoraActual,
-        inspectorNombre: nombreInspector,
-        inspectorUid: usuario?.uid || "INSP-001",
-        historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
-      };
-
-      await actualizarSolicitud(solicitudAtencion.id, cambios);
-
+      const intentosPrevios = Number(solicitudAtencion.intentosInspeccion || 1);
       const expLimpio = String(solicitudAtencion.id).replace(/^EXP-/, "");
+      const nombreCiudadano = obtenerNombreCiudadanoValido(solicitudAtencion);
+      const dniCiudadano = obtenerDniValido(solicitudAtencion);
 
-      if (resultadoDecisión === "aprobado" && solicitudAtencion.correoUsuario) {
-        const numLicenciaStr = `00${expLimpio.slice(-6)} - 2026 MPT-GDEL-SGLC`;
-        const fechaHoyFormateada = `Trujillo, ${new Date().toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })}`;
+      if (resultadoDecisión === "aprobado") {
+        // 1. APROBAR INSPECCIÓN
+        const logEntrada = {
+          fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+          hora: fechaHoraActual.split(",")[1]?.trim() || "",
+          inspector: nombreInspector,
+          accion: "Evaluación Técnica: APROBADO",
+          comentarios: observacionesTexto,
+          evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
+        };
 
-        const htmlLicenciaOficial = `
-          <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #0f172a; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
-            <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
-              <h2 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 900; letter-spacing: 1px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-              <span style="font-size: 11.5px; color: #475569; font-weight: bold; text-transform: uppercase;">Gerencia de Desarrollo Económico Local — Subgerencia de Licencias y Comercialización</span>
-              
-              <div style="margin-top: 16px; background: #f8fafc; border: 1.5px solid #0f172a; padding: 12px; border-radius: 8px;">
-                <h1 style="margin: 0; color: #1e3a8a; font-size: 21px; font-weight: 900;">LICENCIA DE FUNCIONAMIENTO</h1>
-                <p style="margin: 4px 0 0; font-size: 15px; font-weight: 800; color: #dc2626;">Nro. ${numLicenciaStr}</p>
-                <small style="color: #475569; font-weight: bold;">(Ley N° 28976 — Marco Único de Licencias de Funcionamiento)</small>
-              </div>
-            </div>
+        const cambios = {
+          estadoInspeccion: "Inspección aprobada",
+          inspeccion: "Inspección aprobada",
+          estado: "Inspección aprobada",
+          estadoNormalizado: "INSPECCION_APROBADA",
+          resultadoInspeccion: "aprobado",
+          observacionesInspector: observacionesTexto,
+          evidenciasInspector: evidencias,
+          fechaEvaluacionInspector: fechaHoraActual,
+          inspectorNombre: nombreInspector,
+          inspectorUid: usuario?.uid || "INSP-001",
+          historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
+        };
 
-            <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
-              <p style="margin: 0 0 16px; font-style: italic; text-align: justify; color: #475569;">
-                Visto el Expediente N° <strong>EXP-${expLimpio}</strong> y habiéndose cumplido con los requisitos exigidos por el TÚO de la Ley N° 28976 y las Ordenanzas Municipales vigentes, habiendo obtenido informe de inspección técnica <strong>CONFORME Y APROBADO</strong>, la Municipalidad Provincial de Trujillo otorga la presente Licencia Municipal de Funcionamiento a favor de:
-              </p>
+        await actualizarSolicitud(solicitudAtencion.id, cambios);
 
-              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;">
-                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0; width: 40%;">Titular / Solicitante:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #0f172a;">${solicitudAtencion.nombresSolicitante || ""} ${solicitudAtencion.apellidosSolicitante || ""} ${solicitudAtencion.nombreSolicitante || ""}</td></tr>
-                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Doc. Identidad / RUC:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.ruc || solicitudAtencion.dniSolicitante || solicitudAtencion.dni}</td></tr>
-                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Representante Legal:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.nombreSolicitante || "Titular Representante"}</td></tr>
-                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Doc. Identidad (DNI):</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.dniSolicitante || solicitudAtencion.dni || "---"}</td></tr>
-                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Nombre Comercial:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #1e3a8a;">${solicitudAtencion.nombreNegocio}</td></tr>
-                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Dirección del Local:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.direccion}</td></tr>
-                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Giro Autorizado:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.giro || "Comercio / Servicios"}</td></tr>
-                <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Zonificación:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">Comercial Vecinal (CZ)</td></tr>
-                <tr><td style="padding: 8px 12px; font-weight: bold;">Área del Establecimiento:</td><td style="padding: 8px 12px;">Hasta 100.00 m²</td></tr>
-              </table>
+        if (solicitudAtencion.correoUsuario) {
+          const numLicenciaStr = `00${expLimpio.slice(-6)} - 2026 MPT-GDEL-SGLC`;
+          const fechaHoyFormateada = `Trujillo, ${new Date().toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })}`;
 
-              <div style="text-align: right; margin-bottom: 20px; font-weight: bold; color: #0f172a;">
-                ${fechaHoyFormateada}
-              </div>
-
-              <div style="background: #fffbe6; border: 1.5px solid #ffe58f; padding: 14px; border-radius: 8px; margin-bottom: 20px;">
-                <h4 style="margin: 0 0 6px; color: #d46b08; font-size: 13.5px; font-weight: 800;">PROHIBICIONES AL ESTABLECIMIENTO</h4>
-                <ol style="margin: 0; padding-left: 18px; font-size: 12px; color: #873800; line-height: 1.5;">
-                  <li>Prohibido generar ruidos nocivos o molestos que excedan los decibelios permitidos por ordenanza municipal.</li>
-                  <li>Prohibido la ocupación no autorizada de la vía pública o veredas con mercadería o mobiliario.</li>
-                  <li>Prohibida la venta de bebidas alcohólicas a menores de edad (Ley N° 28681).</li>
-                  <li>Prohibido alterar el giro comercial autorizado sin la debida ampliación de licencia municipal.</li>
-                </ol>
-              </div>
-
-              <div style="text-align: center; background: #eff6ff; border: 1.5px dashed #3b82f6; padding: 12px; border-radius: 8px; margin-bottom: 24px;">
-                <strong style="color: #1d4ed8; font-size: 13px; letter-spacing: 0.5px;">
-                  ES OBLIGATORIO QUE SE EXHIBA EN UN LUGAR VISIBLE DEL ESTABLECIMIENTO
-                </strong>
-              </div>
-
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px; border-top: 1px solid #cbd5e1; padding-top: 20px;">
-                <div>
-                  <small style="color: #64748b; font-weight: bold; display: block;">SUBGERENCIA DE LICENCIAS Y COMERCIALIZACIÓN</small>
-                  <span style="font-size: 12px; color: #94a3b8;">Gerencia de Desarrollo Económico Local</span>
-                </div>
-                <div style="text-align: center;">
-                  <div style="font-family: cursive, sans-serif; font-size: 20px; color: #1e3a8a; margin-bottom: -2px;">Vicky Mori del Águila</div>
-                  <div style="font-size: 11px; font-weight: bold; color: #0f172a; border-top: 1px solid #0f172a; padding-top: 2px;">
-                    SUB GERENTE DE LICENCIAS MUNICIPALES
-                  </div>
+          const htmlLicenciaOficial = `
+            <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #0f172a; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
+              <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 900; letter-spacing: 1px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                <span style="font-size: 11.5px; color: #2563eb; font-weight: bold; text-transform: uppercase;">Gerencia de Desarrollo Económico Local — Subgerencia de Licencias</span>
+                
+                <div style="margin-top: 16px; background: #f8fafc; border: 1.5px solid #0f172a; padding: 12px; border-radius: 8px;">
+                  <h1 style="margin: 0; color: #1e3a8a; font-size: 21px; font-weight: 900;">LICENCIA MUNICIPAL DE FUNCIONAMIENTO</h1>
+                  <p style="margin: 4px 0 0; font-size: 15px; font-weight: 800; color: #dc2626;">Nro. ${numLicenciaStr}</p>
+                  <small style="color: #475569; font-weight: bold;">(Ley N° 28976 — Marco Único de Licencias de Funcionamiento)</small>
                 </div>
               </div>
-            </div>
-          </div>
-        `;
 
-        await crearNotificacion(
-          solicitudAtencion.uidUsuario || "CIUDADANO",
-          {
-            titulo: `📜 Licencia de Funcionamiento Emitida — N° ${numLicenciaStr}`,
-            descripcion: `¡Felicidades! Su inspección fue APROBADA y se ha emitido la Licencia de Funcionamiento Oficial N° ${numLicenciaStr} para su establecimiento ${solicitudAtencion.nombreNegocio}.`,
-            icono: "📜",
-            html: htmlLicenciaOficial,
-          },
-          solicitudAtencion.correoUsuario
-        );
+              <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
+                <p style="margin: 0 0 16px; font-style: italic; text-align: justify; color: #475569;">
+                  Visto el Expediente N° <strong>EXP-${expLimpio}</strong> y habiéndose verificado el cumplimiento total de los requisitos de ley con informe de inspección técnica <strong>CONFORME Y APROBADO</strong>, se otorga la presente Licencia Municipal de Funcionamiento a favor de:
+                </p>
+
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;">
+                  <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0; width: 40%;">Titular / Solicitante:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #0f172a;">${nombreCiudadano}</td></tr>
+                  <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">RUC / Doc. Identidad:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.ruc || dniCiudadano}</td></tr>
+                  <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Nombre Comercial:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #1e3a8a;">${solicitudAtencion.nombreNegocio}</td></tr>
+                  <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Dirección del Local:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.direccion}</td></tr>
+                  <tr><td style="padding: 8px 12px; font-weight: bold;">Giro Autorizado:</td><td style="padding: 8px 12px;">${solicitudAtencion.giro || "Comercio / Servicios"}</td></tr>
+                </table>
+
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 12px;">
+                  <strong>Observaciones del Inspector:</strong> ${observacionesTexto}
+                </div>
+
+                <div style="text-align: right; margin-bottom: 20px; font-weight: bold; color: #0f172a;">
+                  ${fechaHoyFormateada}
+                </div>
+              </div>
+            </div>
+          `;
+
+          await crearNotificacion(
+            solicitudAtencion.uidUsuario || "CIUDADANO",
+            {
+              titulo: `🏛️ Licencia Municipal Emitida — Expediente EXP-${expLimpio}`,
+              descripcion: `¡Felicidades! Su solicitud EXP-${expLimpio} fue APROBADA y se ha emitido su Licencia Municipal de Funcionamiento N° ${numLicenciaStr}.`,
+              icono: "📜",
+              html: htmlLicenciaOficial,
+            },
+            solicitudAtencion.correoUsuario
+          );
+        }
+
+        alert(`Inspección APROBADA con éxito. Se ha enviado la Licencia de Funcionamiento al correo del solicitante.`);
       } else {
-        await crearNotificacion(
-          solicitudAtencion.uidUsuario || "",
-          {
-            titulo: `Resultado de Inspección: ${resultadoDecisión.toUpperCase()}`,
-            descripcion: `Su expediente EXP-${expLimpio} ha sido evaluado con resultado: ${nuevoEstado}.`,
-            icono: resultadoDecisión === "aprobado" ? "✅" : resultadoDecisión === "observado" ? "⚠️" : "❌",
-          },
-          solicitudAtencion.correoUsuario || ""
-        );
+        // 2. RECHAZAR INSPECCIÓN (1er intento -> REPROGRAMAR A 30 DÍAS / 2do intento -> CANCELACIÓN DEFINITIVA)
+        if (intentosPrevios < 2) {
+          // PRIMER RECHAZO: Reprogramación automática a 30 días
+          const hoyObj = new Date();
+          hoyObj.setDate(hoyObj.getDate() + 30);
+          const fechaVisita30 = hoyObj.toLocaleDateString("es-PE", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric"
+          });
+          const horaLabel30 = "08:00 a. m.";
+
+          const logEntrada = {
+            fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+            hora: fechaHoraActual.split(",")[1]?.trim() || "",
+            inspector: nombreInspector,
+            accion: "Evaluación Técnica: RECHAZADO (1er Intento)",
+            comentarios: `1er Rechazo Técnico: ${observacionesTexto}. Reprogramado automáticamente para 2da inspección el ${fechaVisita30} (${horaLabel30}).`,
+            evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
+          };
+
+          const cambios = {
+            intentosInspeccion: 2,
+            estadoInspeccion: "Inspección Observada (1er Intento) - Reprogramada a 30 días",
+            inspeccion: "Inspección Observada (1er Intento)",
+            estado: "Inspección observada - Reprogramada a 30 días",
+            estadoNormalizado: "INSPECCION_OBSERVADA",
+            resultadoInspeccion: "rechazado_1er_intento",
+            observacionesInspector: observacionesTexto,
+            evidenciasInspector: evidencias,
+            fechaVisitaInspector: fechaVisita30,
+            horaVisitaInspector: "08:00",
+            horaVisitaLabel: horaLabel30,
+            fechaEvaluacionInspector: fechaHoraActual,
+            inspectorNombre: nombreInspector,
+            inspectorUid: usuario?.uid || "INSP-001",
+            historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
+          };
+
+          await actualizarSolicitud(solicitudAtencion.id, cambios);
+
+          const htmlNotifRechazo1 = `
+            <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #d97706; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
+              <div style="text-align: center; border-bottom: 2px solid #d97706; padding-bottom: 16px; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #0f172a; font-size: 19px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                <span style="font-size: 11.5px; color: #d97706; font-weight: bold; text-transform: uppercase;">Subgerencia de Licencias — Informe Técnico de Inspección</span>
+                
+                <div style="margin-top: 16px; background: #fffbeb; border: 1.5px solid #d97706; padding: 12px; border-radius: 8px;">
+                  <h1 style="margin: 0; color: #b45309; font-size: 18px; font-weight: 900;">INSPECCIÓN TÉCNICA OBSERVADA (1ER INTENTO)</h1>
+                  <p style="margin: 4px 0 0; font-size: 14px; font-weight: 800; color: #78350f;">Expediente N° EXP-${expLimpio}</p>
+                </div>
+              </div>
+
+              <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
+                <p style="margin: 0 0 14px;">Estimado(a) <strong>${nombreCiudadano}</strong>,</p>
+                <p style="margin: 0 0 14px; text-align: justify;">
+                  Le informamos que la inspección técnica realizada al establecimiento <strong>${solicitudAtencion.nombreNegocio}</strong> no ha sido aprobada en primera instancia por los siguientes motivos u observaciones técnicas:
+                </p>
+
+                <div style="background: #fffbeb; border-left: 4px solid #d97706; padding: 12px 16px; border-radius: 4px; margin-bottom: 18px; font-weight: 600; color: #78350f;">
+                  "${observacionesTexto}"
+                </div>
+
+                <div style="background: #eff6ff; border: 1.5px solid #2563eb; padding: 14px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+                  <h4 style="margin: 0 0 6px; color: #1e40af; font-size: 14.5px;">📅 2DA INSPECCIÓN PROGRAMADA AUTOMÁTICAMENTE</h4>
+                  <p style="margin: 0; font-size: 16px; font-weight: 900; color: #1d4ed8;">
+                    Fecha: ${fechaVisita30} — Hora: ${horaLabel30}
+                  </p>
+                  <small style="color: #475569; display: block; margin-top: 4px;">Dispone de un plazo máximo de 30 días para subsanar las observaciones indicadas antes de la fecha agendada.</small>
+                </div>
+              </div>
+            </div>
+          `;
+
+          await crearNotificacion(
+            solicitudAtencion.uidUsuario || "",
+            {
+              titulo: "⚠️ Inspección Observada (1er Intento)",
+              descripcion: `Su inspección técnica fue observada. Se ha reprogramado una 2da inspección para el día ${fechaVisita30} (${horaLabel30}) para subsanar las observaciones.`,
+              icono: "⚠️",
+              html: htmlNotifRechazo1,
+            },
+            solicitudAtencion.correoUsuario || ""
+          );
+
+          alert(`1er Rechazo registrado. Se envió el informe al correo del solicitante y se reprogramó automáticamente la 2da inspección técnica para el ${fechaVisita30} (${horaLabel30}).`);
+        } else {
+          // SEGUNDO RECHAZO: Cancelación definitiva
+          const logEntrada = {
+            fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+            hora: fechaHoraActual.split(",")[1]?.trim() || "",
+            inspector: nombreInspector,
+            accion: "Evaluación Técnica: RECHAZADO DEFINITIVO (2do Intento)",
+            comentarios: `2do Rechazo Técnico Definitivo: ${observacionesTexto}. Trámite cancelado definitivamente.`,
+            evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
+          };
+
+          const cambios = {
+            intentosInspeccion: 2,
+            estadoInspeccion: "Inspección Rechazada Definitivamente (2do Intento)",
+            inspeccion: "Rechazado Definitivo",
+            estado: "Solicitud Rechazada Definitivamente",
+            estadoNormalizado: "RECHAZADO",
+            resultadoInspeccion: "rechazado_definitivo",
+            observacionesInspector: observacionesTexto,
+            evidenciasInspector: evidencias,
+            fechaEvaluacionInspector: fechaHoraActual,
+            inspectorNombre: nombreInspector,
+            inspectorUid: usuario?.uid || "INSP-001",
+            historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
+          };
+
+          await actualizarSolicitud(solicitudAtencion.id, cambios);
+
+          const htmlNotifRechazo2 = `
+            <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #dc2626; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
+              <div style="text-align: center; border-bottom: 2px solid #dc2626; padding-bottom: 16px; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #0f172a; font-size: 19px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                <span style="font-size: 11.5px; color: #dc2626; font-weight: bold; text-transform: uppercase;">Subgerencia de Licencias — Resolución de Inspección Final</span>
+                
+                <div style="margin-top: 16px; background: #fef2f2; border: 1.5px solid #dc2626; padding: 12px; border-radius: 8px;">
+                  <h1 style="margin: 0; color: #991b1b; font-size: 18px; font-weight: 900;">TRÁMITE RECHAZADO DEFINITIVAMENTE</h1>
+                  <p style="margin: 4px 0 0; font-size: 14px; font-weight: 800; color: #991b1b;">Expediente N° EXP-${expLimpio}</p>
+                </div>
+              </div>
+
+              <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
+                <p style="margin: 0 0 14px;">Estimado(a) <strong>${nombreCiudadano}</strong>,</p>
+                <p style="margin: 0 0 14px; text-align: justify;">
+                  Le notificamos que habiéndose realizado la segunda inspección técnica al establecimiento <strong>${solicitudAtencion.nombreNegocio}</strong>, el expediente no obtuvo informe favorable por persistir en las siguientes deficiencias:
+                </p>
+
+                <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 4px; margin-bottom: 18px; font-weight: 600; color: #991b1b;">
+                  "${observacionesTexto}"
+                </div>
+
+                <p style="margin: 0; font-weight: bold; color: #991b1b; background: #fee2e2; padding: 10px; border-radius: 6px; text-align: center;">
+                  El procedimiento administrativo ha quedado CANCELADO DEFINITIVAMENTE conforme a la normativa municipal vigente.
+                </p>
+              </div>
+            </div>
+          `;
+
+          await crearNotificacion(
+            solicitudAtencion.uidUsuario || "",
+            {
+              titulo: "🔴 Inspección Rechazada Definitivamente",
+              descripcion: `Su trámite fue RECHAZADO DEFINITIVAMENTE tras desaprobar por 2da vez la inspección técnica municipal.`,
+              icono: "🔴",
+              html: htmlNotifRechazo2,
+            },
+            solicitudAtencion.correoUsuario || ""
+          );
+
+          alert(`La solicitud ha sido RECHAZADA DEFINITIVAMENTE por 2da vez y el trámite ha quedado cancelado. Se notificó al correo.`);
+        }
       }
 
-      alert(`Resultado registrado con éxito. Estado: ${nuevoEstado}`);
       setSolicitudAtencion(null);
       await cargarSolicitudes();
     } catch (err) {
       console.error(err);
-      alert("Error al registrar resultado de inspección: " + err.message);
+      alert("Error al guardar el resultado de la inspección: " + err.message);
     } finally {
       setProcesando(false);
     }
@@ -525,43 +639,73 @@ function PanelInspector({ seccion }) {
               <thead>
                 <tr>
                   <th>Expediente</th>
-                  <th>Ciudadano / DNI</th>
-                  <th>Establecimiento / RUC</th>
-                  <th>Fecha Visita</th>
-                  <th>Dictamen / Estado</th>
+                  <th>Ciudadano / Representante</th>
+                  <th>Establecimiento Comercial</th>
+                  <th>Fecha y Hora Inspección</th>
+                  <th>Programación</th>
+                  <th>Estado Inspección</th>
                   <th>Acción</th>
                 </tr>
               </thead>
               <tbody>
                 {solicitudesFiltradas.map((s) => {
+                  const expIdLimpio = String(s.id || "").replace(/^EXP-/, "");
                   const nombreCiudadano = obtenerNombreCiudadanoValido(s);
                   const dniCiudadano = obtenerDniValido(s);
+                  const celular = s.telefono || s.celular || "---";
+                  const correo = s.correoUsuario || s.correo || "---";
+
+                  const fechaVisitaStr = s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "22/07/2026";
+                  const horaVisitaStr = s.horaVisitaLabel || s.horaVisitaInspector || (s.horaVisita ? `${s.horaVisita} hrs` : "08:00 a. m.");
+
+                  const programadoPor = s.cajeraResponsable || s.usuarioCajero || s.inspectorNombre || "Ventanilla Municipal";
+                  const fechaProg = s.fechaPago || s.fechaEnvioOficial || s.fechaSolicitud || s.fecha || "---";
 
                   return (
                     <tr key={s.id}>
                       <td>
-                        <strong>EXP-{s.id}</strong>
-                        <small style={{ display: "block", color: "#64748b" }}>{s.fecha || "---"}</small>
-                      </td>
-                      <td>
-                        <strong>{nombreCiudadano}</strong>
-                        <small style={{ display: "block", color: "#475569" }}>DNI: {dniCiudadano}</small>
-                        <small style={{ display: "block", color: "#2563eb", fontWeight: "600", marginTop: "2px" }}>
-                          📱 Cel: {s.telefono || "---"} | ✉️ {s.correoUsuario || s.correo || "---"}
+                        <strong>EXP-{expIdLimpio}</strong>
+                        <small style={{ display: "block", color: "#64748b", marginTop: "2px" }}>
+                          📅 Reg: {fechaProg}
                         </small>
                       </td>
                       <td>
-                        <strong>{s.nombreNegocio}</strong>
-                        <small style={{ display: "block", color: "#64748b" }}>RUC: {s.ruc}</small>
+                        <strong style={{ color: "#0f172a", fontSize: "13px" }}>{nombreCiudadano}</strong>
+                        <small style={{ display: "block", color: "#475569", fontWeight: "600" }}>DNI: {dniCiudadano}</small>
+                        <small style={{ display: "block", color: "#2563eb", fontWeight: "600", marginTop: "3px" }}>
+                          📱 Cel: {celular}
+                        </small>
+                        <small style={{ display: "block", color: "#475569" }}>
+                          ✉️ {correo}
+                        </small>
                       </td>
                       <td>
-                        {s.fechaVisitaInspector ? (
-                          <span className="badge info">
-                            📅 {s.fechaVisitaInspector} ({s.horaVisitaLabel || s.horaVisitaInspector || "Por definir"})
-                          </span>
-                        ) : (
-                          <span className="badge warning">Por programar</span>
+                        <strong style={{ color: "#0f172a" }}>{s.nombreNegocio || s.razonSocial}</strong>
+                        {s.razonSocial && s.razonSocial !== s.nombreNegocio && (
+                          <small style={{ display: "block", color: "#334155" }}>Razón: {s.razonSocial}</small>
                         )}
+                        <small style={{ display: "block", color: "#64748b", fontWeight: "600" }}>RUC: {s.ruc}</small>
+                        <small style={{ display: "block", color: "#0f766e", marginTop: "2px", fontWeight: "600" }}>
+                          📍 {s.direccion}
+                        </small>
+                      </td>
+                      <td>
+                        <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "6px 10px", borderRadius: "8px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: "800", color: "#1e40af", display: "block" }}>
+                            📅 {fechaVisitaStr}
+                          </span>
+                          <span style={{ fontSize: "12px", fontWeight: "800", color: "#15803d", display: "block", marginTop: "2px" }}>
+                            🕒 {horaVisitaStr}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#334155", display: "block" }}>
+                          👤 {programadoPor}
+                        </span>
+                        <small style={{ display: "block", color: "#64748b" }}>
+                          📅 {fechaProg}
+                        </small>
                       </td>
                       <td>
                         <span className={`badge ${
@@ -569,7 +713,7 @@ function PanelInspector({ seccion }) {
                           (s.estado || "").toLowerCase().includes("observada") ? "warning" :
                           (s.estado || "").toLowerCase().includes("rechazado") ? "danger" : "info"
                         }`}>
-                          {s.estado || "Asignado a Inspección"}
+                          {s.estadoInspeccion || s.inspeccion || s.estado || "Programada"}
                         </span>
                       </td>
                       <td>
@@ -578,7 +722,7 @@ function PanelInspector({ seccion }) {
                             type="button"
                             className="btn-primary"
                             onClick={() => abrirModalAtencion(s, "historial")}
-                            style={{ background: "#312e81", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: "700" }}
+                            style={{ background: "#312e81", color: "white", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", fontSize: "12px" }}
                           >
                             👁️ Ver Detalles
                           </button>
@@ -587,7 +731,7 @@ function PanelInspector({ seccion }) {
                             type="button"
                             className="btn-primary"
                             onClick={() => abrirModalAtencion(s, "evaluacion")}
-                            style={{ background: "#7c3aed", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: "700" }}
+                            style={{ background: "#7c3aed", color: "white", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", fontSize: "12px" }}
                           >
                             🔍 Atender Expediente
                           </button>
@@ -608,8 +752,8 @@ function PanelInspector({ seccion }) {
           <div className="admin-form-card" style={{ maxWidth: "750px", maxHeight: "90vh", overflowY: "auto" }}>
             <div className="admin-form-header" style={{ background: "#7c3aed", color: "white", padding: "16px 20px" }}>
               <div>
-                <h3 style={{ color: "white", margin: 0 }}>🔍 Módulo de Inspección Técnica — EXP-{solicitudAtencion.id}</h3>
-                <small style={{ color: "#e0e7ff" }}>Establecimiento: {solicitudAtencion.nombreNegocio} (RUC: {solicitudAtencion.ruc})</small>
+                <h3 style={{ color: "white", margin: 0 }}>🔍 Módulo de Inspección Técnica — EXP-{String(solicitudAtencion.id || "").replace(/^EXP-/, "")}</h3>
+                <small style={{ color: "#e0e7ff" }}>Establecimiento: {solicitudAtencion.nombreNegocio || solicitudAtencion.razonSocial} (RUC: {solicitudAtencion.ruc})</small>
               </div>
               <button type="button" onClick={() => setSolicitudAtencion(null)} style={{ color: "white" }}>✕</button>
             </div>
@@ -624,24 +768,10 @@ function PanelInspector({ seccion }) {
               </button>
               <button
                 type="button"
-                className={tabModal === "programacion" ? "tab-active" : ""}
-                onClick={() => setTabModal("programacion")}
-              >
-                📅 Programar Visita
-              </button>
-              <button
-                type="button"
                 className={tabModal === "documentos" ? "tab-active" : ""}
                 onClick={() => setTabModal("documentos")}
               >
                 📄 Datos y PDFs (RENIEC/SUNAT)
-              </button>
-              <button
-                type="button"
-                className={tabModal === "historial" ? "tab-active" : ""}
-                onClick={() => setTabModal("historial")}
-              >
-                📜 Historial Completo ({ (solicitudAtencion.historialAcciones || []).length })
               </button>
             </div>
 
@@ -650,12 +780,12 @@ function PanelInspector({ seccion }) {
                 <div>
                   <h4 style={{ color: "#1e293b", margin: "0 0 14px", fontSize: "15px" }}>Seleccione Resultado de la Evaluación Técnica:</h4>
                   
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px" }}>
                     <button
                       type="button"
                       onClick={() => setResultadoDecisión("aprobado")}
                       style={{
-                        padding: "14px",
+                        padding: "16px",
                         borderRadius: "10px",
                         border: resultadoDecisión === "aprobado" ? "2px solid #16a34a" : "1px solid #cbd5e1",
                         background: resultadoDecisión === "aprobado" ? "#f0fdf4" : "white",
@@ -665,33 +795,16 @@ function PanelInspector({ seccion }) {
                         textAlign: "center"
                       }}
                     >
-                      <div style={{ fontSize: "24px", marginBottom: "4px" }}>🟢</div>
-                      Aprobar Inspección
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setResultadoDecisión("observado")}
-                      style={{
-                        padding: "14px",
-                        borderRadius: "10px",
-                        border: resultadoDecisión === "observado" ? "2px solid #d97706" : "1px solid #cbd5e1",
-                        background: resultadoDecisión === "observado" ? "#fffbeb" : "white",
-                        cursor: "pointer",
-                        fontWeight: "bold",
-                        color: resultadoDecisión === "observado" ? "#b45309" : "#475569",
-                        textAlign: "center"
-                      }}
-                    >
-                      <div style={{ fontSize: "24px", marginBottom: "4px" }}>🟡</div>
-                      Solicitar Subsanación
+                      <div style={{ fontSize: "28px", marginBottom: "4px" }}>🟢</div>
+                      <span style={{ fontSize: "15px", display: "block" }}>Aprobar Inspección</span>
+                      <small style={{ color: "#166534", fontSize: "11.5px", fontWeight: "normal" }}>Emite la Licencia de Funcionamiento</small>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setResultadoDecisión("rechazado")}
                       style={{
-                        padding: "14px",
+                        padding: "16px",
                         borderRadius: "10px",
                         border: resultadoDecisión === "rechazado" ? "2px solid #dc2626" : "1px solid #cbd5e1",
                         background: resultadoDecisión === "rechazado" ? "#fef2f2" : "white",
@@ -701,10 +814,25 @@ function PanelInspector({ seccion }) {
                         textAlign: "center"
                       }}
                     >
-                      <div style={{ fontSize: "24px", marginBottom: "4px" }}>🔴</div>
-                      Rechazar Inspección
+                      <div style={{ fontSize: "28px", marginBottom: "4px" }}>🔴</div>
+                      <span style={{ fontSize: "15px", display: "block" }}>Rechazar Inspección</span>
+                      <small style={{ color: "#991b1b", fontSize: "11.5px", fontWeight: "normal" }}>
+                        {Number(solicitudAtencion.intentosInspeccion || 1) < 2
+                          ? "Reprograma a 30 días (1er Rechazo)"
+                          : "Cancela definitivamente la solicitud (2do Rechazo)"}
+                      </small>
                     </button>
                   </div>
+
+                  {resultadoDecisión === "rechazado" && (
+                    <div style={{ background: Number(solicitudAtencion.intentosInspeccion || 1) < 2 ? "#fffbeb" : "#fef2f2", border: Number(solicitudAtencion.intentosInspeccion || 1) < 2 ? "1px solid #fcd34d" : "1px solid #fca5a5", color: Number(solicitudAtencion.intentosInspeccion || 1) < 2 ? "#92400e" : "#991b1b", padding: "10px 14px", borderRadius: "8px", marginBottom: "16px", fontSize: "12.5px" }}>
+                      {Number(solicitudAtencion.intentosInspeccion || 1) < 2 ? (
+                        <span><strong>⚠️ 1er Rechazo:</strong> La inspección será reprogramada automáticamente a los 30 días para otorgar plazo de subsanación al solicitante.</span>
+                      ) : (
+                        <span><strong>🔴 2do Rechazo:</strong> Al rechazar por segunda vez, el expediente quedará cancelado definitivamente sin opción a reprogramación.</span>
+                      )}
+                    </div>
+                  )}
 
                   <div style={{ marginBottom: "16px" }}>
                     <label style={{ display: "block", fontSize: "13.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
@@ -769,92 +897,31 @@ function PanelInspector({ seccion }) {
                 </div>
               )}
 
-              {tabModal === "programacion" && (
-                <div>
-                  <h4 style={{ color: "#1e293b", margin: "0 0 14px", fontSize: "15px" }}>Programar Fecha y Hora de Inspección Física:</h4>
-                  
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                        Fecha de la Visita (Mínimo mañana) *
-                      </label>
-                      <input
-                        type="date"
-                        min={formatearFechaYYYYMMDD(obtenerFechaMinimaInspeccion())}
-                        value={
-                          fechaVisita && fechaVisita.includes("/")
-                            ? fechaVisita.split("/").reverse().join("-")
-                            : fechaVisita
-                        }
-                        onChange={(e) => {
-                          const valYMD = e.target.value;
-                          if (!valYMD) return;
-                          const [y, m, d] = valYMD.split("-");
-                          setFechaVisita(`${d}/${m}/${y}`);
-                        }}
-                        style={{
-                          width: "100%", padding: "10px", borderRadius: "8px",
-                          border: fechaVisita && !esFechaValidaParaInspeccion(fechaVisita) ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
-                          fontSize: "14px"
-                        }}
-                      />
-                      {fechaVisita && !esFechaValidaParaInspeccion(fechaVisita) && (
-                        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "8px 12px", borderRadius: "8px", marginTop: "6px", fontSize: "12px" }}>
-                          ⚠️ {MENSAJE_FECHA_INSPECCION}
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                        Horario Disponible *
-                      </label>
-                      <select
-                        value={horaVisita}
-                        onChange={(e) => setHoraVisita(e.target.value)}
-                        style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                      >
-                        {TIME_SLOTS.map((slot) => (
-                          <option key={slot.value} value={slot.value}>
-                            {slot.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="admin-form-actions">
-                    <button type="button" onClick={() => setSolicitudAtencion(null)} disabled={procesando}>Cancelar</button>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={guardarProgramacionVisita}
-                      disabled={procesando}
-                      style={{ background: "#0f766e", color: "white" }}
-                    >
-                      {procesando ? "Guardando Fecha..." : "📅 Confirmar Fecha de Inspección"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {tabModal === "documentos" && (
                 <div>
                   <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
-                    <h4 style={{ margin: "0 0 6px", color: "#1e293b", fontSize: "14px" }}>👤 Datos RENIEC — Ciudadano Solicitante</h4>
+                    <h4 style={{ margin: "0 0 6px", color: "#1e293b", fontSize: "14px" }}>👤 Datos RENIEC — Ciudadano / Representante</h4>
                     <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Nombre Completo:</strong> {obtenerNombreCiudadanoValido(solicitudAtencion)}</p>
-                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>DNI:</strong> {obtenerDniValido(solicitudAtencion)}</p>
-                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Correo:</strong> {solicitudAtencion.correoUsuario || "---"}</p>
-                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Teléfono:</strong> {solicitudAtencion.telefono || "---"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>DNI / Doc. Identidad:</strong> {obtenerDniValido(solicitudAtencion)}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Correo Electrónico:</strong> {solicitudAtencion.correoUsuario || solicitudAtencion.correo || solicitudAtencion.email || "---"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Teléfono / Celular:</strong> {solicitudAtencion.telefono || solicitudAtencion.celular || "---"}</p>
                   </div>
 
                   <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
                     <h4 style={{ margin: "0 0 6px", color: "#1e293b", fontSize: "14px" }}>🏢 Datos SUNAT — Establecimiento Comercial</h4>
                     <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>RUC:</strong> {solicitudAtencion.ruc}</p>
-                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Nombre Comercial:</strong> {solicitudAtencion.nombreNegocio}</p>
-                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Razón Social:</strong> {solicitudAtencion.razonSocial || solicitudAtencion.nombreNegocio}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Nombre Comercial:</strong> {solicitudAtencion.nombreNegocio || "---"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Razón Social:</strong> {solicitudAtencion.razonSocial || solicitudAtencion.nombreNegocio || "---"}</p>
                     <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Giro Comercial:</strong> {solicitudAtencion.giro || "General"}</p>
-                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Dirección Fiscal:</strong> {solicitudAtencion.direccion}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Dirección Fiscal / Inspección:</strong> {solicitudAtencion.direccion}</p>
+                  </div>
+
+                  <div style={{ background: "#eff6ff", padding: "14px", borderRadius: "10px", border: "1px solid #bfdbfe", marginBottom: "14px" }}>
+                    <h4 style={{ margin: "0 0 6px", color: "#1e40af", fontSize: "14px" }}>📅 Programación Oficial de Inspección</h4>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Programado por:</strong> {solicitudAtencion.cajeraResponsable || solicitudAtencion.usuarioCajero || solicitudAtencion.inspectorNombre || "Ventanilla Municipal"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Fecha de Inspección:</strong> {solicitudAtencion.fechaVisitaInspector || solicitudAtencion.fechaVisita || "22/07/2026"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Hora Asignada:</strong> {solicitudAtencion.horaVisitaLabel || solicitudAtencion.horaVisitaInspector || (solicitudAtencion.horaVisita ? `${solicitudAtencion.horaVisita} hrs` : "08:00 a. m.")}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Estado Actual:</strong> {solicitudAtencion.estadoInspeccion || solicitudAtencion.inspeccion || solicitudAtencion.estado || "Programada"}</p>
                   </div>
 
                   <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
@@ -878,31 +945,6 @@ function PanelInspector({ seccion }) {
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-
-              {tabModal === "historial" && (
-                <div>
-                  <h4 style={{ color: "#1e293b", margin: "0 0 14px", fontSize: "15px" }}>Historial Auditado de Acciones en la Solicitud:</h4>
-                  
-                  {(solicitudAtencion.historialAcciones || []).length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
-                      <p>No hay acciones auditadas registradas en esta solicitud aún.</p>
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gap: "10px" }}>
-                      {(solicitudAtencion.historialAcciones || []).map((h, idx) => (
-                        <div key={idx} style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                            <strong style={{ color: "#7c3aed", fontSize: "14px" }}>{h.accion || "Acción en Expediente"}</strong>
-                            <small style={{ color: "#64748b" }}>{h.fecha} {h.hora}</small>
-                          </div>
-                          <p style={{ margin: "4px 0", fontSize: "13.5px", color: "#334155" }}>{h.comentarios || h.observaciones}</p>
-                          <small style={{ color: "#475569", fontWeight: "600" }}>Responsable: {h.inspector || h.cajera || "Sistema"}</small>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
