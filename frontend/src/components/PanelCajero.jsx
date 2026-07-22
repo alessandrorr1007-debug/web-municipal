@@ -2420,7 +2420,16 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     max="200.00"
                     placeholder="Ej. 10, 20, 50, 100 o 200"
                     value={montoRecibidoInput}
-                    onChange={(e) => setMontoRecibidoInput(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = parseFloat(val);
+                      if (!isNaN(num) && num > 200) {
+                        alert("🚫 El monto ingresado no puede superar S/ 200.00 (máximo billete peruano). Se ha restablecido a 0.");
+                        setMontoRecibidoInput("");
+                        return;
+                      }
+                      setMontoRecibidoInput(val);
+                    }}
                     style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #d97706", fontSize: "16px", fontWeight: "800", color: "#0f172a", background: "white" }}
                   />
 
