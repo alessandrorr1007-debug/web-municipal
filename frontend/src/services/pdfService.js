@@ -496,3 +496,187 @@ export const abrirPdf = async (urlInput) => {
 
   alert("No se pudo cargar el documento.");
 };
+
+export const generarPlantillaLicenciaOficial = (s, esVencido = false) => {
+  if (!s) return "";
+
+  const expLimpio = String(s.id || "").replace(/^EXP-/, "");
+  const numLicenciaStr = s.numLicencia || s.numeroLicencia || `00${expLimpio.padStart(4, "0")} - 2026 MPT-GDEL-SGLC`;
+
+  const titular = (s.titular || s.nombreCiudadano || s.razonSocial || s.nombreNegocio || "CIUDADANO SOLICITANTE").toUpperCase();
+  const ruc = (s.ruc || "10000000000").toUpperCase();
+  const repLegal = (s.representanteLegal || s.representante || titular).toUpperCase();
+  const dni = (s.dni || s.dniUsuario || "00000000").toUpperCase();
+  const nombreComercial = (s.nombreNegocio || s.razonSocial || "ESTABLECIMIENTO COMERCIAL").toUpperCase();
+  const direccion = (s.direccion || "AV. ESPAÑA N° 123").toUpperCase();
+  const distrito = (s.distrito || "TRUJILLO").toUpperCase();
+  const direccionCompleta = `${direccion} - ${distrito}`;
+  const codigoCatastral = s.codigoCatastral || "13010100458";
+  const giro = (s.giro || s.giroComercial || "COMERCIO Y SERVICIOS").toUpperCase();
+  const zonificacion = (s.zonificacion || "CZ - COMERCIO ZONAL").toUpperCase();
+  const area = s.area || s.areaM2 || "85.00";
+  const expNum = `EXP-${expLimpio}`;
+  const correlativoRojo = expLimpio.padStart(6, "0");
+
+  const hoy = new Date();
+  const dia = hoy.getDate();
+  const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const mesStr = meses[hoy.getMonth()];
+  const anio = hoy.getFullYear();
+
+  const fechaFormateada = `Trujillo, ${dia} de ${mesStr} del ${anio}`;
+
+  const marcaAguaHtml = esVencido
+    ? `
+      <div style="position: absolute; top: 38%; left: 5%; width: 90%; text-align: center; transform: rotate(-35deg); opacity: 0.28; font-size: 110px; font-weight: 900; color: #dc2626; border: 12px solid #dc2626; padding: 20px 0; border-radius: 20px; letter-spacing: 12px; pointer-events: none; z-index: 999; font-family: sans-serif;">
+        VENCIDO
+      </div>
+    `
+    : "";
+
+  return `
+    <div style="width: 210mm; min-height: 297mm; padding: 20px 24px; box-sizing: border-box; font-family: 'Times New Roman', Times, serif; background: #ffffff; position: relative; color: #000000; margin: 0 auto; border: 3px solid #1B365D; background-image: radial-gradient(#e0f2fe 1px, transparent 1px); background-size: 16px 16px;">
+      ${marcaAguaHtml}
+
+      <!-- ENCABEZADO -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+        <tr>
+          <td style="width: 20%; vertical-align: middle; text-align: left;">
+            <div style="width: 70px; height: 80px; border: 2px solid #1B365D; border-radius: 8px; background: #f0f9ff; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4px;">
+              <span style="font-size: 26px;">🏛️</span>
+              <span style="font-size: 8px; font-weight: bold; color: #1B365D; text-transform: uppercase; font-family: sans-serif; margin-top: 2px;">MPT</span>
+            </div>
+          </td>
+          <td style="width: 80%; vertical-align: middle; text-align: center; padding-right: 70px;">
+            <h2 style="margin: 0; color: #1B365D; font-family: 'Times New Roman', Times, serif; font-size: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">
+              MUNICIPALIDAD PROVINCIAL DE TRUJILLO
+            </h2>
+            <span style="font-size: 11px; font-family: sans-serif; font-weight: bold; color: #1B365D; text-transform: uppercase; letter-spacing: 0.5px;">
+              Gerencia de Desarrollo Económico Local — Subgerencia de Licencias y Comercialización
+            </span>
+          </td>
+        </tr>
+      </table>
+
+      <!-- TÍTULO CENTRAL -->
+      <div style="text-align: center; margin-bottom: 14px;">
+        <h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 22px; font-weight: bold; color: #000000; text-transform: uppercase; letter-spacing: 1px;">
+          LICENCIA DE FUNCIONAMIENTO
+        </h1>
+        <div style="font-family: 'Times New Roman', Times, serif; font-size: 15px; font-weight: bold; color: #1B365D; margin-top: 4px;">
+          Nro. ${numLicenciaStr}
+        </div>
+        <div style="font-family: 'Times New Roman', Times, serif; font-size: 12px; font-weight: bold; color: #334155; margin-top: 2px;">
+          Ley Nro. 28976
+        </div>
+        <p style="margin: 10px 0 0; text-align: justify; font-size: 9pt; line-height: 1.4; color: #1e293b;">
+          En uso de las Facultades conferidas mediante Ley N° 28976 — Ley Marco de Licencias de Funcionamiento y la Ordenanza Municipal vigente, la Municipalidad Provincial de Trujillo CONCEDE A:
+        </p>
+      </div>
+
+      <!-- CUERPO DE DATOS (FORMULARIO BI-COLUMNA TABULADO) -->
+      <div style="border: 1.5px solid #1B365D; border-radius: 6px; padding: 12px 16px; margin-bottom: 14px; background: rgba(255, 255, 255, 0.95);">
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.7;">
+          <tbody>
+            <tr>
+              <td style="width: 32%; font-weight: normal; color: #1e293b; padding: 2px 0;">Titular :</td>
+              <td style="width: 68%; font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">${titular}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Doc. de Identidad :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">RUC: ${ruc}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Representante Legal :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">${repLegal}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Doc. de Identidad :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">DNI: ${dni}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Nombre Comercial :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #1B365D; padding: 2px 0;">${nombreComercial}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Dirección :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">${direccionCompleta}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Código Catastral :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">"${codigoCatastral}"</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Giro :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">"${giro}"</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Zonificación :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">"${zonificacion}"</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Área :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">${area} m2</td>
+            </tr>
+            <tr>
+              <td style="font-weight: normal; color: #1e293b; padding: 2px 0;">Visto el Expediente :</td>
+              <td style="font-weight: bold; text-transform: uppercase; color: #000000; padding: 2px 0;">${expNum}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- FECHA -->
+      <div style="text-align: right; font-family: 'Times New Roman', Times, serif; font-size: 13px; font-weight: bold; color: #000000; margin-bottom: 16px;">
+        ${fechaFormateada}
+      </div>
+
+      <!-- SECCIÓN INFERIOR DE REGLAS / PROHIBICIONES -->
+      <div style="border: 1px solid #cbd5e1; background: rgba(248, 250, 252, 0.9); padding: 10px 14px; border-radius: 6px; margin-bottom: 24px;">
+        <h4 style="margin: 0 0 6px; font-family: 'Times New Roman', Times, serif; font-size: 11px; font-weight: bold; color: #000000; text-transform: uppercase;">
+          PROHIBICIONES AL ESTABLECIMIENTO
+        </h4>
+        <div style="font-family: sans-serif; font-size: 9.5pt; color: #1e293b; line-height: 1.5; text-align: left;">
+          <div>Prohibida la contaminación sonora</div>
+          <div>Prohibido el uso de la Vía Pública y Área de Retiro</div>
+          <div>Prohibido consumir bebidas alcohólicas dentro y fuera del local</div>
+          <div>Prohibida la contaminación ambiental</div>
+        </div>
+        <div style="text-align: center; margin-top: 8px; font-family: sans-serif; font-size: 9pt; font-weight: bold; color: #000000; text-transform: uppercase; background: #e2e8f0; padding: 4px; border-radius: 4px;">
+          ES OBLIGATORIO QUE SE EXHIBA EN UN LUGAR VISIBLE DEL ESTABLECIMIENTO.
+        </div>
+      </div>
+
+      <!-- PIE DE PÁGINA Y SEGURIDAD -->
+      <div style="margin-top: 30px;">
+        <!-- ÁREA DE FIRMA Y SELLO SEGUNDO PLANO -->
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="width: 200px; border-top: 1.5px solid #000000; margin: 0 auto; padding-top: 4px;">
+            <strong style="font-family: 'Times New Roman', Times, serif; font-size: 12px; display: block; color: #000000;">SUB GERENTE</strong>
+            <span style="font-size: 9.5px; font-family: sans-serif; color: #475569; display: block;">Subgerencia de Licencias y Comercialización</span>
+            <span style="font-size: 9px; font-family: sans-serif; color: #64748b; display: block;">Municipalidad Provincial de Trujillo</span>
+          </div>
+        </div>
+
+        <!-- CORRELATIVO ROJO -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div style="font-family: sans-serif; font-size: 14px; font-weight: bold; color: #D32F2F;">
+            Nº ${correlativoRojo}
+          </div>
+        </div>
+
+        <!-- BARRA INFERIOR COMPLETA -->
+        <table style="width: 100%; border-collapse: collapse; background: #1B365D; border-radius: 4px; overflow: hidden; font-family: sans-serif;">
+          <tr>
+            <td style="width: 50%; padding: 8px 12px; text-align: center; color: #ffffff; font-size: 11px; font-weight: bold; border-right: 1px solid #ffffff;">
+              MPT | Gerencia de Desarrollo Económico
+            </td>
+            <td style="width: 50%; padding: 8px 12px; text-align: center; color: #ffffff; font-size: 11px; font-weight: bold;">
+              Subgerencia de Licencias y Comercialización
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  `;
+};

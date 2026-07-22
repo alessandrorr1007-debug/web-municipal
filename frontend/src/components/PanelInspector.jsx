@@ -5,7 +5,7 @@ import {
   suscribirSolicitudes,
 } from "../services/solicitudService";
 import { crearNotificacion } from "../services/notificacionService";
-import { abrirPdf, obtenerBlobUrlParaPdf } from "../services/pdfService";
+import { abrirPdf, obtenerBlobUrlParaPdf, generarPlantillaLicenciaOficial } from "../services/pdfService";
 import { useAuth } from "../context/AuthContext";
 import { obtenerDniValido, obtenerNombreCiudadanoValido, obtenerTelefonoValido } from "../services/comprobanteService";
 import VisualizadorDocumentoModal from "./VisualizadorDocumentoModal";
@@ -359,51 +359,13 @@ function PanelInspector({ seccion }) {
         await actualizarSolicitud(solicitudAtencion.id, cambios);
 
         if (solicitudAtencion.correoUsuario) {
-          const numLicenciaStr = `00${expLimpio.slice(-6)} - 2026 MPT-GDEL-SGLC`;
-          const fechaHoyFormateada = `Trujillo, ${new Date().toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })}`;
-
-          const htmlLicenciaOficial = `
-            <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #0f172a; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
-              <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 900; letter-spacing: 1px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-                <span style="font-size: 11.5px; color: #2563eb; font-weight: bold; text-transform: uppercase;">Gerencia de Desarrollo Económico Local — Subgerencia de Licencias</span>
-                
-                <div style="margin-top: 16px; background: #f8fafc; border: 1.5px solid #0f172a; padding: 12px; border-radius: 8px;">
-                  <h1 style="margin: 0; color: #1e3a8a; font-size: 21px; font-weight: 900;">LICENCIA MUNICIPAL DE FUNCIONAMIENTO</h1>
-                  <p style="margin: 4px 0 0; font-size: 15px; font-weight: 800; color: #dc2626;">Nro. ${numLicenciaStr}</p>
-                  <small style="color: #475569; font-weight: bold;">(Ley N° 28976 — Marco Único de Licencias de Funcionamiento)</small>
-                </div>
-              </div>
-
-              <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
-                <p style="margin: 0 0 16px; font-style: italic; text-align: justify; color: #475569;">
-                  Visto el Expediente N° <strong>EXP-${expLimpio}</strong> y habiéndose verificado el cumplimiento total de los requisitos de ley con informe de inspección técnica <strong>CONFORME Y APROBADO</strong>, se otorga la presente Licencia Municipal de Funcionamiento a favor de:
-                </p>
-
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;">
-                  <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0; width: 40%;">Titular / Solicitante:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #0f172a;">${nombreCiudadano}</td></tr>
-                  <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">RUC / Doc. Identidad:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.ruc || dniCiudadano}</td></tr>
-                  <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Nombre Comercial:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #1e3a8a;">${solicitudAtencion.nombreNegocio}</td></tr>
-                  <tr><td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">Dirección del Local:</td><td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${solicitudAtencion.direccion}</td></tr>
-                  <tr><td style="padding: 8px 12px; font-weight: bold;">Giro Autorizado:</td><td style="padding: 8px 12px;">${solicitudAtencion.giro || "Comercio / Servicios"}</td></tr>
-                </table>
-
-                <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 12px;">
-                  <strong>Observaciones del Inspector:</strong> ${observacionesTexto}
-                </div>
-
-                <div style="text-align: right; margin-bottom: 20px; font-weight: bold; color: #0f172a;">
-                  ${fechaHoyFormateada}
-                </div>
-              </div>
-            </div>
-          `;
+          const htmlLicenciaOficial = generarPlantillaLicenciaOficial(solicitudAtencion, false);
 
           await crearNotificacion(
             solicitudAtencion.uidUsuario || "CIUDADANO",
             {
               titulo: `🏛️ Licencia Municipal Emitida — Expediente EXP-${expLimpio}`,
-              descripcion: `¡Felicidades! Su solicitud EXP-${expLimpio} fue APROBADA y se ha emitido su Licencia Municipal de Funcionamiento N° ${numLicenciaStr}.`,
+              descripcion: `¡Felicidades! Su solicitud EXP-${expLimpio} fue APROBADA y se ha emitido su Licencia Municipal de Funcionamiento oficial.`,
               icono: "📜",
               html: htmlLicenciaOficial,
             },

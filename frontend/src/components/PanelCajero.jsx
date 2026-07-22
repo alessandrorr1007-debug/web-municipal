@@ -7,7 +7,7 @@ import {
   actualizarFechaLicenciamiento,
 } from "../services/solicitudService";
 import { crearNotificacion } from "../services/notificacionService";
-import { abrirPdf, obtenerBlobUrlParaPdf } from "../services/pdfService";
+import { abrirPdf, obtenerBlobUrlParaPdf, generarPlantillaLicenciaOficial } from "../services/pdfService";
 import { crearOrdenFlow } from "../services/pagoService";
 import { consultarDni } from "../services/dniService";
 import { consultarRuc } from "../services/rucService";
@@ -1612,34 +1612,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
   const descargarLicenciaConMarcaAgua = (sol, esVencido = false) => {
     if (!sol) return;
-    const fechaAprobacion = sol.fechaEvaluacionInspector || sol.fechaAprobacion || sol.fechaSolicitud || "---";
-    const { fechaVencimientoStr } = calcularEstadoLicenciaVencimiento(sol);
-    const fechaExpiracion = sol.fechaExpiracion || fechaVencimientoStr || "---";
 
-    const marcaAguaHtml = esVencido ? `
-      <div style="
-        position: absolute;
-        top: 45%;
-        left: 50%;
-        transform: translate(-50%, -50%) rotate(-35deg);
-        font-size: 100px;
-        font-weight: 900;
-        color: rgba(220, 38, 38, 0.28);
-        border: 10px solid rgba(220, 38, 38, 0.35);
-        padding: 15px 45px;
-        border-radius: 20px;
-        letter-spacing: 12px;
-        text-transform: uppercase;
-        pointer-events: none;
-        z-index: 9999;
-        white-space: nowrap;
-        user-select: none;
-      ">
-        VENCIDO
-      </div>
-    ` : "";
+    const htmlOficial = generarPlantillaLicenciaOficial(sol, esVencido);
 
-    const contenido = `
+    const contenidoCompleto = `
       <!DOCTYPE html>
       <html lang="es">
         <head>
@@ -1647,84 +1623,27 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           <title>Licencia Municipal de Funcionamiento - EXP-${sol.id} ${esVencido ? '(VENCIDA)' : ''}</title>
           <style>
             @page { size: A4; margin: 0; }
-            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; background: #f8fafc; color: #0f172a; margin: 0; }
-            .licencia { position: relative; max-width: 820px; margin: auto; background: white; border: 6px double ${esVencido ? '#dc2626' : '#1e3a8a'}; border-radius: 20px; padding: 45px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); overflow: hidden; }
-            .header { text-align: center; margin-bottom: 25px; border-bottom: 3px double #cbd5e1; padding-bottom: 20px; }
-            .header h1 { margin: 0; font-size: 26px; color: #0f172a; text-transform: uppercase; letter-spacing: 1.5px; }
-            .header h2 { margin-top: 6px; font-size: 20px; color: #2563eb; font-weight: 800; text-transform: uppercase; }
-            .datos { margin-top: 25px; }
-            .dato { margin: 12px 0; font-size: 15.5px; line-height: 1.5; border-bottom: 1px dashed #e2e8f0; padding-bottom: 6px; display: flex; justify-content: space-between; }
-            .dato strong { color: #1e293b; min-width: 220px; }
-            .vigencia { margin-top: 25px; padding: 18px; background: ${esVencido ? '#fef2f2' : '#eff6ff'}; border: 2px solid ${esVencido ? '#fca5a5' : '#3b82f6'}; border-radius: 12px; }
-            .vigencia h3 { margin-top: 0; color: ${esVencido ? '#991b1b' : '#1d4ed8'}; font-size: 16px; margin-bottom: 8px; }
-            .estado-banner { margin-top: 25px; padding: 16px; border-radius: 12px; text-align: center; background: ${esVencido ? '#fee2e2' : '#dcfce7'}; color: ${esVencido ? '#991b1b' : '#166534'}; font-size: 22px; font-weight: 900; border: 2.5px solid ${esVencido ? '#dc2626' : '#16a34a'}; letter-spacing: 2px; text-transform: uppercase; }
-            .qr-container { margin-top: 30px; text-align: center; }
-            .qr-container img { width: 120px; height: 120px; border: 1px solid #cbd5e1; padding: 5px; border-radius: 8px; }
-            .firmas { margin-top: 50px; display: flex; justify-content: space-around; text-align: center; }
-            .firma-box { text-align: center; }
-            .linea-firma { width: 220px; border-top: 2px solid #0f172a; margin: 0 auto 6px; }
-            .footer { margin-top: 35px; text-align: center; color: #64748b; font-size: 12.5px; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+            body { font-family: 'Times New Roman', Times, serif; margin: 0; padding: 0; background: #ffffff; color: #000000; }
+            @media print {
+              body { padding: 0; }
+            }
           </style>
         </head>
         <body>
-          <div class="licencia">
-            ${marcaAguaHtml}
-            <div class="header">
-              <h1>MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h1>
-              <h2>LICENCIA MUNICIPAL DE FUNCIONAMIENTO</h2>
-              <small style="color: #64748b; font-weight: 700;">SUBGERENCIA DE LICENCIAS Y COMERCIALIZACIÓN</small>
-            </div>
-
-            <div class="datos">
-              <div class="dato"><strong>N° Licencia de Funcionamiento:</strong> <span>${sol.numeroLicencia || `LIC-2026-${sol.id}`}</span></div>
-              <div class="dato"><strong>N° de Expediente Municipal:</strong> <span>EXP-${String(sol.id).replace(/^EXP-/, "")}</span></div>
-              <div class="dato"><strong>RUC de la Empresa:</strong> <span>${sol.ruc || "---"}</span></div>
-              <div class="dato"><strong>Razón Social / Titular:</strong> <span>${sol.razonSocial || sol.nombreNegocio || "---"}</span></div>
-              <div class="dato"><strong>Nombre Comercial del Negocio:</strong> <span>${sol.nombreNegocio || "---"}</span></div>
-              <div class="dato"><strong>Dirección del Establecimiento:</strong> <span>${sol.direccion || "---"} (${sol.distrito || "Trujillo"})</span></div>
-              <div class="dato"><strong>Giro o Actividad Comercial:</strong> <span>${sol.giro || "---"}</span></div>
-            </div>
-
-            <div class="vigencia">
-              <h3>📅 Periodo de Vigencia de la Licencia</h3>
-              <div class="dato" style="border:none;"><strong>Fecha de Emisión:</strong> <span>${fechaAprobacion}</span></div>
-              <div class="dato" style="border:none;"><strong>Fecha de Expiración:</strong> <span>${fechaExpiracion}</span></div>
-            </div>
-
-            <div class="estado-banner">
-              ${esVencido ? '⚠️ LICENCIA VENCIDA — DOCUMENTO CADUCADO' : '✅ LICENCIA MUNICIPAL APROBADA Y VIGENTE'}
-            </div>
-
-            <div class="qr-container">
-              <p style="font-size: 13px; font-weight: 700; color: #475569; margin-bottom: 6px;">Código QR de Verificación Oficial MPT</p>
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`LICENCIA MPT | EXP: ${sol.id} | RUC: ${sol.ruc} | ESTADO: ${esVencido ? 'VENCIDO' : 'APROBADO'}`)}" alt="QR Verificación" />
-            </div>
-
-            <div class="firmas">
-              <div class="firma-box">
-                <div class="linea-firma"></div>
-                <p style="margin: 0; font-size: 13px; font-weight: 700;">Subgerente de Licencias</p>
-                <small style="color: #64748b;">Municipalidad Provincial de Trujillo</small>
-              </div>
-            </div>
-
-            <div class="footer">
-              Documento digital emitido de conformidad con la Ley N° 28976 — Ley Marco de Licencias de Funcionamiento.
-            </div>
-          </div>
+          ${htmlOficial}
         </body>
       </html>
     `;
 
-    const blob = new Blob([contenido], { type: "text/html" });
+    const blob = new Blob([contenidoCompleto], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const enlace = document.createElement("a");
     enlace.href = url;
-    enlace.download = `Licencia_RUC_${sol.ruc}_${esVencido ? "VENCIDO" : "APROBADO"}.html`;
+    enlace.download = `Licencia_Funcionamiento_${sol.ruc || sol.id}_${esVencido ? "VENCIDA" : "OFICIAL"}.html`;
     document.body.appendChild(enlace);
     enlace.click();
     document.body.removeChild(enlace);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   };
 
   const clasificarEstadoTramiteCajera = (s) => {
