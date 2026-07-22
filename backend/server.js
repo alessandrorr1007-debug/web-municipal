@@ -1354,18 +1354,6 @@ app.post("/api/comprobantes/enviar-correo", verificarToken, async (req, res) => 
         </div>
       </div>
     `;
-              &#128196; Descargar comprobante PDF
-            </a>
-            <p style="margin: 8px 0 0; font-size: 12px; color: #94a3b8;">${nombrePdf}</p>
-          </div>
-          ` : ""}
-
-          <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 16px; text-align: center;">
-            Este comprobante fue generado automáticamente por la plataforma.<br/>
-            ${MUNICIPALIDAD_CONFIG.nombre} — ${MUNICIPALIDAD_CONFIG.sistemaNombre}
-          </p>
-        </div>
-      `;
 
     await emailProvider.sendEmail(correo_usuario, `${tipoLabel} — ${codigo_unico} | Comprobante de pago municipal`, `${tipoLabel} - ${codigo_unico} - Monto: S/${Number(monto_total || 0).toFixed(2)}`, htmlBody);
 
