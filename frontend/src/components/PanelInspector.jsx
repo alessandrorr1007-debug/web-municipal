@@ -943,25 +943,70 @@ function PanelInspector({ seccion }) {
                   </div>
 
                   <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-                    <h4 style={{ margin: "0 0 8px", color: "#1e293b", fontSize: "14px" }}>📄 Visor de Documentos PDF Adjuntados</h4>
-                    {(solicitudAtencion.archivosPdf || []).length === 0 ? (
-                      <p style={{ color: "#64748b", fontSize: "13px" }}>Sin documentos PDF adjuntos.</p>
-                    ) : (
-                      <div style={{ display: "grid", gap: "8px" }}>
-                        {(solicitudAtencion.archivosPdf || []).map((pdf, idx) => (
-                          <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "white", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
-                            <span style={{ fontSize: "13px", color: "#334155" }}>📄 {pdf.nombre || pdf.archivoNombre || `Documento_${idx + 1}`}</span>
-                            <button
-                              type="button"
-                              onClick={() => setDocumentoPdfVisor(pdf)}
-                              style={{ padding: "6px 12px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer" }}
-                            >
-                              👁️ Ver Documento
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <h4 style={{ margin: "0 0 10px", color: "#1e293b", fontSize: "14.5px", fontWeight: "bold" }}>📄 Visor de Documentos PDF Adjuntados</h4>
+                    {(() => {
+                      const docsList = [];
+
+                      if (solicitudAtencion.planoUrl) {
+                        docsList.push({
+                          nombre: "Plano Arquitectónico y de Distribución del Local (PDF)",
+                          url: solicitudAtencion.planoUrl,
+                        });
+                      }
+
+                      if (Array.isArray(solicitudAtencion.archivosPdf)) {
+                        solicitudAtencion.archivosPdf.forEach((pdf) => {
+                          if (pdf && (pdf.url || pdf.archivoUrl || pdf.base64)) {
+                            docsList.push(pdf);
+                          }
+                        });
+                      }
+
+                      if (Array.isArray(solicitudAtencion.archivosAdjuntos)) {
+                        solicitudAtencion.archivosAdjuntos.forEach((pdf) => {
+                          if (pdf && (pdf.url || pdf.archivoUrl || pdf.base64)) {
+                            docsList.push(pdf);
+                          }
+                        });
+                      }
+
+                      if (docsList.length === 0) {
+                        return <p style={{ color: "#64748b", fontSize: "13px" }}>Sin documentos PDF adjuntos en el expediente.</p>;
+                      }
+
+                      return (
+                        <div style={{ display: "grid", gap: "10px" }}>
+                          {docsList.map((doc, idx) => {
+                            const nomDoc = doc.nombre || doc.archivoNombre || `Documento_Adjunto_${idx + 1}.pdf`;
+                            return (
+                              <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "white", borderRadius: "8px", border: "1px solid #cbd5e1", gap: "10px" }}>
+                                <span style={{ fontSize: "13px", fontWeight: "bold", color: "#1e293b", flex: 1 }}>
+                                  📄 {nomDoc}
+                                </span>
+
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDocumentoPdfVisor(doc)}
+                                    style={{ padding: "6px 12px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                                  >
+                                    👁️ Ver Documento
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirPdf(doc)}
+                                    style={{ padding: "6px 12px", background: "#16a34a", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                                  >
+                                    📥 Descargar
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

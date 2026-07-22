@@ -297,29 +297,25 @@ export default function VisualizadorDocumentoModal({ documento, onCerrar }) {
               />
             </div>
           ) : (
-            <object
-              data={blobUrl}
-              type="application/pdf"
-              style={{ width: "100%", height: "100%", border: "none" }}
-            >
-              <embed
+            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+              <iframe
                 src={blobUrl}
-                type="application/pdf"
-                style={{ width: "100%", height: "100%", border: "none" }}
+                title={nombreArchivo}
+                style={{ width: "100%", height: "100%", border: "none", flex: 1 }}
               />
-              <div style={{ padding: "40px", textAlign: "center", color: "white" }}>
-                <p style={{ fontSize: "16px", marginBottom: "16px" }}>
-                  Su navegador no tiene activo el visor integrado de PDF.
-                </p>
+              <div style={{ padding: "10px 16px", background: "#0f172a", borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ color: "#94a3b8", fontSize: "12px" }}>
+                  📄 Visor Municipal PDF — {nombreArchivo}
+                </span>
                 <button
                   type="button"
                   onClick={descargarDirecto}
-                  style={{ padding: "12px 24px", background: "#2563eb", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14.5px", cursor: "pointer" }}
+                  style={{ padding: "8px 16px", background: "#16a34a", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "12.5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
                 >
-                  📥 Clic aquí para descargar el PDF
+                  📥 Descargar Archivo PDF
                 </button>
               </div>
-            </object>
+            </div>
           )}
         </div>
       </div>
