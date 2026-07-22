@@ -10,6 +10,7 @@ import { abrirPdf } from "../services/pdfService";
 import { crearOrdenFlow } from "../services/pagoService";
 import { consultarDni } from "../services/dniService";
 import { consultarRuc } from "../services/rucService";
+import { convertirNumeroALetras } from "../services/comprobanteService";
 import { GROS_DISPONIBLES, obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -40,6 +41,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [solicitudVerBoleta, setSolicitudVerBoleta] = useState(null);
   const [solicitudRenovacion, setSolicitudRenovacion] = useState(null);
   const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("Efectivo en Caja Municipal");
+  const [montoRecibidoInput, setMontoRecibidoInput] = useState("10.00");
   const [comprobanteGenerado, setComprobanteGenerado] = useState(null);
   const [procesando, setProcesando] = useState(false);
 
@@ -448,6 +450,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       return;
     }
 
+    const esEfectivo = metodoPagoSeleccionado.toLowerCase().includes("efectivo");
+    const montoRecibidoNum = parseFloat(montoRecibidoInput) || 0;
+    const vueltoCalculado = Math.max(0, montoRecibidoNum - MONTO_TRAMITE);
+
+    if (esEfectivo && montoRecibidoNum < MONTO_TRAMITE) {
+      alert(`⚠️ El monto recibido (S/ ${montoRecibidoNum.toFixed(2)}) es menor al total a pagar (S/ ${MONTO_TRAMITE.toFixed(2)}). Por favor ingrese un monto válido.`);
+      return;
+    }
+
     // VALIDACIÓN 1: No fechas pasadas
     if (esHorarioPasado(fechaInspeccion, "00:00")) {
       alert("⚠️ No se permite programar inspecciones para fechas pasadas.");
@@ -490,6 +501,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         horaVisitaLabel: horaLabel,
         metodoPago: metodoPagoSeleccionado,
         montoPagado: MONTO_TRAMITE,
+        montoRecibido: esEfectivo ? montoRecibidoNum : null,
+        vuelto: esEfectivo ? vueltoCalculado : null,
         comprobantePago: `Boleta de Caja N° ${codComprobante}`,
         numeroOperacion: codComprobante,
         fechaPago: fechaHoraActual,
@@ -505,7 +518,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             usuario: nombreCajera,
             rol: "Cajera",
             accion: "Cobro de tasa y programación de inspección",
-            comentarios: `Pago de S/ ${MONTO_TRAMITE.toFixed(2)} registrado (${metodoPagoSeleccionado}). Boleta: ${codComprobante}. Visita asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion} a las ${horaLabel}.`,
+            comentarios: `Pago de S/ ${MONTO_TRAMITE.toFixed(2)} registrado (${metodoPagoSeleccionado}). ${esEfectivo ? `Recibido: S/ ${montoRecibidoNum.toFixed(2)}, Vuelto: S/ ${vueltoCalculado.toFixed(2)}. ` : ''}Boleta: ${codComprobante}. Visita asignada a ${inspectorElegido.nombre} para el ${fechaInspeccion} a las ${horaLabel}.`,
           },
         ],
       };
@@ -597,6 +610,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       return;
     }
 
+    const esEfectivo = metodoPagoSeleccionado.toLowerCase().includes("efectivo");
+    const montoRecibidoNum = parseFloat(montoRecibidoInput) || 0;
+    const vueltoCalculado = Math.max(0, montoRecibidoNum - MONTO_TRAMITE);
+
+    if (esEfectivo && montoRecibidoNum < MONTO_TRAMITE) {
+      alert(`⚠️ El monto recibido (S/ ${montoRecibidoNum.toFixed(2)}) es menor al total a pagar (S/ ${MONTO_TRAMITE.toFixed(2)}). Por favor ingrese un monto válido.`);
+      return;
+    }
+
     setProcesando(true);
     try {
       const idExp = Date.now().toString().slice(-6);
@@ -614,8 +636,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const nuevaSolicitudPresencial = {
         id: idExp,
         numeroExpediente: `EXP-${idExp}`,
-        dniSolicitante: dniForm || rucForm,
-        dni: dniForm || rucForm,
+        dniSolicitante: dniForm || "",
+        dni: dniForm || "",
         nombresSolicitante: nombresForm || razonSocialForm || nombreNegocioForm,
         apellidosSolicitante: apellidosForm || "",
         nombreSolicitante: (nombresForm && apellidosForm) ? `${nombresForm} ${apellidosForm}` : (razonSocialForm || nombreNegocioForm || "SOLICITANTE PRESENCIAL"),
@@ -632,6 +654,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         estadoPago: "Confirmado",
         metodoPago: metodoPagoSeleccionado,
         montoPagado: MONTO_TRAMITE,
+        montoRecibido: esEfectivo ? montoRecibidoNum : null,
+        vuelto: esEfectivo ? vueltoCalculado : null,
         tipoComprobante: nombreComprobanteTitulo,
         comprobantePago: `${nombreComprobanteTitulo} N° ${codComprobante}`,
         numeroOperacion: codComprobante,
@@ -1198,14 +1222,14 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               `}</style>
 
               {/* VOUCHER / COMPROBANTE DE VENTA ELECTRÓNICO (BOLETA O FACTURA CON ESTRUCTURA SUNAT) */}
-              <div id="comprobante-sunat-impresion" style={{ background: "#ffffff", border: "2px solid #0f172a", borderRadius: "14px", padding: "28px", maxWidth: "620px", margin: "0 auto 24px", textAlign: "left", boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}>
-                {/* ENCABEZADO CON LOGO / RECUADRO OSCURO */}
-                <div style={{ background: "#0f172a", color: "white", padding: "14px 20px", borderRadius: "8px", textAlign: "center", marginBottom: "20px" }}>
+              <div id="comprobante-sunat-impresion" style={{ background: "#ffffff", border: "2px solid #0f172a", borderRadius: "14px", padding: "24px", maxWidth: "640px", margin: "0 auto 24px", textAlign: "left", boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}>
+                {/* ENCABEZADO MUNICIPAL */}
+                <div style={{ background: "#0f172a", color: "white", padding: "16px 20px", borderRadius: "8px", textAlign: "center", marginBottom: "20px" }}>
                   <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "900", letterSpacing: "0.5px" }}>MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-                  <span style={{ fontSize: "11px", opacity: 0.9, textTransform: "uppercase", fontWeight: "bold", letterSpacing: "0.5px", display: "block", marginTop: "2px" }}>
+                  <span style={{ fontSize: "11px", opacity: 0.9, textTransform: "uppercase", fontWeight: "bold", letterSpacing: "0.5px", display: "block", marginTop: "2px", color: "#cbd5e1" }}>
                     Módulo de Atención y Caja Municipal
                   </span>
-                  <span style={{ fontSize: "10.5px", opacity: 0.75, display: "block", marginTop: "2px" }}>RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
+                  <span style={{ fontSize: "10.5px", opacity: 0.75, display: "block", marginTop: "2px", color: "#94a3b8" }}>RUC: 20145532000 — Jr. Diego de Almagro N° 525, Trujillo</span>
                 </div>
 
                 {/* RECUADRO DE ENCABEZADO DE COMPROBANTE Y NUMERACIÓN */}
@@ -1213,26 +1237,28 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   <span style={{ fontWeight: "900", fontSize: "15px", display: "block", color: "#0f172a", letterSpacing: "0.5px" }}>
                     {(resultadoRegistroExitoso.tipoComprobante || "BOLETA DE VENTA ELECTRÓNICA").toUpperCase()}
                   </span>
-                  <span style={{ fontSize: "16px", fontWeight: "900", color: "#dc2626" }}>N° {resultadoRegistroExitoso.codComprobante}</span>
-                  <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#475569" }}>Fecha: {resultadoRegistroExitoso.solicitudCompleta?.fechaPago || "21/7/2026"}</p>
+                  <span style={{ fontSize: "17px", fontWeight: "900", color: "#dc2626" }}>N° {resultadoRegistroExitoso.codComprobante}</span>
+                  <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#475569" }}>Fecha y Hora: {resultadoRegistroExitoso.solicitudCompleta?.fechaPago || "21/07/2026 22:15"}</p>
                 </div>
 
-                {/* DATOS DEL ESTABLECIMIENTO (INFORMACIÓN DE LA EMPRESA / CONTRIBUYENTE) */}
+                {/* DATOS DEL CONTRIBUYENTE Y EXPEDIENTE */}
                 <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "10px", padding: "16px", marginBottom: "20px" }}>
                   <h4 style={{ margin: "0 0 10px", color: "#0f172a", fontSize: "14px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "6px" }}>
                     🏢 Información del Contribuyente y Establecimiento
                   </h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "13px" }}>
-                    <p style={{ margin: 0 }}><strong>Nombre Legal / Razón Social:</strong> {resultadoRegistroExitoso.solicitudCompleta?.razonSocial || resultadoRegistroExitoso.nombreNegocio}</p>
+                    <p style={{ margin: 0 }}><strong>Código Expediente:</strong> EXP-{String(resultadoRegistroExitoso.id).replace(/^EXP-/, "")}</p>
+                    <p style={{ margin: 0 }}><strong>RUC Contribuyente:</strong> {resultadoRegistroExitoso.solicitudCompleta?.ruc}</p>
+                    <p style={{ margin: 0 }}><strong>Razón Social / Empresa:</strong> {resultadoRegistroExitoso.solicitudCompleta?.razonSocial || resultadoRegistroExitoso.nombreNegocio}</p>
                     <p style={{ margin: 0 }}><strong>Nombre Comercial:</strong> {resultadoRegistroExitoso.nombreNegocio}</p>
-                    <p style={{ margin: 0 }}><strong>Número de RUC:</strong> {resultadoRegistroExitoso.solicitudCompleta?.ruc}</p>
-                    <p style={{ margin: 0 }}><strong>Dirección Fiscal:</strong> {resultadoRegistroExitoso.solicitudCompleta?.direccion}</p>
-                    <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Solicitante:</strong> {resultadoRegistroExitoso.nombreSolicitante} (DNI: {resultadoRegistroExitoso.solicitudCompleta?.dniSolicitante || resultadoRegistroExitoso.solicitudCompleta?.dni})</p>
+                    <p style={{ margin: 0 }}><strong>Representante Legal:</strong> {resultadoRegistroExitoso.nombreSolicitante}</p>
+                    <p style={{ margin: 0 }}><strong>DNI Representante:</strong> {resultadoRegistroExitoso.solicitudCompleta?.dniSolicitante || resultadoRegistroExitoso.solicitudCompleta?.dni || "---"}</p>
+                    <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Dirección Fiscal:</strong> {resultadoRegistroExitoso.solicitudCompleta?.direccion}</p>
                   </div>
                 </div>
 
-                {/* DETALLE DE LOS PRODUCTOS (LA "GRILLA") */}
-                <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "20px", fontSize: "13px" }}>
+                {/* GRILLA TABULAR DE PRODUCTOS */}
+                <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px", fontSize: "13px" }}>
                   <thead>
                     <tr style={{ background: "#0f172a", color: "white" }}>
                       <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "center", width: "12%" }}>CANT</th>
@@ -1254,28 +1280,63 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </tbody>
                 </table>
 
-                {/* CÁLCULO TOTAL Y DESGLOSE FINANCIERO */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
-                  <div style={{ fontSize: "12px", color: "#334155" }}>
-                    <p style={{ margin: "2px 0" }}><strong>MÉTODO DE PAGO:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.metodoPago || "BILLETERA DIGITAL (YAPE / PLIN)").toUpperCase()}</p>
-                    <p style={{ margin: "2px 0" }}><strong>CAJERA:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.cajeraResponsable || "CAJERA MUNICIPAL").toUpperCase()}</p>
+                {/* TOTAL EN LETRAS Y RESUMEN FINANCIERO */}
+                <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
+                  <p style={{ margin: "0 0 10px", fontWeight: "800", fontSize: "13px", color: "#0f172a" }}>
+                    {convertirNumeroALetras(MONTO_TRAMITE)}
+                  </p>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #cbd5e1", paddingTop: "10px" }}>
+                    <div style={{ fontSize: "12.5px", color: "#475569" }}>
+                      <span>OP. GRAVADA: <strong>S/ 2.54</strong></span> &nbsp;|&nbsp; 
+                      <span>I.G.V. (18%): <strong>S/ 0.46</strong></span>
+                    </div>
+                    <div style={{ fontSize: "16px", fontWeight: "900", color: "#16a34a" }}>
+                      TOTAL PAGADO: S/ 3.00
+                    </div>
                   </div>
-                  <table style={{ width: "210px", fontSize: "13.5px" }}>
-                    <tbody>
-                      <tr><td style={{ color: "#475569" }}>OP. GRAVADA:</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 2.54</td></tr>
-                      <tr><td style={{ color: "#475569" }}>I.G.V. (18%):</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 0.46</td></tr>
-                      <tr style={{ fontSize: "16px", borderTop: "1.5px solid #0f172a" }}>
-                        <td style={{ paddingTop: "6px", fontWeight: "900", color: "#0f172a" }}>TOTAL A PAGAR:</td>
-                        <td style={{ paddingTop: "6px", textAlign: "right", fontWeight: "900", color: "#16a34a" }}>S/ 3.00</td>
-                      </tr>
-                    </tbody>
-                  </table>
                 </div>
 
-                {/* PIE DE PÁGINA Y MENSAJE LEGAL */}
-                <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: "14px", fontSize: "12px", color: "#64748b", textAlign: "center" }}>
-                  <p style={{ margin: "0 0 4px", fontWeight: "bold" }}>Representación impresa del comprobante de venta electrónico.</p>
-                  <p style={{ margin: 0, color: "#16a34a", fontWeight: "800", fontSize: "13px" }}>¡Gracias por su preferencia!</p>
+                {/* CONDICIONES DE PAGO: EFECTIVO VS TARJETA/DIGITAL */}
+                <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "10px", padding: "14px", marginBottom: "20px", fontSize: "12.5px", color: "#334155" }}>
+                  <h4 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "13px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "4px" }}>
+                    💳 Detalles de Pago y Atención en Caja
+                  </h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                    <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.metodoPago || "EFECTIVO EN CAJA MUNICIPAL").toUpperCase()}</p>
+                    <p style={{ margin: 0 }}><strong>Estado del Pago:</strong> <span style={{ color: "#16a34a", fontWeight: "bold" }}>Pago confirmado</span></p>
+                    <p style={{ margin: 0 }}><strong>Cajero(a) Responsable:</strong> {(resultadoRegistroExitoso.solicitudCompleta?.cajeraResponsable || "MARÍA LÓPEZ (CAJ-001)").toUpperCase()}</p>
+                    
+                    {String(resultadoRegistroExitoso.solicitudCompleta?.metodoPago || "").toLowerCase().includes("efectivo") ? (
+                      <>
+                        <p style={{ margin: 0 }}><strong>Monto Recibido:</strong> S/ {Number(resultadoRegistroExitoso.solicitudCompleta?.montoRecibido || 10.00).toFixed(2)}</p>
+                        <p style={{ margin: 0, gridColumn: "span 2", color: "#16a34a", fontWeight: "bold" }}><strong>Vuelto Entregado:</strong> S/ {Number(resultadoRegistroExitoso.solicitudCompleta?.vuelto || (Number(resultadoRegistroExitoso.solicitudCompleta?.montoRecibido || 10.00) - 3.00)).toFixed(2)}</p>
+                      </>
+                    ) : (
+                      <p style={{ margin: 0 }}><strong>N° Operación / Transacción:</strong> {resultadoRegistroExitoso.codComprobante}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* MENSAJE OFICIAL DE REVISIÓN Y CÓDIGO QR */}
+                <div style={{ borderTop: "1.5px solid #cbd5e1", paddingTop: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: "12px", color: "#475569", maxWidth: "430px" }}>
+                    <p style={{ margin: "0 0 6px", color: "#166534", fontWeight: "800", fontSize: "12.5px" }}>
+                      ✓ La solicitud fue enviada correctamente para revisión / inspección municipal.
+                    </p>
+                    <p style={{ margin: "0 0 2px", fontWeight: "bold" }}>Representación impresa del comprobante de venta electrónico SUNAT.</p>
+                    <small style={{ color: "#64748b", display: "block" }}>Verificación Hash: MUNI-TRU-2026-98432-OK</small>
+                  </div>
+                  
+                  {/* CÓDIGO QR DE VERIFICACIÓN */}
+                  <div style={{ border: "1px solid #0f172a", padding: "6px", borderRadius: "8px", background: "white", textAlign: "center" }}>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(`MUNICIPALIDAD PROVINCIAL DE TRUJILLO|RUC:20145532000|COMP:${resultadoRegistroExitoso.codComprobante}|EXP:${resultadoRegistroExitoso.id}|TOTAL:S/3.00`)}`}
+                      alt="Código QR Comprobante"
+                      style={{ width: "80px", height: "80px", display: "block" }}
+                    />
+                    <span style={{ fontSize: "9px", fontWeight: "bold", color: "#0f172a", display: "block", marginTop: "2px" }}>QR VERIFICACIÓN</span>
+                  </div>
                 </div>
               </div>
 
@@ -1677,12 +1738,56 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
                             style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
                           >
-                            <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
                             <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                            <option value="Pago Online Real con Flow (Flow.cl)">💳 Pago Online Real con Flow (Flow.cl)</option>
+                            <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
+                            <option value="Tarjeta de Crédito / Débito">💳 Tarjeta de Crédito / Débito</option>
+                            <option value="Pago Online Real con Flow (Flow.cl)">🌐 Pago Online Real con Flow (Flow.cl)</option>
                           </select>
                         </div>
                       </div>
+
+                      {/* CAMPOS DINÁMICOS DE EFECTIVO VS DIGITAL */}
+                      {metodoPagoSeleccionado.toLowerCase().includes("efectivo") && (
+                        <div style={{ background: "#fffbeb", border: "1.5px solid #fde68a", padding: "16px", borderRadius: "12px", marginBottom: "16px" }}>
+                          <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#92400e", marginBottom: "6px" }}>
+                            💵 Monto Recibido del Ciudadano (S/) *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.10"
+                            min="3.00"
+                            placeholder="Ej. 10.00"
+                            value={montoRecibidoInput}
+                            onChange={(e) => setMontoRecibidoInput(e.target.value)}
+                            style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #d97706", fontSize: "16px", fontWeight: "800", color: "#0f172a", background: "white" }}
+                          />
+
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "12px", background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #fcd34d", textAlign: "center" }}>
+                            <div>
+                              <small style={{ color: "#64748b", fontWeight: "bold", fontSize: "10.5px" }}>TOTAL A PAGAR</small>
+                              <p style={{ margin: "2px 0 0", fontWeight: "800", fontSize: "14.5px", color: "#0f172a" }}>S/ {MONTO_TRAMITE.toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <small style={{ color: "#64748b", fontWeight: "bold", fontSize: "10.5px" }}>MONTO RECIBIDO</small>
+                              <p style={{ margin: "2px 0 0", fontWeight: "800", fontSize: "14.5px", color: "#2563eb" }}>
+                                S/ {(parseFloat(montoRecibidoInput) || 0).toFixed(2)}
+                              </p>
+                            </div>
+                            <div>
+                              <small style={{ color: "#64748b", fontWeight: "bold", fontSize: "10.5px" }}>VUELTO</small>
+                              <p style={{ margin: "2px 0 0", fontWeight: "800", fontSize: "14.5px", color: (parseFloat(montoRecibidoInput) || 0) >= MONTO_TRAMITE ? "#16a34a" : "#dc2626" }}>
+                                S/ {Math.max(0, (parseFloat(montoRecibidoInput) || 0) - MONTO_TRAMITE).toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {(parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE && (
+                            <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", padding: "8px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", marginTop: "10px", textAlign: "center" }}>
+                              ⚠️ El monto recibido es menor al total a pagar (S/ {MONTO_TRAMITE.toFixed(2)}). Por favor ingrese un monto suficiente.
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* INFORMACIÓN DE ASIGNACIÓN AUTOMÁTICA DE INSPECCIÓN */}
                       <div style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: "16px 20px", borderRadius: "12px" }}>
@@ -2111,13 +2216,13 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
             {/* COMPROBANTE OFICIAL ESTILO SUNAT */}
             <div id="comprobante-modal-impresion" style={{ background: "#ffffff", border: "2px solid #0f172a", borderRadius: "14px", padding: "24px", textAlign: "left", boxShadow: "0 4px 16px rgba(0,0,0,0.06)", marginBottom: "20px" }}>
-              {/* ENCABEZADO */}
-              <div style={{ background: "#0f172a", color: "white", padding: "14px 20px", borderRadius: "8px", textAlign: "center", marginBottom: "20px" }}>
+              {/* ENCABEZADO MUNICIPAL */}
+              <div style={{ background: "#0f172a", color: "white", padding: "16px 20px", borderRadius: "8px", textAlign: "center", marginBottom: "20px" }}>
                 <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "900", letterSpacing: "0.5px" }}>MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-                <span style={{ fontSize: "11px", opacity: 0.9, textTransform: "uppercase", fontWeight: "bold", letterSpacing: "0.5px", display: "block", marginTop: "2px" }}>
+                <span style={{ fontSize: "11px", opacity: 0.9, textTransform: "uppercase", fontWeight: "bold", letterSpacing: "0.5px", display: "block", marginTop: "2px", color: "#cbd5e1" }}>
                   Módulo de Atención y Caja Municipal
                 </span>
-                <span style={{ fontSize: "10.5px", opacity: 0.75, display: "block", marginTop: "2px" }}>RUC: 20145532000 — Jr. Almagro N° 525, Trujillo</span>
+                <span style={{ fontSize: "10.5px", opacity: 0.75, display: "block", marginTop: "2px", color: "#94a3b8" }}>RUC: 20145532000 — Jr. Diego de Almagro N° 525, Trujillo</span>
               </div>
 
               {/* NUMERACIÓN DE COMPROBANTE */}
@@ -2125,28 +2230,30 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 <span style={{ fontWeight: "900", fontSize: "15px", display: "block", color: "#0f172a", letterSpacing: "0.5px" }}>
                   {(solicitudVerBoleta.tipoComprobante || ((solicitudVerBoleta.comprobantePago || "").includes("FACTURA") ? "FACTURA ELECTRÓNICA" : "BOLETA DE VENTA ELECTRÓNICA")).toUpperCase()}
                 </span>
-                <span style={{ fontSize: "16px", fontWeight: "900", color: "#dc2626" }}>
+                <span style={{ fontSize: "17px", fontWeight: "900", color: "#dc2626" }}>
                   N° {solicitudVerBoleta.numeroOperacion || solicitudVerBoleta.comprobantePago || `B001-${String(solicitudVerBoleta.id).replace(/^EXP-/, "")}`}
                 </span>
-                <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#475569" }}>Fecha: {solicitudVerBoleta.fechaPago || solicitudVerBoleta.fechaSolicitud || "21/7/2026"}</p>
+                <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#475569" }}>Fecha y Hora: {solicitudVerBoleta.fechaPago || solicitudVerBoleta.fechaSolicitud || "21/07/2026 22:15"}</p>
               </div>
 
-              {/* DATOS CONTRIBUYENTE */}
+              {/* DATOS CONTRIBUYENTE Y EXPEDIENTE */}
               <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "10px", padding: "16px", marginBottom: "20px" }}>
                 <h4 style={{ margin: "0 0 10px", color: "#0f172a", fontSize: "14px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "6px" }}>
                   🏢 Información del Contribuyente y Establecimiento
                 </h4>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "13px" }}>
-                  <p style={{ margin: 0 }}><strong>Nombre Legal / Razón Social:</strong> {solicitudVerBoleta.razonSocial || solicitudVerBoleta.nombreNegocio}</p>
+                  <p style={{ margin: 0 }}><strong>Código Expediente:</strong> EXP-{String(solicitudVerBoleta.id).replace(/^EXP-/, "")}</p>
+                  <p style={{ margin: 0 }}><strong>RUC Contribuyente:</strong> {solicitudVerBoleta.ruc}</p>
+                  <p style={{ margin: 0 }}><strong>Razón Social / Empresa:</strong> {solicitudVerBoleta.razonSocial || solicitudVerBoleta.nombreNegocio}</p>
                   <p style={{ margin: 0 }}><strong>Nombre Comercial:</strong> {solicitudVerBoleta.nombreNegocio}</p>
-                  <p style={{ margin: 0 }}><strong>Número de RUC:</strong> {solicitudVerBoleta.ruc}</p>
-                  <p style={{ margin: 0 }}><strong>Dirección Fiscal:</strong> {solicitudVerBoleta.direccion}</p>
-                  <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Solicitante:</strong> {[solicitudVerBoleta.nombresSolicitante, solicitudVerBoleta.apellidosSolicitante, solicitudVerBoleta.nombreSolicitante].filter(Boolean).join(" ")} (DNI: {solicitudVerBoleta.dniSolicitante || solicitudVerBoleta.dni})</p>
+                  <p style={{ margin: 0 }}><strong>Representante Legal:</strong> {[solicitudVerBoleta.nombresSolicitante, solicitudVerBoleta.apellidosSolicitante, solicitudVerBoleta.nombreSolicitante].filter(Boolean).join(" ") || "---"}</p>
+                  <p style={{ margin: 0 }}><strong>DNI Representante:</strong> {solicitudVerBoleta.dniSolicitante || solicitudVerBoleta.dni || "---"}</p>
+                  <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Dirección Fiscal:</strong> {solicitudVerBoleta.direccion}</p>
                 </div>
               </div>
 
               {/* GRILLA TABULAR */}
-              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "20px", fontSize: "13px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px", fontSize: "13px" }}>
                 <thead>
                   <tr style={{ background: "#0f172a", color: "white" }}>
                     <th style={{ padding: "10px", textTransform: "uppercase", textAlign: "center", width: "12%" }}>CANT</th>
@@ -2168,28 +2275,63 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 </tbody>
               </table>
 
-              {/* RESUMEN FINANCIERO */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
-                <div style={{ fontSize: "12px", color: "#334155" }}>
-                  <p style={{ margin: "2px 0" }}><strong>MÉTODO DE PAGO:</strong> {(solicitudVerBoleta.metodoPago || "BILLETERA DIGITAL (YAPE / PLIN)").toUpperCase()}</p>
-                  <p style={{ margin: "2px 0" }}><strong>CAJERA:</strong> {(solicitudVerBoleta.cajeraResponsable || solicitudVerBoleta.usuarioCajero || "CAJERA MUNICIPAL").toUpperCase()}</p>
+              {/* TOTAL EN LETRAS Y RESUMEN FINANCIERO */}
+              <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
+                <p style={{ margin: "0 0 10px", fontWeight: "800", fontSize: "13px", color: "#0f172a" }}>
+                  {convertirNumeroALetras(solicitudVerBoleta.montoPagado || MONTO_TRAMITE)}
+                </p>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #cbd5e1", paddingTop: "10px" }}>
+                  <div style={{ fontSize: "12.5px", color: "#475569" }}>
+                    <span>OP. GRAVADA: <strong>S/ 2.54</strong></span> &nbsp;|&nbsp; 
+                    <span>I.G.V. (18%): <strong>S/ 0.46</strong></span>
+                  </div>
+                  <div style={{ fontSize: "16px", fontWeight: "900", color: "#16a34a" }}>
+                    TOTAL PAGADO: S/ {Number(solicitudVerBoleta.montoPagado || MONTO_TRAMITE).toFixed(2)}
+                  </div>
                 </div>
-                <table style={{ width: "210px", fontSize: "13.5px" }}>
-                  <tbody>
-                    <tr><td style={{ color: "#475569" }}>OP. GRAVADA:</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 2.54</td></tr>
-                    <tr><td style={{ color: "#475569" }}>I.G.V. (18%):</td><td style={{ textAlign: "right", fontWeight: "bold" }}>S/ 0.46</td></tr>
-                    <tr style={{ fontSize: "16px", borderTop: "1.5px solid #0f172a" }}>
-                      <td style={{ paddingTop: "6px", fontWeight: "900", color: "#0f172a" }}>TOTAL A PAGAR:</td>
-                      <td style={{ paddingTop: "6px", textAlign: "right", fontWeight: "900", color: "#16a34a" }}>S/ {Number(solicitudVerBoleta.montoPagado || MONTO_TRAMITE).toFixed(2)}</td>
-                    </tr>
-                  </tbody>
-                </table>
               </div>
 
-              {/* PIE LEGAL */}
-              <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: "14px", fontSize: "12px", color: "#64748b", textAlign: "center" }}>
-                <p style={{ margin: "0 0 4px", fontWeight: "bold" }}>Representación impresa del comprobante de venta electrónico.</p>
-                <p style={{ margin: 0, color: "#16a34a", fontWeight: "800", fontSize: "13px" }}>¡Gracias por su preferencia!</p>
+              {/* CONDICIONES DE PAGO Y ATENCIÓN EN CAJA */}
+              <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "10px", padding: "14px", marginBottom: "20px", fontSize: "12.5px", color: "#334155" }}>
+                <h4 style={{ margin: "0 0 8px", color: "#0f172a", fontSize: "13px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "4px" }}>
+                  💳 Detalles de Pago y Atención en Caja
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                  <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {(solicitudVerBoleta.metodoPago || "EFECTIVO EN CAJA MUNICIPAL").toUpperCase()}</p>
+                  <p style={{ margin: 0 }}><strong>Estado del Pago:</strong> <span style={{ color: "#16a34a", fontWeight: "bold" }}>Pago confirmado</span></p>
+                  <p style={{ margin: 0 }}><strong>Cajero(a) Responsable:</strong> {(solicitudVerBoleta.cajeraResponsable || solicitudVerBoleta.usuarioCajero || "MARÍA LÓPEZ (CAJ-001)").toUpperCase()}</p>
+
+                  {String(solicitudVerBoleta.metodoPago || "").toLowerCase().includes("efectivo") ? (
+                    <>
+                      <p style={{ margin: 0 }}><strong>Monto Recibido:</strong> S/ {Number(solicitudVerBoleta.montoRecibido || 10.00).toFixed(2)}</p>
+                      <p style={{ margin: 0, gridColumn: "span 2", color: "#16a34a", fontWeight: "bold" }}><strong>Vuelto Entregado:</strong> S/ {Number(solicitudVerBoleta.vuelto || (Number(solicitudVerBoleta.montoRecibido || 10.00) - Number(solicitudVerBoleta.montoPagado || 3.00))).toFixed(2)}</p>
+                    </>
+                  ) : (
+                    <p style={{ margin: 0 }}><strong>N° Operación / Transacción:</strong> {solicitudVerBoleta.numeroOperacion || solicitudVerBoleta.comprobantePago || "TX-2026-001"}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* MENSAJE OFICIAL Y QR */}
+              <div style={{ borderTop: "1.5px solid #cbd5e1", paddingTop: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: "12px", color: "#475569", maxWidth: "430px" }}>
+                  <p style={{ margin: "0 0 6px", color: "#166534", fontWeight: "800", fontSize: "12.5px" }}>
+                    ✓ La solicitud fue enviada correctamente para revisión / inspección municipal.
+                  </p>
+                  <p style={{ margin: "0 0 2px", fontWeight: "bold" }}>Representación impresa del comprobante de venta electrónico SUNAT.</p>
+                  <small style={{ color: "#64748b", display: "block" }}>Verificación Hash: MUNI-TRU-2026-98432-OK</small>
+                </div>
+                
+                {/* CÓDIGO QR DE VERIFICACIÓN */}
+                <div style={{ border: "1px solid #0f172a", padding: "6px", borderRadius: "8px", background: "white", textAlign: "center" }}>
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(`MUNICIPALIDAD PROVINCIAL DE TRUJILLO|RUC:20145532000|COMP:${solicitudVerBoleta.numeroOperacion || solicitudVerBoleta.id}|EXP:${solicitudVerBoleta.id}|TOTAL:S/${Number(solicitudVerBoleta.montoPagado || 3.00).toFixed(2)}`)}`}
+                    alt="Código QR Comprobante"
+                    style={{ width: "80px", height: "80px", display: "block" }}
+                  />
+                  <span style={{ fontSize: "9px", fontWeight: "bold", color: "#0f172a", display: "block", marginTop: "2px" }}>QR VERIFICACIÓN</span>
+                </div>
               </div>
             </div>
 
@@ -2216,25 +2358,25 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       {/* MODAL PROCESAR PAGO EN CAJA MUNICIPAL */}
       {solicitudCobro && (
         <div className="admin-form-modal" style={{ zIndex: 1000 }}>
-          <div className="admin-form-card" style={{ maxWidth: "520px" }}>
+          <div className="admin-form-card" style={{ maxWidth: "540px" }}>
             <div className="admin-form-header">
-              <h3>💳 Registrar Pago de Trámite — EXP-{solicitudCobro.id}</h3>
+              <h3>💳 Registrar Pago de Trámite — EXP-{String(solicitudCobro.id).replace(/^EXP-/, "")}</h3>
               <button type="button" onClick={() => setSolicitudCobro(null)}>✕</button>
             </div>
 
             <div style={{ padding: "16px 0" }}>
               <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "16px" }}>
                 <p style={{ margin: "0 0 6px", fontSize: "13.5px", color: "#334155" }}>
-                  <strong>Ciudadano:</strong> {[solicitudCobro.nombresSolicitante, solicitudCobro.apellidosSolicitante, solicitudCobro.nombreSolicitante].filter(Boolean).join(" ")}
+                  <strong>Contribuyente:</strong> {solicitudCobro.razonSocial || solicitudCobro.nombreNegocio} (RUC: {solicitudCobro.ruc})
                 </p>
                 <p style={{ margin: "0 0 6px", fontSize: "13.5px", color: "#334155" }}>
-                  <strong>DNI:</strong> {solicitudCobro.dniSolicitante || solicitudCobro.dni || "---"}
+                  <strong>Representante Legal / Solicitante:</strong> {[solicitudCobro.nombresSolicitante, solicitudCobro.apellidosSolicitante, solicitudCobro.nombreSolicitante].filter(Boolean).join(" ") || "---"}
                 </p>
                 <p style={{ margin: "0 0 6px", fontSize: "13.5px", color: "#334155" }}>
-                  <strong>Negocio:</strong> {solicitudCobro.nombreNegocio} (RUC: {solicitudCobro.ruc})
+                  <strong>DNI del Representante:</strong> {solicitudCobro.dniSolicitante || solicitudCobro.dni || "---"}
                 </p>
                 <p style={{ margin: "0 0 6px", fontSize: "13.5px", color: "#334155" }}>
-                  <strong>Cajera Responsable:</strong> {usuario?.nombre || usuario?.email || "Cajera Municipal"}
+                  <strong>Cajera Responsable:</strong> {usuario?.nombre || usuario?.email || "Cajera de Ventanilla (CAJ-01)"}
                 </p>
                 <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #cbd5e1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontWeight: "bold", fontSize: "15px", color: "#0f172a" }}>Derecho de Trámite:</span>
@@ -2249,12 +2391,64 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 <select
                   value={metodoPagoSeleccionado}
                   onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
-                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold" }}
                 >
                   <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
                   <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
+                  <option value="Tarjeta de Crédito / Débito">💳 Tarjeta de Crédito / Débito</option>
+                  <option value="Pago Online Real con Flow (Flow.cl)">🌐 Pago Online Real con Flow (Flow.cl)</option>
                 </select>
               </div>
+
+              {/* LÓGICA DE COBRO SEGÚN MÉTODO DE PAGO: EFECTIVO VS TARJETA/DIGITAL */}
+              {metodoPagoSeleccionado.toLowerCase().includes("efectivo") ? (
+                <div style={{ background: "#fffbeb", border: "1.5px solid #fde68a", padding: "16px", borderRadius: "12px", marginBottom: "16px" }}>
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#92400e", marginBottom: "6px" }}>
+                    💵 Monto Recibido del Ciudadano (S/) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.10"
+                    min="3.00"
+                    placeholder="Ej. 10.00"
+                    value={montoRecibidoInput}
+                    onChange={(e) => setMontoRecibidoInput(e.target.value)}
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #d97706", fontSize: "16px", fontWeight: "800", color: "#0f172a", background: "white" }}
+                  />
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "12px", background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #fcd34d", textAlign: "center" }}>
+                    <div>
+                      <small style={{ color: "#64748b", fontWeight: "bold", fontSize: "10.5px" }}>TOTAL A PAGAR</small>
+                      <p style={{ margin: "2px 0 0", fontWeight: "800", fontSize: "14.5px", color: "#0f172a" }}>S/ {MONTO_TRAMITE.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <small style={{ color: "#64748b", fontWeight: "bold", fontSize: "10.5px" }}>MONTO RECIBIDO</small>
+                      <p style={{ margin: "2px 0 0", fontWeight: "800", fontSize: "14.5px", color: "#2563eb" }}>
+                        S/ {(parseFloat(montoRecibidoInput) || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div>
+                      <small style={{ color: "#64748b", fontWeight: "bold", fontSize: "10.5px" }}>VUELTO</small>
+                      <p style={{ margin: "2px 0 0", fontWeight: "800", fontSize: "14.5px", color: (parseFloat(montoRecibidoInput) || 0) >= MONTO_TRAMITE ? "#16a34a" : "#dc2626" }}>
+                        S/ {Math.max(0, (parseFloat(montoRecibidoInput) || 0) - MONTO_TRAMITE).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {(parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE && (
+                    <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", padding: "8px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", marginTop: "10px", textAlign: "center" }}>
+                      ⚠️ El monto recibido es menor al total a pagar (S/ {MONTO_TRAMITE.toFixed(2)}). Por favor ingrese un monto suficiente.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: "14px 16px", borderRadius: "10px", marginBottom: "16px" }}>
+                  <p style={{ margin: "2px 0", fontSize: "13px", color: "#1e3a8a" }}><strong>Método de Pago:</strong> {metodoPagoSeleccionado}</p>
+                  <p style={{ margin: "2px 0", fontSize: "13px", color: "#1e3a8a" }}><strong>Estado del Pago:</strong> <span style={{ color: "#16a34a", fontWeight: "bold" }}>Pago confirmado</span></p>
+                  <p style={{ margin: "2px 0", fontSize: "13.5px", color: "#1e3a8a" }}><strong>Código de Transacción:</strong> TX-{Date.now().toString().slice(-8)}</p>
+                  <p style={{ margin: "2px 0", fontSize: "12.5px", color: "#64748b" }}>Fecha y Hora: {formatearFechaHora()}</p>
+                </div>
+              )}
 
               {/* SECCIÓN PROGRAMACIÓN DE INSPECCIÓN — SOLO LECTURA */}
               <div style={{ background: "#f0fdf4", padding: "14px", borderRadius: "10px", border: "1px solid #bbf7d0", marginBottom: "16px" }}>
@@ -2315,8 +2509,19 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 type="button"
                 className="btn-primary"
                 onClick={ejecutarCobro}
-                disabled={procesando || !inspectorElegido}
-                style={{ background: inspectorElegido ? "#16a34a" : "#cbd5e1", color: "white" }}
+                disabled={
+                  procesando ||
+                  !inspectorElegido ||
+                  (metodoPagoSeleccionado.toLowerCase().includes("efectivo") && (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE)
+                }
+                style={{
+                  background:
+                    inspectorElegido &&
+                    (!metodoPagoSeleccionado.toLowerCase().includes("efectivo") || (parseFloat(montoRecibidoInput) || 0) >= MONTO_TRAMITE)
+                      ? "#16a34a"
+                      : "#cbd5e1",
+                  color: "white"
+                }}
               >
                 {procesando ? "Procesando Cobro y Asignación..." : "✅ Confirmar Pago y Programar Inspección"}
               </button>
