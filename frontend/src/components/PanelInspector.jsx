@@ -610,10 +610,10 @@ function PanelInspector({ seccion }) {
                             {s.planoUrl && (
                               <button
                                 type="button"
-                                onClick={() => setDocumentoPdfVisor({ url: s.planoUrl, nombre: `Plano del Local — EXP-${String(s.id).replace(/^EXP-/, "")}` })}
-                                style={{ background: "#2563eb", color: "white", border: "none", padding: "4px 10px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer" }}
+                                onClick={() => abrirPdf({ url: s.planoUrl, nombre: `Plano_del_Local_EXP_${String(s.id).replace(/^EXP-/, "")}.pdf` })}
+                                style={{ background: "#16a34a", color: "white", border: "none", padding: "5px 12px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
                               >
-                                📐 Ver Plano del Local
+                                📥 Descargar Plano del Local
                               </button>
                             )}
                             {s.documentosResumen?.map((docNom, idx) => (
@@ -984,23 +984,13 @@ function PanelInspector({ seccion }) {
                                   📄 {nomDoc}
                                 </span>
 
-                                <div style={{ display: "flex", gap: "8px" }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDocumentoPdfVisor(doc)}
-                                    style={{ padding: "6px 12px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
-                                  >
-                                    👁️ Ver Documento
-                                  </button>
-
                                   <button
                                     type="button"
                                     onClick={() => abrirPdf(doc)}
-                                    style={{ padding: "6px 12px", background: "#16a34a", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                                    style={{ padding: "8px 16px", background: "#16a34a", color: "white", border: "none", borderRadius: "8px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
                                   >
-                                    📥 Descargar
+                                    📥 Descargar Documento
                                   </button>
-                                </div>
                               </div>
                             );
                           })}
