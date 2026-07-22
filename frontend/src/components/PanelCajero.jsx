@@ -10,7 +10,7 @@ import { abrirPdf, obtenerBlobUrlParaPdf } from "../services/pdfService";
 import { crearOrdenFlow } from "../services/pagoService";
 import { consultarDni } from "../services/dniService";
 import { consultarRuc } from "../services/rucService";
-import { convertirNumeroALetras } from "../services/comprobanteService";
+import { convertirNumeroALetras, obtenerDniValido, obtenerNombreCiudadanoValido } from "../services/comprobanteService";
 import { GROS_DISPONIBLES, obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
 import { useAuth } from "../context/AuthContext";
 import VisualizadorDocumentoModal from "./VisualizadorDocumentoModal";
@@ -1943,10 +1943,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               </thead>
               <tbody>
                 {solicitudesFiltradas.map((s) => {
-                  const nombreCiudadano =
-                    (s.nombresSolicitante && s.apellidosSolicitante)
-                      ? `${s.nombresSolicitante} ${s.apellidosSolicitante}`.trim()
-                      : s.nombreSolicitante || s.nombresSolicitante || s.apellidosSolicitante || "Solicitante";
+                  const nombreCiudadano = obtenerNombreCiudadanoValido(s);
+                  const dniCiudadano = obtenerDniValido(s);
                   const esPagado = s.estadoPago === "Confirmado" || (s.estado || "").toLowerCase().includes("pagado") || (s.estado || "").toLowerCase().includes("inspeccion");
                   const esFacturaDoc = (s.tipoComprobante || s.comprobantePago || s.numeroOperacion || "").toLowerCase().includes("factura") || (s.numeroOperacion || "").startsWith("F");
                   const etiquetaComprobante = esFacturaDoc ? "Factura emitida" : "Boleta emitida";
@@ -1961,7 +1959,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       </td>
                       <td>
                         <strong>{nombreCiudadano}</strong>
-                        <small style={{ display: "block", color: "#475569" }}>DNI: {s.dniSolicitante || s.dni || "---"}</small>
+                        <small style={{ display: "block", color: "#475569" }}>DNI: {dniCiudadano}</small>
                       </td>
                       <td>
                         <strong>{s.nombreNegocio}</strong>
@@ -2056,10 +2054,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "16px" }}>
                 <h4 style={{ margin: "0 0 8px", color: "#1e293b", fontSize: "14px" }}>👤 Datos del Ciudadano (RENIEC)</h4>
                 <p style={{ margin: "4px 0", fontSize: "13.5px" }}>
-                  <strong>Nombres y Apellidos:</strong> {(solicitudVerDetalle.nombresSolicitante && solicitudVerDetalle.apellidosSolicitante) ? `${solicitudVerDetalle.nombresSolicitante} ${solicitudVerDetalle.apellidosSolicitante}`.trim() : solicitudVerDetalle.nombreSolicitante || "---"}
+                  <strong>Nombres y Apellidos:</strong> {obtenerNombreCiudadanoValido(solicitudVerDetalle)}
                 </p>
                 <p style={{ margin: "4px 0", fontSize: "13.5px" }}>
-                  <strong>DNI:</strong> {solicitudVerDetalle.dniSolicitante || solicitudVerDetalle.dni || "---"}
+                  <strong>DNI:</strong> {obtenerDniValido(solicitudVerDetalle)}
                 </p>
                 <p style={{ margin: "4px 0", fontSize: "13.5px" }}>
                   <strong>Correo / Teléfono:</strong> {solicitudVerDetalle.correoUsuario || "---"} | {solicitudVerDetalle.telefono || "---"}
@@ -2222,8 +2220,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   <p style={{ margin: 0 }}><strong>RUC Contribuyente:</strong> {solicitudVerBoleta.ruc}</p>
                   <p style={{ margin: 0 }}><strong>Razón Social / Empresa:</strong> {solicitudVerBoleta.razonSocial || solicitudVerBoleta.nombreNegocio}</p>
                   <p style={{ margin: 0 }}><strong>Nombre Comercial:</strong> {solicitudVerBoleta.nombreNegocio}</p>
-                  <p style={{ margin: 0 }}><strong>Representante Legal:</strong> {[solicitudVerBoleta.nombresSolicitante, solicitudVerBoleta.apellidosSolicitante, solicitudVerBoleta.nombreSolicitante].filter(Boolean).join(" ") || "---"}</p>
-                  <p style={{ margin: 0 }}><strong>DNI Representante:</strong> {solicitudVerBoleta.dniSolicitante || solicitudVerBoleta.dni || "---"}</p>
+                  <p style={{ margin: 0 }}><strong>Representante Legal:</strong> {obtenerNombreCiudadanoValido(solicitudVerBoleta)}</p>
+                  <p style={{ margin: 0 }}><strong>DNI Representante:</strong> {obtenerDniValido(solicitudVerBoleta)}</p>
                   <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Dirección Fiscal:</strong> {solicitudVerBoleta.direccion}</p>
                 </div>
               </div>

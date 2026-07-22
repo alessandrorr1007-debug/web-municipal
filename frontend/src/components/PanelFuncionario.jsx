@@ -10,6 +10,7 @@ import { registrarDecisionFuncionario } from "../services/auditService";
 import { abrirPdf, obtenerBlobUrlParaPdf, convertirPdfABase64 } from "../services/pdfService";
 import { crearNotificacion } from "../services/notificacionService";
 import { useAuth } from "../context/AuthContext";
+import { obtenerDniValido, obtenerNombreCiudadanoValido } from "../services/comprobanteService";
 import VisualizadorDocumentoModal from "./VisualizadorDocumentoModal";
 import Timeline from "./Timeline";
 import {
@@ -1733,9 +1734,8 @@ function PanelFuncionario({ seccion }) {
                 </thead>
                 <tbody>
                   {solicitudesFiltradas.map((s) => {
-                    const nombreCiudadano =
-                      [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante].filter(Boolean).join(" ") ||
-                      "Solicitante";
+                    const nombreCiudadano = obtenerNombreCiudadanoValido(s);
+                    const dniCiudadano = obtenerDniValido(s);
 
                     return (
                       <tr key={s.id}>
@@ -1749,7 +1749,7 @@ function PanelFuncionario({ seccion }) {
                         </td>
                         <td>
                           <strong>{nombreCiudadano}</strong>
-                          <small style={{ display: "block", color: "#64748b" }}>DNI: {s.dniSolicitante || s.dni || "---"}</small>
+                          <small style={{ display: "block", color: "#64748b" }}>DNI: {dniCiudadano}</small>
                         </td>
                         <td>{badgePago(s)}</td>
                         <td>{badgeInspeccion(s)}</td>

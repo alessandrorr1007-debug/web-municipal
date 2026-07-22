@@ -16,6 +16,8 @@ import {
   generarPdfComprobante,
   existeComprobanteParaSolicitud,
   eliminarComprobante,
+  obtenerDniValido,
+  obtenerNombreCiudadanoValido,
 } from "../services/comprobanteService";
 import { abrirPdf, obtenerBlobUrlParaPdf, convertirPdfABase64, normalizarTexto } from "../services/pdfService";
 import { crearNotificacion, marcarComoLeida, marcarTodasComoLeidas } from "../services/notificacionService";
@@ -3049,12 +3051,10 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                 <h4 style={{ fontSize: "13px", fontWeight: "700", color: "#475569", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Datos del Solicitante</h4>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px 24px", fontSize: "13px" }}>
                   <p style={{ margin: 0 }}>
-                    <strong>DNI:</strong>{" "}
-                    {d.dniSolicitante || usuario?.dni || "No registrado"}
+                    <strong>DNI:</strong> {obtenerDniValido(d)}
                   </p>
                   <p style={{ margin: 0 }}>
-                    <strong>Nombres Solicitante:</strong>{" "}
-                    {[d.nombresSolicitante, d.apellidosSolicitante].filter(Boolean).join(" ") || usuario?.nombre || "N/A"}
+                    <strong>Nombres Solicitante:</strong> {obtenerNombreCiudadanoValido(d)}
                   </p>
                   <p style={{ margin: 0 }}>
                     <strong>Correo Electrónico:</strong>{" "}

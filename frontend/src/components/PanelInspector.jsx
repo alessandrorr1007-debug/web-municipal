@@ -7,6 +7,7 @@ import {
 import { crearNotificacion } from "../services/notificacionService";
 import { abrirPdf, obtenerBlobUrlParaPdf } from "../services/pdfService";
 import { useAuth } from "../context/AuthContext";
+import { obtenerDniValido, obtenerNombreCiudadanoValido } from "../services/comprobanteService";
 import VisualizadorDocumentoModal from "./VisualizadorDocumentoModal";
 import {
   formatearFechaLocal,
@@ -533,9 +534,8 @@ function PanelInspector({ seccion }) {
               </thead>
               <tbody>
                 {solicitudesFiltradas.map((s) => {
-                  const nombreCiudadano =
-                    [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante].filter(Boolean).join(" ") ||
-                    "Solicitante";
+                  const nombreCiudadano = obtenerNombreCiudadanoValido(s);
+                  const dniCiudadano = obtenerDniValido(s);
 
                   return (
                     <tr key={s.id}>
@@ -545,7 +545,7 @@ function PanelInspector({ seccion }) {
                       </td>
                       <td>
                         <strong>{nombreCiudadano}</strong>
-                        <small style={{ display: "block", color: "#475569" }}>DNI: {s.dniSolicitante || s.dni || "---"}</small>
+                        <small style={{ display: "block", color: "#475569" }}>DNI: {dniCiudadano}</small>
                         <small style={{ display: "block", color: "#2563eb", fontWeight: "600", marginTop: "2px" }}>
                           📱 Cel: {s.telefono || "---"} | ✉️ {s.correoUsuario || s.correo || "---"}
                         </small>
@@ -842,8 +842,8 @@ function PanelInspector({ seccion }) {
                 <div>
                   <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
                     <h4 style={{ margin: "0 0 6px", color: "#1e293b", fontSize: "14px" }}>👤 Datos RENIEC — Ciudadano Solicitante</h4>
-                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Nombre Completo:</strong> {[solicitudAtencion.nombresSolicitante, solicitudAtencion.apellidosSolicitante, solicitudAtencion.nombreSolicitante].filter(Boolean).join(" ")}</p>
-                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>DNI:</strong> {solicitudAtencion.dniSolicitante || solicitudAtencion.dni || "---"}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Nombre Completo:</strong> {obtenerNombreCiudadanoValido(solicitudAtencion)}</p>
+                    <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>DNI:</strong> {obtenerDniValido(solicitudAtencion)}</p>
                     <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Correo:</strong> {solicitudAtencion.correoUsuario || "---"}</p>
                     <p style={{ margin: "3px 0", fontSize: "13.5px" }}><strong>Teléfono:</strong> {solicitudAtencion.telefono || "---"}</p>
                   </div>

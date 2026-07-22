@@ -26,6 +26,64 @@ export const MUNICIPALIDAD_CONFIG = {
   ruc: "20145532000"
 };
 
+export const obtenerDniValido = (obj) => {
+  if (!obj) return "---";
+
+  const candidatos = [
+    obj.dni_cliente,
+    obj.dniRepresentante,
+    obj.dniSolicitante,
+    obj.dni,
+    obj.representanteDni,
+    obj.dniUsuario,
+  ];
+
+  for (const val of candidatos) {
+    if (val && typeof val === "string") {
+      const limpio = val.trim().replace(/\D/g, "");
+      if (limpio.length === 8) {
+        return limpio;
+      }
+    }
+  }
+
+  return "---";
+};
+
+export const obtenerNombreCiudadanoValido = (obj) => {
+  if (!obj) return "Solicitante";
+
+  const nombresDirectos = [
+    obj.nombres_cliente || obj.nombresSolicitante,
+    obj.apellidos_cliente || obj.apellidosSolicitante,
+  ].filter(Boolean).join(" ").trim();
+
+  if (nombresDirectos && nombresDirectos.length > 2) {
+    const razon = (obj.razon_social || obj.razonSocial || obj.nombre_negocio || obj.nombreNegocio || "").trim();
+    if (nombresDirectos !== razon) {
+      return nombresDirectos;
+    }
+  }
+
+  const rep = obj.representante_legal || obj.representanteLegal || obj.nombreSolicitante || obj.solicitante;
+  if (rep && typeof rep === "string") {
+    const repLimpio = rep.trim();
+    const razon = (obj.razon_social || obj.razonSocial || obj.nombre_negocio || obj.nombreNegocio || "").trim();
+    if (
+      repLimpio &&
+      repLimpio !== razon &&
+      !repLimpio.endsWith("S.A.") &&
+      !repLimpio.endsWith("S.A.C.") &&
+      !repLimpio.endsWith("E.I.R.L.") &&
+      !repLimpio.endsWith("S.R.L.")
+    ) {
+      return repLimpio;
+    }
+  }
+
+  return "Representante Legal";
+};
+
 const generarSerie = (tipo) => {
   return tipo === "boleta" ? "B001" : "F001";
 };
@@ -266,8 +324,8 @@ export const generarPdfComprobante = async (comprobante) => {
   const expId = `EXP-${String(comprobante.id_solicitud || comprobante.id || '').replace(/^EXP-/, '')}`;
   const razonSocial = comprobante.razon_social || comprobante.nombre_negocio || comprobante.nombreNegocio || "CONTRIBUYENTE REGISTRADO";
   const ruc = comprobante.ruc_cliente || comprobante.ruc || "---";
-  const solicitante = [comprobante.nombres_cliente, comprobante.apellidos_cliente].filter(Boolean).join(" ") || comprobante.nombreSolicitante || "---";
-  const dniRep = comprobante.dni_cliente || comprobante.dniSolicitante || comprobante.dni || "---";
+  const solicitante = obtenerNombreCiudadanoValido(comprobante);
+  const dniRep = obtenerDniValido(comprobante);
   const direccion = comprobante.direccion_cliente || comprobante.direccion || "TRUJILLO";
 
   docPdf.text(`Expediente N°: ${expId}`, 18, 52);
