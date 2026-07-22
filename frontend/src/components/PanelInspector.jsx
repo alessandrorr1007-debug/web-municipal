@@ -145,19 +145,40 @@ function PanelInspector({ seccion }) {
       if (!esExpedienteDeEsteInspector(s)) return false;
 
       const e = (s.estado || s.estadoNormalizado || "").toLowerCase();
-      // 1. Excluir expedientes aprobados definitivamente, rechazados definitivamente, anulados o cancelados
-      if (e.includes("aprobado") || e.includes("rechazado definitivamente") || e.includes("licencia emitida") || e.includes("cancelad") || e.includes("anulad")) return false;
+      const resultado = (s.resultadoInspeccion || "").toLowerCase();
 
-      // 2. Si YA FUE EVALUADO HOY (el inspector ya hizo clic en Registrar Evaluación Final hoy), DESAPARECE de pendientes de atención
-      if (s.fechaEvaluacionInspector) {
+      // 1. Excluir expedientes aprobados definitivamente, rechazados en 2do intento, anulados o cancelados
+      if (
+        e.includes("aprobado") ||
+        e.includes("licencia emitida") ||
+        e.includes("cancelad") ||
+        e.includes("anulad") ||
+        resultado === "rechazado_2do_intento" ||
+        e.includes("rechazado definitivamente")
+      ) {
+        return false;
+      }
+
+      // 2. Coincidir estrictamente con la fecha de visita agendada para HOY
+      const fechaVisitaStr = s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "";
+      const fechaSolNorm = normalizarFechaString(fechaVisitaStr);
+      if (fechaSolNorm !== hoyNorm) return false;
+
+      // 3. Evaluar si es 2do intento
+      const esSegundoIntento = Number(s.intentosInspeccion) === 2 || e.includes("observad") || resultado === "rechazado_1er_intento";
+
+      // Si es 1er intento y ya fue evaluado hoy, ocultar
+      if (!esSegundoIntento && s.fechaEvaluacionInspector) {
         const fechaEvalNorm = normalizarFechaString(s.fechaEvaluacionInspector);
         if (fechaEvalNorm === hoyNorm) return false;
       }
 
-      // 3. Coincidir estrictamente con la fecha de visita agendada para HOY
-      const fechaVisitaStr = s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "";
-      const fechaSolNorm = normalizarFechaString(fechaVisitaStr);
-      return fechaSolNorm === hoyNorm;
+      // Si es 2do intento y ya fue finalizado (resultado === "aprobado" o "rechazado_2do_intento"), ocultar
+      if (esSegundoIntento && (resultado === "aprobado" || resultado === "rechazado_2do_intento")) {
+        return false;
+      }
+
+      return true;
     });
   }, [solicitudes, esExpedienteDeEsteInspector]);
 
