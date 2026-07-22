@@ -7,7 +7,7 @@ import {
   actualizarFechaLicenciamiento,
 } from "../services/solicitudService";
 import { crearNotificacion } from "../services/notificacionService";
-import { abrirPdf, obtenerBlobUrlParaPdf, generarPlantillaLicenciaOficial } from "../services/pdfService";
+import { abrirPdf, obtenerBlobUrlParaPdf, generarPlantillaLicenciaOficial, subirArchivoACloudinary } from "../services/pdfService";
 import { crearOrdenFlow } from "../services/pagoService";
 import { consultarDni } from "../services/dniService";
 import { consultarRuc } from "../services/rucService";
@@ -495,27 +495,55 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     }
   };
 
-  // CARGAR ARCHIVO PRESENCIAL
-  const manejarArchivoPresencial = (e, docId, docNombre) => {
+  const [subiendoPdfCloudinary, setSubiendoPdfCloudinary] = useState(false);
+
+  // CARGAR ARCHIVO PRESENCIAL Y SUBIR A CLOUDINARY
+  const manejarArchivoPresencial = async (e, docId, docNombre) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64Url = reader.result;
+    setSubiendoPdfCloudinary(true);
+    try {
+      // 1. Intentar subir directamente a Cloudinary
+      const resCloudinary = await subirArchivoACloudinary(file);
+      const urlCloudinary = resCloudinary.archivoUrl;
+
       setArchivosPresenciales((prev) => [
         ...prev.filter((item) => item.docId !== docId),
         {
           docId,
           nombre: docNombre || file.name,
           archivoNombre: file.name,
-          archivoUrl: base64Url,
-          url: base64Url,
+          archivoUrl: urlCloudinary,
+          url: urlCloudinary,
+          planoUrl: urlCloudinary,
+          publicId: resCloudinary.publicId,
           tipo: "presencial",
         },
       ]);
-    };
-    reader.readAsDataURL(file);
+    } catch (errCloudinary) {
+      console.warn("[PanelCajero] Falló subida a Cloudinary, usando respaldo Data URL Base64:", errCloudinary.message);
+      // 2. Respaldo por FileReader en caso de fallo de conexión
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Url = reader.result;
+        setArchivosPresenciales((prev) => [
+          ...prev.filter((item) => item.docId !== docId),
+          {
+            docId,
+            nombre: docNombre || file.name,
+            archivoNombre: file.name,
+            archivoUrl: base64Url,
+            url: base64Url,
+            planoUrl: base64Url,
+            tipo: "presencial",
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setSubiendoPdfCloudinary(false);
+    }
   };
 
   const obtenerConteoInspectorEnFechaLocal = useCallback((inspectorUid, fechaStr) => {
@@ -2131,15 +2159,26 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       <input
                         type="file"
                         accept=".pdf,application/pdf"
+                        disabled={subiendoPdfCloudinary}
                         onChange={(e) => manejarArchivoPresencial(e, "plano_local", "Plano Arquitectónico y de Distribución del Local (PDF)")}
                         style={{ fontSize: "13.5px", fontWeight: "bold" }}
                       />
                     </div>
 
-                    {archivosPresenciales.length > 0 && (
+                    {subiendoPdfCloudinary && (
+                      <div style={{ background: "#e0f2fe", border: "1.5px solid #38bdf8", padding: "14px 20px", borderRadius: "12px", marginTop: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                        <span style={{ fontSize: "22px" }}>☁️</span>
+                        <div>
+                          <strong style={{ color: "#0369a1", fontSize: "14px" }}>Subiendo plano a la nube Cloudinary...</strong>
+                          <span style={{ display: "block", fontSize: "12.5px", color: "#0284c7" }}>Por favor espere unos segundos mientras se procesa el archivo PDF.</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {!subiendoPdfCloudinary && archivosPresenciales.length > 0 && (
                       <div style={{ background: "#dcfce7", border: "1.5px solid #86efac", padding: "14px 20px", borderRadius: "12px", marginTop: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
-                          <strong style={{ color: "#166534", fontSize: "14.5px" }}>✓ Archivo cargado correctamente</strong>
+                          <strong style={{ color: "#166534", fontSize: "14.5px" }}>✓ Archivo cargado correctamente a Cloudinary</strong>
                           <span style={{ display: "block", fontSize: "13px", color: "#15803d", marginTop: "2px" }}>📄 {archivosPresenciales[0]?.archivoNombre}</span>
                         </div>
                         <span style={{ fontSize: "24px" }}>✅</span>

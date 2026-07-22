@@ -1,5 +1,5 @@
-const CLOUDINARY_CLOUD_NAME = "drnrrgose";
-const CLOUDINARY_UPLOAD_PRESET = "municipal.pdf";
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "qi9tfjns";
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "ml_defaullt344";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -11,7 +11,7 @@ export const subirArchivoACloudinary = async (file) => {
   formData.append("resource_type", "auto");
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
 
   try {
     const response = await fetch(

@@ -951,13 +951,28 @@ function PanelInspector({ seccion }) {
                         docsList.push({
                           nombre: "Plano Arquitectónico y de Distribución del Local (PDF)",
                           url: solicitudAtencion.planoUrl,
+                          archivoUrl: solicitudAtencion.planoUrl,
                         });
                       }
 
                       if (Array.isArray(solicitudAtencion.archivosPdf)) {
                         solicitudAtencion.archivosPdf.forEach((pdf) => {
                           if (pdf && (pdf.url || pdf.archivoUrl || pdf.base64)) {
-                            docsList.push(pdf);
+                            const urlKey = pdf.url || pdf.archivoUrl;
+                            if (!docsList.some(d => (d.url || d.archivoUrl) === urlKey)) {
+                              docsList.push(pdf);
+                            }
+                          }
+                        });
+                      }
+
+                      if (Array.isArray(solicitudAtencion.archivosPresenciales)) {
+                        solicitudAtencion.archivosPresenciales.forEach((pdf) => {
+                          if (pdf && (pdf.url || pdf.archivoUrl || pdf.base64)) {
+                            const urlKey = pdf.url || pdf.archivoUrl;
+                            if (!docsList.some(d => (d.url || d.archivoUrl) === urlKey)) {
+                              docsList.push(pdf);
+                            }
                           }
                         });
                       }
@@ -965,8 +980,19 @@ function PanelInspector({ seccion }) {
                       if (Array.isArray(solicitudAtencion.archivosAdjuntos)) {
                         solicitudAtencion.archivosAdjuntos.forEach((pdf) => {
                           if (pdf && (pdf.url || pdf.archivoUrl || pdf.base64)) {
-                            docsList.push(pdf);
+                            const urlKey = pdf.url || pdf.archivoUrl;
+                            if (!docsList.some(d => (d.url || d.archivoUrl) === urlKey)) {
+                              docsList.push(pdf);
+                            }
                           }
+                        });
+                      }
+
+                      if (docsList.length === 0 && solicitudAtencion.archivoUrl) {
+                        docsList.push({
+                          nombre: solicitudAtencion.archivoNombre || "Plano Arquitectónico del Local (PDF)",
+                          url: solicitudAtencion.archivoUrl,
+                          archivoUrl: solicitudAtencion.archivoUrl,
                         });
                       }
 
