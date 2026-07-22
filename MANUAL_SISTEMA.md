@@ -81,7 +81,7 @@ La Cajera atiende al ciudadano en ventanilla, realiza las verificaciones oficial
   > **📜 Solicitud EXP-XXXX Registrada y Pago Confirmado**
   > *Se ha procesado exitosamente el pago de su solicitud. Su inspección técnica presencial ha sido agendada para el día **[FECHA]** en el horario de **[HORARIO]** a cargo del Inspector Municipal **[INSPECTOR]**.*
 
-#### C. Módulo de Consulta de Trámites e Historial de Pagos
+#### C. Módulo de Consulta de Estado de Trámites
 - Permite buscar expedientes registrados por Código (`EXP-XXXX`), DNI, RUC o Nombre.
 - Genera e imprime la **Boleta de Caja Municipal**.
 

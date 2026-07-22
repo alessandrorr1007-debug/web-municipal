@@ -465,39 +465,13 @@ function PanelInspector({ seccion }) {
         </div>
 
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <div className="hero-card">
-            <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              {esHistorial ? "Atendidas" : "Hoy"}
-            </span>
-            <strong style={{ fontSize: "24px" }}>
-              {esHistorial ? inspeccionesFinalizadas.length : inspeccionesHoy.length}
-            </strong>
-            <small>expedientes</small>
-          </div>
-
           <button type="button" className="btn-outline-light" onClick={cargarSolicitudes}>
             {cargando ? "Actualizando..." : "🔄 Actualizar"}
           </button>
         </div>
       </div>
 
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "20px" }}>
-        <div className="stat-card" style={{ background: !esHistorial ? "#fef3c7" : "white" }}>
-          <span>Inspecciones Para Hoy</span>
-          <strong style={{ color: "#d97706" }}>{inspeccionesPendientes.length}</strong>
-          <small>Programadas para hoy</small>
-        </div>
-        <div className="stat-card" style={{ background: esHistorial ? "#dcfce7" : "white" }}>
-          <span>Inspecciones Evaluadas</span>
-          <strong style={{ color: "#16a34a" }}>{inspeccionesFinalizadas.length}</strong>
-          <small>Resultados emitidos</small>
-        </div>
-        <div className="stat-card">
-          <span>Inspector Responsable</span>
-          <strong style={{ color: "#2563eb", fontSize: "16px" }}>{usuario?.nombre || "Inspector Municipal"}</strong>
-          <small>{usuario?.email || "Inspector de Licencias"}</small>
-        </div>
-      </div>
+
 
       <section className="section-card">
         <div className="section-header">

@@ -42,10 +42,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [procesando, setProcesando] = useState(false);
 
   // VISTA SECUNDARIA DE CONSULTA DE ESTADO DE TRÁMITES
-  const [vistaConsultaEstado, setVistaConsultaEstado] = useState(() => seccion === "consulta-expedientes" || seccion === "historial" || seccion === "solicitudes-pago");
+  const [vistaConsultaEstado, setVistaConsultaEstado] = useState(() => seccion === "consulta-expedientes" || seccion === "solicitudes-pago");
 
   useEffect(() => {
-    if (seccion === "consulta-expedientes" || seccion === "historial" || seccion === "solicitudes-pago") {
+    if (seccion === "consulta-expedientes" || seccion === "solicitudes-pago") {
       setVistaConsultaEstado(true);
     } else if (seccion === "inicio") {
       setVistaConsultaEstado(false);
@@ -329,34 +329,25 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     });
   }, [solicitudes]);
 
-  // EVALUACIÓN SECUENCIAL DE LOS 7 PASOS DEL WIZARD DE CAJERO
-  // Paso 1: Validación RENIEC
-  const paso1Completado = dniValidado && Boolean(nombresForm) && Boolean(apellidosForm);
-
-  // Paso 2: Datos de Contacto (Teléfono Celular iniciado en 9 y Correo válido)
+  // EVALUACIÓN SECUENCIAL DE LOS 4 PASOS DEL WIZARD DE CAJERO
+  // Paso 1: Datos de Contacto (Teléfono Celular iniciado en 9 y Correo válido)
   const esTelefonoValido = /^9\d{8}$/.test(telefonoForm);
   const esCorreoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoForm);
-  const paso2Completado = paso1Completado && esTelefonoValido && esCorreoValido;
+  const paso1Completado = esTelefonoValido && esCorreoValido;
 
-  // Paso 3: Validación SUNAT
+  // Paso 2: Validación SUNAT
   const sunatPermiteContinuar = rucValidado && estadoSunat === "ACTIVO" && condicionSunat === "HABIDO";
-  const paso3Completado = paso2Completado && sunatPermiteContinuar && Boolean(nombreNegocioForm) && Boolean(direccionForm);
+  const paso2Completado = paso1Completado && sunatPermiteContinuar && Boolean(nombreNegocioForm) && Boolean(direccionForm);
 
-  // Paso 4: Carga de Documentos Obligatorios por Giro
+  // Paso 3: Carga de Documentos Obligatorios por Giro
   const reqsDocInfo = obtenerDocumentosPorGiro(giroForm);
   const reqsDoc = reqsDocInfo?.ciudadano || [];
   const reqsObligatorios = reqsDoc.filter((d) => d.obligatorio);
   const faltanObligatorios = reqsObligatorios.some((req) => !archivosPresenciales.some((a) => a.docId === req.id));
-  const paso4Completado = paso3Completado && reqsObligatorios.length > 0 && !faltanObligatorios;
+  const paso3Completado = paso2Completado && reqsObligatorios.length > 0 && !faltanObligatorios;
 
-  // Paso 5: Cobro de Tasa (S/ 3.00) y Método de Pago
-  const paso5Completado = paso4Completado && Boolean(metodoPagoSeleccionado);
-
-  // Paso 6: Programación Automática de Inspección Técnica
-  const paso6Completado = paso5Completado && !sinDisponibilidadInspeccion && Boolean(inspectorElegido) && Boolean(fechaInspeccion) && Boolean(slotInspeccion);
-
-  // Paso 7: Registro y Finalización
-  const paso7Listo = paso6Completado;
+  // Paso 4: Cobro de Tasa (S/ 3.00) y Método de Pago
+  const paso4Completado = paso3Completado && Boolean(metodoPagoSeleccionado);
 
   // Conteo de pasos completados para la barra de progreso
   const pasosCompletadosCount = [
@@ -364,12 +355,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     paso2Completado,
     paso3Completado,
     paso4Completado,
-    paso5Completado,
-    paso6Completado,
-    paso7Listo
   ].filter(Boolean).length;
 
-  const porcentajeProgreso = Math.round((pasosCompletadosCount / 7) * 100);
+  const porcentajeProgreso = Math.round((pasosCompletadosCount / 4) * 100);
 
   const obtenerEstadoPaso = (numPaso) => {
     if (numPaso === 1) {
@@ -390,20 +378,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       if (!paso3Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
       if (paso4Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
       return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
-    }
-    if (numPaso === 5) {
-      if (!paso4Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
-      if (paso5Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
-      return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
-    }
-    if (numPaso === 6) {
-      if (!paso5Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
-      if (paso6Completado) return { icono: "✅", texto: "Completado", bg: "#dcfce7", color: "#15803d" };
-      return { icono: "🟡", texto: "En proceso", bg: "#fef3c7", color: "#b45309" };
-    }
-    if (numPaso === 7) {
-      if (!paso6Completado) return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
-      return { icono: "🚀", texto: "Listo", bg: "#dcfce7", color: "#15803d" };
     }
     return { icono: "🔒", texto: "Bloqueado", bg: "#f1f5f9", color: "#64748b" };
   };
@@ -444,40 +418,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     return lista.filter((s) => {
       if (!s) return false;
 
-      // 1. Filtro por Rango de Fechas de Pago (solo si se especifican fechas)
-      if (seccion === "historial") {
-        if (fechaDesde || fechaHasta) {
-          if (fechaDesde && (fechaDesde < "2026-07-14" || fechaDesde > hoyStr)) return false;
-          if (fechaHasta && (fechaHasta < "2026-07-14" || fechaHasta > hoyStr)) return false;
-          if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) return false;
-
-          const fechaPagoObj = obtenerFechaPagoObj(s);
-          if (!fechaPagoObj) return false;
-          fechaPagoObj.setHours(0, 0, 0, 0);
-
-          if (fechaDesde) {
-            const [y1, m1, d1] = fechaDesde.split("-").map(Number);
-            const fDesde = new Date(y1, m1 - 1, d1, 0, 0, 0, 0);
-            if (fechaPagoObj < fDesde) return false;
-          }
-
-          if (fechaHasta) {
-            const [y2, m2, d2] = fechaHasta.split("-").map(Number);
-            const fHasta = new Date(y2, m2 - 1, d2, 0, 0, 0, 0);
-            if (fechaPagoObj > fHasta) return false;
-          }
-        }
-      }
-
-      // 2. Filtro por Búsqueda de Texto (Código, DNI, RUC, Nombres, Razón Social)
+      // Filtro por Búsqueda de Texto (exclusivamente por RUC)
       if (!busqueda || !busqueda.trim()) return true;
       const q = busqueda.toLowerCase().trim();
-      const dni = String(s.dniSolicitante || s.dni || "").toLowerCase();
-      const idExp = String(s.id || "").toLowerCase();
-      const codExp = `exp-${idExp}`;
       const ruc = String(s.ruc || "").toLowerCase();
-      const razonSocial = String(s.razonSocial || "").toLowerCase();
-      return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q) || razonSocial.includes(q);
+      return ruc.includes(q);
     });
   }, [solicitudes, seccion, fechaDesde, fechaHasta, busqueda, obtenerFechaPagoObj, obtenerFechaHoyStr]);
 
@@ -596,10 +541,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const ejecutarRegistroPresencialCompleto = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
-    if (!dniValidado) {
-      alert("⚠️ Debe consultar y validar el DNI del solicitante mediante RENIEC antes de continuar.");
-      return;
-    }
     if (!rucValidado) {
       alert("⚠️ Debe consultar y validar el RUC del establecimiento mediante SUNAT antes de continuar.");
       return;
@@ -614,16 +555,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       alert("Este establecimiento no pertenece a la jurisdicción de la Municipalidad Provincial de Trujillo. Solo es posible registrar solicitudes para establecimientos ubicados en la provincia de Trujillo.");
       return;
     }
-    if (!dniForm || dniForm.length !== 8) {
-      alert("⚠️ Ingrese un DNI válido de 8 dígitos.");
-      return;
-    }
     if (!telefonoForm || !/^9\d{8}$/.test(telefonoForm)) {
       alert("⚠️ Ingrese un número de celular peruano válido de 9 dígitos que inicie con 9.");
-      return;
-    }
-    if (!nombresForm || !apellidosForm) {
-      alert("⚠️ Ingrese nombres y apellidos completos del solicitante.");
       return;
     }
     if (!rucForm || rucForm.length !== 11) {
@@ -671,12 +604,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const nuevaSolicitudPresencial = {
         id: idExp,
         numeroExpediente: `EXP-${idExp}`,
-        dniSolicitante: dniForm,
-        dni: dniForm,
-        nombresSolicitante: nombresForm,
-        apellidosSolicitante: apellidosForm,
-        nombreSolicitante: `${nombresForm} ${apellidosForm}`,
-        correoUsuario: correoForm || `${dniForm}@ciudadano.pe`,
+        dniSolicitante: dniForm || rucForm,
+        dni: dniForm || rucForm,
+        nombresSolicitante: nombresForm || razonSocialForm || nombreNegocioForm,
+        apellidosSolicitante: apellidosForm || "",
+        nombreSolicitante: (nombresForm && apellidosForm) ? `${nombresForm} ${apellidosForm}` : (razonSocialForm || nombreNegocioForm || "SOLICITANTE PRESENCIAL"),
+        correoUsuario: correoForm || `${rucForm}@empresa.pe`,
         telefono: telefonoForm,
         ruc: rucForm,
         nombreNegocio: nombreNegocioForm,
@@ -1160,7 +1093,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           <h1>
             {seccion === "nueva-solicitud" && "➕ Registro Presencial de Solicitud"}
             {seccion === "consulta-expedientes" && "🔍 Consulta de Estado de Trámites"}
-            {seccion === "historial" && "📈 Historial de Solicitudes"}
           </h1>
           <p>
             Recepción de solicitudes presenciales, verificación documental, cobro del derecho de trámite (S/ 3.00), emisión de boleta de caja y derivación al Inspector.
@@ -1358,23 +1290,22 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     Registro Presencial de Licencia Municipal
                   </span>
                   <span style={{ background: "#f0fdf4", color: "#166534", padding: "4px 14px", borderRadius: "20px", fontSize: "12.5px", fontWeight: "800", border: "1px solid #bbf7d0" }}>
-                    Paso {pasoActual} de 5 ({Math.round((pasoActual / 5) * 100)}%)
+                    Paso {pasoActual} de 4 ({Math.round((pasoActual / 4) * 100)}%)
                   </span>
                 </div>
 
                 <h3 style={{ margin: "4px 0 12px", color: "#0f172a", fontSize: "20px", fontWeight: "800" }}>
-                  {pasoActual === 1 && "Paso 1: Validación de Identidad RENIEC"}
-                  {pasoActual === 2 && "Paso 2: Datos de Contacto del Solicitante"}
-                  {pasoActual === 3 && "Paso 3: Validación de Establecimiento SUNAT"}
-                  {pasoActual === 4 && "Paso 4: Carga del Plano del Local (PDF)"}
-                  {pasoActual === 5 && "Paso 5: Pago de Tasa Municipal (S/ 3.00) y Registro Directo"}
+                  {pasoActual === 1 && "Paso 1: Datos de Contacto del Solicitante"}
+                  {pasoActual === 2 && "Paso 2: Validación de Establecimiento SUNAT"}
+                  {pasoActual === 3 && "Paso 3: Carga del Plano del Local (PDF)"}
+                  {pasoActual === 4 && "Paso 4: Pago de Tasa Municipal (S/ 3.00) y Registro Directo"}
                 </h3>
 
                 <div style={{ height: "10px", width: "100%", background: "#f1f5f9", borderRadius: "5px", overflow: "hidden", border: "1px solid #e2e8f0" }}>
                   <div
                     style={{
                       height: "100%",
-                      width: `${(pasoActual / 5) * 100}%`,
+                      width: `${(pasoActual / 4) * 100}%`,
                       background: "linear-gradient(90deg, #2563eb, #16a34a)",
                       transition: "width 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
                       borderRadius: "5px"
@@ -1385,50 +1316,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
               {/* CONTENIDO DEL PASO ACTIVO */}
               <div style={{ minHeight: "340px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                {/* PASO 1: RENIEC */}
+                {/* PASO 1: DATOS DE CONTACTO */}
                 {pasoActual === 1 && (
-                  <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-                    <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>🪪 Ingrese el DNI del Solicitante</h4>
-                    <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
-                      <input
-                        type="text"
-                        maxLength={8}
-                        placeholder="Ingrese DNI (8 dígitos)"
-                        value={dniForm}
-                        onChange={(e) => {
-                          setDniForm(e.target.value.replace(/\D/g, "").slice(0, 8));
-                          setDniValidado(false);
-                          setNombresForm("");
-                          setApellidosForm("");
-                        }}
-                        style={{ flex: 1, padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "15px", fontWeight: "700" }}
-                      />
-                      <button
-                        type="button"
-                        onClick={manejarConsultarDniPresencial}
-                        disabled={consultandoDni}
-                        style={{ padding: "12px 20px", background: dniValidado ? "#16a34a" : "#2563eb", color: "white", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "bold", cursor: "pointer" }}
-                      >
-                        {consultandoDni ? "Buscando en RENIEC..." : dniValidado ? "✓ Validado" : "Consultar RENIEC"}
-                      </button>
-                    </div>
-
-                    {dniValidado && (
-                      <div style={{ background: "#f0fdf4", border: "1.5px solid #bbf7d0", padding: "20px", borderRadius: "14px", marginTop: "16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#166534", fontSize: "15px", fontWeight: "bold", marginBottom: "12px" }}>
-                          <span>✅</span> Identidad Verificada en RENIEC
-                        </div>
-                        <div style={{ background: "white", padding: "14px", borderRadius: "10px", border: "1px solid #cbd5e1", display: "grid", gap: "6px" }}>
-                          <p style={{ margin: 0, fontSize: "14.5px", color: "#0f172a" }}><strong>Nombres:</strong> {nombresForm}</p>
-                          <p style={{ margin: 0, fontSize: "14.5px", color: "#0f172a" }}><strong>Apellidos:</strong> {apellidosForm}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* PASO 2: DATOS DE CONTACTO */}
-                {pasoActual === 2 && (
                   <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
                     <h4 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>📞 Datos de Contacto del Solicitante</h4>
                     <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "13.5px" }}>Ingrese el teléfono móvil y correo electrónico para notificaciones del estado del trámite.</p>
@@ -1491,8 +1380,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </div>
                 )}
 
-                {/* PASO 3: SUNAT */}
-                {pasoActual === 3 && (
+                {/* PASO 2: SUNAT */}
+                {pasoActual === 2 && (
                   <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
                       <h4 style={{ margin: 0, color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>🏢 Ingrese el RUC del Establecimiento Comercial</h4>
@@ -1681,8 +1570,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </div>
                 )}
 
-                {/* PASO 4: PLANO PDF */}
-                {pasoActual === 4 && (
+                {/* PASO 3: PLANO PDF */}
+                {pasoActual === 3 && (
                   <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
                     <h4 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>📄 Carga del Plano del Local (PDF Obligatorio)</h4>
                     <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "13.5px" }}>Adjunte el archivo PDF correspondiente al plano arquitectónico y distribución del local.</p>
@@ -1712,8 +1601,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </div>
                 )}
 
-                {/* PASO 5: PAGO DE TASA Y REGISTRO DIRECTO */}
-                {pasoActual === 5 && (
+                {/* PASO 4: PAGO DE TASA Y REGISTRO DIRECTO */}
+                {pasoActual === 4 && (
                   <div style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", border: "1px solid #cbd5e1", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
                     <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "16px", fontWeight: "700" }}>💳 Pago de Tasa Municipal (S/ 3.00) y Finalización Directa</h4>
 
@@ -1811,19 +1700,15 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     <div />
                   )}
 
-                  {pasoActual < 5 && (
+                  {pasoActual < 4 && (
                     <button
                       type="button"
                       onClick={() => {
                         if (pasoActual === 1 && !paso1Completado) {
-                          alert("⚠️ Debe validar el DNI en RENIEC para continuar.");
-                          return;
-                        }
-                        if (pasoActual === 2 && !paso2Completado) {
                           alert("⚠️ Ingrese un teléfono celular peruano válido (9 dígitos iniciado en 9) y un correo electrónico.");
                           return;
                         }
-                        if (pasoActual === 3) {
+                        if (pasoActual === 2) {
                           if (!rucValidado) {
                             alert("⚠️ Debe consultar y validar el RUC en SUNAT para continuar.");
                             return;
@@ -1843,11 +1728,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             return;
                           }
                         }
-                        if (pasoActual === 4 && !paso4Completado) {
+                        if (pasoActual === 3 && !paso3Completado) {
                           alert("⚠️ Debe adjuntar el archivo PDF del Plano del Local.");
                           return;
                         }
-                        setPasoActual((prev) => Math.min(5, prev + 1));
+                        setPasoActual((prev) => Math.min(4, prev + 1));
                       }}
                       style={{ padding: "12px 28px", background: "#2563eb", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", boxShadow: "0 2px 6px rgba(37,99,235,0.2)" }}
                     >
@@ -1861,13 +1746,13 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         </section>
       )}
 
-      {/* VISTA 2 Y VISTA 3: CONSULTA DE ESTADO E HISTORIAL */}
-      {(seccion === "consulta-expedientes" || seccion === "historial") && (
+      {/* VISTA 2: CONSULTA DE ESTADO */}
+      {seccion === "consulta-expedientes" && (
         <section className="section-card">
           <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <h2>{seccion === "historial" ? "📈 Historial de Solicitudes" : "🔍 Consulta y Estado de Trámites"}</h2>
-              <p>Busca expedientes por Código (EXP-XXXX), DNI del ciudadano, RUC o Nombre del establecimiento.</p>
+              <h2>🔍 Consulta y Estado de Trámites</h2>
+              <p>Busca expedientes únicamente por el número de RUC de 11 dígitos del establecimiento.</p>
             </div>
           </div>
 
@@ -1876,132 +1761,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             <div>
               <input
                 type="text"
-                placeholder="🔍 Buscar por código (Ej. EXP-1002), DNI, RUC o Nombre de Solicitante/Negocio..."
+                placeholder="🔍 Buscar por RUC del establecimiento (11 dígitos)..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 style={{ width: "100%", padding: "12px 18px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px" }}
               />
             </div>
-
-            {seccion === "historial" && (
-              <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap", background: "#f8fafc", padding: "16px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "700", color: "#334155", marginBottom: "4px" }}>
-                    📅 Fecha desde:
-                  </label>
-                  <input
-                    type="date"
-                    min="2026-07-14"
-                    max={obtenerFechaHoyStr()}
-                    value={fechaDesde}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const hoyStr = obtenerFechaHoyStr();
-                      if (val && val < "2026-07-14") {
-                        alert("⚠️ No existen registros anteriores al 14/07/2026.");
-                        setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
-                        setFechaDesde("2026-07-14");
-                        return;
-                      }
-                      if (val && val > hoyStr) {
-                        alert("⚠️ No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
-                        setErrorFechaRange("No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
-                        setFechaDesde(hoyStr);
-                        return;
-                      }
-                      if (val && fechaHasta && val > fechaHasta) {
-                        alert("⚠️ La fecha desde no puede ser mayor que la fecha hasta.");
-                        setErrorFechaRange("La fecha desde no puede ser mayor que la fecha hasta.");
-                      } else {
-                        setErrorFechaRange("");
-                      }
-                      setFechaDesde(val);
-                    }}
-                    style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "700", color: "#334155", marginBottom: "4px" }}>
-                    📅 Fecha hasta:
-                  </label>
-                  <input
-                    type="date"
-                    min="2026-07-14"
-                    max={obtenerFechaHoyStr()}
-                    value={fechaHasta}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const hoyStr = obtenerFechaHoyStr();
-                      if (val && val < "2026-07-14") {
-                        alert("⚠️ No existen registros anteriores al 14/07/2026.");
-                        setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
-                        setFechaHasta("2026-07-14");
-                        return;
-                      }
-                      if (val && val > hoyStr) {
-                        alert("⚠️ No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
-                        setErrorFechaRange("No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
-                        setFechaHasta(hoyStr);
-                        return;
-                      }
-                      if (val && fechaDesde && val < fechaDesde) {
-                        alert("⚠️ La fecha hasta no puede ser menor que la fecha desde.");
-                        setErrorFechaRange("La fecha hasta no puede ser menor que la fecha desde.");
-                      } else {
-                        setErrorFechaRange("");
-                      }
-                      setFechaHasta(val);
-                    }}
-                    style={{ padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "600", background: "white" }}
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const hoyStr = obtenerFechaHoyStr();
-                    if (fechaDesde && fechaDesde < "2026-07-14") {
-                      alert("⚠️ No existen registros anteriores al 14/07/2026.");
-                      setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
-                      return;
-                    }
-                    if (fechaHasta && fechaHasta < "2026-07-14") {
-                      alert("⚠️ No existen registros anteriores al 14/07/2026.");
-                      setErrorFechaRange("No existen registros anteriores al 14/07/2026.");
-                      return;
-                    }
-                    if ((fechaDesde && fechaDesde > hoyStr) || (fechaHasta && fechaHasta > hoyStr)) {
-                      alert("⚠️ No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
-                      setErrorFechaRange("No se permiten fechas futuras. Seleccione una fecha entre el 14/07/2026 y la fecha actual.");
-                      return;
-                    }
-                    if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
-                      alert("⚠️ La fecha desde no puede ser mayor que la fecha hasta.");
-                      setErrorFechaRange("La fecha desde no puede ser mayor que la fecha hasta.");
-                      return;
-                    }
-                    setErrorFechaRange("");
-                  }}
-                  style={{ padding: "10px 20px", background: "#2563eb", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
-                >
-                  🔎 Buscar
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBusqueda("");
-                    setFechaDesde("");
-                    setFechaHasta("");
-                    setErrorFechaRange("");
-                  }}
-                  style={{ padding: "10px 20px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "8px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
-                >
-                  🧹 Limpiar filtros
-                </button>
-              </div>
-            )}
 
             {errorFechaRange && (
               <div style={{ background: "#fef2f2", color: "#991b1b", border: "1px solid #fca5a5", padding: "10px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>

@@ -124,7 +124,7 @@ function App() {
   const rolNorm = normalizarRol(usuario.rol, usuario.correo);
 
   const seccionesPorRol = {
-    cajero: ["nueva-solicitud", "consulta-expedientes", "historial"],
+    cajero: ["nueva-solicitud", "consulta-expedientes"],
     inspector: ["inspecciones", "historial-inspecciones"],
     administrador: ["gestion-usuarios"],
   };
@@ -149,7 +149,6 @@ function App() {
       switch (seccionActiva) {
         case "nueva-solicitud": return <PanelCajero seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
         case "consulta-expedientes": return <PanelCajero seccion="consulta-expedientes" cambiarSeccion={cambiarSeccion} />;
-        case "historial": return <PanelCajero seccion="historial" cambiarSeccion={cambiarSeccion} />;
         default: return <PanelCajero seccion="nueva-solicitud" cambiarSeccion={cambiarSeccion} />;
       }
     }
