@@ -2434,28 +2434,21 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                       {tipoComprobante && (
                         <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "18px" }}>
                           <span style={{ display: "inline-block", padding: "7px 12px", borderRadius: "999px", background: "#fef3c7", color: "#92400e", fontWeight: "700", fontSize: "13px", marginBottom: "12px" }}>Forma de pago</span>
-                          <h3 style={{ margin: "0 0 8px", color: "#0f172a" }}>Selecciona como deseas pagar</h3>
-                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", marginTop: "14px" }}>
-                            <div style={{ border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: "14px", padding: "18px" }}>
-                              <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#128179;</div>
-                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "14px" }}>📱 Pago Billetera Digital / Tarjeta (Flow)</h4>
-                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Paga en línea con Billeteras Digitales (Yape/Plin), Tarjetas de Débito o Crédito a través de Flow.</p>
-                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoFlow} disabled={procesandoPago} style={{ fontSize: "13px" }}>{procesandoPago ? "Generando..." : "Pagar con Billetera Digital / Tarjeta"}</button>
+                          <h3 style={{ margin: "0 0 8px", color: "#0f172a" }}>Selecciona cómo deseas pagar</h3>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", marginTop: "14px" }}>
+                            <div style={{ border: "2px solid #22c55e", background: "#f0fdf4", borderRadius: "14px", padding: "20px", boxShadow: "0 4px 12px rgba(34, 197, 94, 0.1)" }}>
+                              <div style={{ fontSize: "28px", marginBottom: "8px" }}>📱</div>
+                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "15px", fontWeight: "800" }}>Pago Billetera Digital / Tarjeta (Flow)</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 12px" }}>Paga de forma segura en línea con Yape, Plin, Tarjeta de Débito o Crédito a través de Flow.cl.</p>
+                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoFlow} disabled={procesandoPago} style={{ fontSize: "13.5px", fontWeight: "bold" }}>{procesandoPago ? "Generando pago..." : "💳 Pagar con Billetera Digital / Tarjeta"}</button>
                             </div>
-                            <div style={{ border: "1px solid #cbd5e1", background: "#f8fafc", borderRadius: "14px", padding: "18px" }}>
-                              <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#127970;</div>
-                              <h4 style={{ margin: "0 0 6px", color: "#334155", fontSize: "14px" }}>Pago presencial en caja</h4>
-                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Paga en la Municipalidad.</p>
-                              <button type="button" className="btn-outline btn-full" onClick={iniciarPagoCaja} disabled={procesandoPago} style={{ fontSize: "13px" }}>Seleccionar caja</button>
+
+                            <div style={{ border: "2px solid #94a3b8", background: "#f8fafc", borderRadius: "14px", padding: "20px", boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }}>
+                              <div style={{ fontSize: "28px", marginBottom: "8px" }}>💵</div>
+                              <h4 style={{ margin: "0 0 6px", color: "#334155", fontSize: "15px", fontWeight: "800" }}>Pago Presencial en Caja Municipal</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 12px" }}>Realiza el pago en efectivo en las ventanillas de la Municipalidad Provincial de Trujillo.</p>
+                              <button type="button" className="btn-outline btn-full" onClick={iniciarPagoCaja} disabled={procesandoPago} style={{ fontSize: "13.5px", fontWeight: "bold" }}>💵 Pagar Presencialmente en Caja</button>
                             </div>
-                            {demoHabilitado && (
-                            <div style={{ border: "1px solid #e9d5ff", background: "#faf5ff", borderRadius: "14px", padding: "18px" }}>
-                              <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#129513;</div>
-                              <h4 style={{ margin: "0 0 6px", color: "#6b21a8", fontSize: "14px" }}>Pago Demo (simulación)</h4>
-                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Simula un pago aprobado sin costo. Solo para pruebas.</p>
-                              <button type="button" className="btn-outline btn-full" onClick={iniciarPagoDemo} disabled={procesandoPago} style={{ fontSize: "13px", color: "#6b21a8", borderColor: "#d8b4fe" }}>Simular pago Demo</button>
-                            </div>
-                            )}
                           </div>
                         </div>
                       )}
