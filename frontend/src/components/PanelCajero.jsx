@@ -3,6 +3,7 @@ import {
   obtenerSolicitudes,
   actualizarSolicitud,
   guardarSolicitud,
+  suscribirSolicitudes,
 } from "../services/solicitudService";
 import { crearNotificacion } from "../services/notificacionService";
 import { abrirPdf } from "../services/pdfService";
@@ -278,7 +279,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   };
 
   useEffect(() => {
-    cargarSolicitudes();
+    setCargando(true);
+    const unsubscribe = suscribirSolicitudes((data) => {
+      setSolicitudes(data);
+      setCargando(false);
+    });
+    return () => unsubscribe();
   }, []);
 
   const formatearFechaHora = () => {
@@ -411,21 +417,24 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     return `${y}-${m}-${d}`;
   }, []);
 
-  // BUSQUEDA Y FILTRADO POR CÓDIGO, DNI, RUC, NOMBRE Y RANGO DE FECHAS DE PAGO
+  // BUSQUEDA Y FILTRADO DE EXPEDIENTES (RUC, CÓDIGO EXP- O NOMBRE DE NEGOCIO)
   const solicitudesFiltradas = useMemo(() => {
     const lista = Array.isArray(solicitudes) ? solicitudes : [];
-    const hoyStr = obtenerFechaHoyStr();
 
     return lista.filter((s) => {
       if (!s) return false;
 
-      // Filtro por Búsqueda de Texto (exclusivamente por RUC)
+      // Si el campo de búsqueda está vacío, mostrar TODAS las solicitudes registradas
       if (!busqueda || !busqueda.trim()) return true;
       const q = busqueda.toLowerCase().trim();
       const ruc = String(s.ruc || "").toLowerCase();
-      return ruc.includes(q);
+      const idExp = String(s.id || "").toLowerCase();
+      const codExp = `exp-${idExp}`;
+      const negocio = String(s.nombreNegocio || s.razonSocial || "").toLowerCase();
+
+      return ruc.includes(q) || idExp.includes(q) || codExp.includes(q) || negocio.includes(q);
     });
-  }, [solicitudes, seccion, fechaDesde, fechaHasta, busqueda, obtenerFechaPagoObj, obtenerFechaHoyStr]);
+  }, [solicitudes, busqueda]);
 
   // CONFIRMAR PAGO Y PROGRAMAR INSPECCIÓN OFICIAL
   const ejecutarCobro = async () => {
