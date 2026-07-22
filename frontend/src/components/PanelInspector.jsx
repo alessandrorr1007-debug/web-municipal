@@ -18,6 +18,7 @@ import {
   obtenerFechaMinimaInspeccion,
   formatearFechaYYYYMMDD,
   calcularFecha30DiasMas,
+  calcularFechaReinspeccionDisponible,
   obtenerPrimerSlotLibreParaInspector,
 } from "../config/inspeccionConfig";
 import { DISTRITOS_TRUJILLO, coincideDistrito } from "../config/estadosSolicitud";
@@ -36,10 +37,10 @@ function PanelInspector({ seccion }) {
 
   // ESTADOS DEL FORMULARIO DE ATENCION
   const [resultadoDecisión, setResultadoDecisión] = useState("aprobado"); // "aprobado", "observado", "rechazado"
+  const [tipoObservacion, setTipoObservacion] = useState("general"); // "general", "plano", "hibrido"
   const [observacionesTexto, setObservacionesTexto] = useState("");
   const [evidencias, setEvidencias] = useState([]);
   const [fechaVisita, setFechaVisita] = useState("");
-  const [horaVisita, setHoraVisita] = useState("10:00");
   const [procesando, setProcesando] = useState(false);
 
   const cargarSolicitudes = async () => {
@@ -190,10 +191,10 @@ function PanelInspector({ seccion }) {
   const abrirModalAtencion = (solicitud, tabInicial = "evaluacion") => {
     setSolicitudAtencion(solicitud);
     setResultadoDecisión("aprobado");
+    setTipoObservacion(solicitud.tipoObservacion || "general");
     setObservacionesTexto("");
     setEvidencias([]);
     setFechaVisita(solicitud.fechaVisitaInspector || formatearFechaLocal(new Date()));
-    setHoraVisita(solicitud.horaVisitaInspector || "10:00");
     setTabModal(tabInicial);
   };
 
@@ -277,7 +278,7 @@ function PanelInspector({ seccion }) {
         solicitudAtencion.correoUsuario || ""
       );
 
-      alert(`Inspección programada para el ${fechaVisita} a las ${horaLabel}.`);
+      alert(`Inspección programada para el ${fechaVisita}.`);
       setSolicitudAtencion(null);
       await cargarSolicitudes();
     } catch (err) {
@@ -288,17 +289,34 @@ function PanelInspector({ seccion }) {
     }
   };
 
-  // EVALUAR E INSPECCIONAR (APROBAR VS RECHAZAR CON 1ER INTENTO A 30 DÍAS / 2DO INTENTO CANCELACIÓN)
+  // EVALUAR E INSPECCIONAR (APROBAR VS OBSERVAR EN 1RA VISITA / APROBAR VS RECHAZAR EN 2DA VISITA)
   const guardarResultadoInspeccion = async () => {
     if (!solicitudAtencion) return;
+
+    const est = (solicitudAtencion.estado || solicitudAtencion.estadoNormalizado || "").toLowerCase();
+    const es2daVisita = Number(solicitudAtencion.intentosInspeccion) === 2 || est.includes("observada") || est.includes("reprogramada");
+
     if (!resultadoDecisión) {
-      alert("Seleccione una decisión (Aprobar o Rechazar Inspección).");
+      alert("Seleccione una decisión (Aprobar u Observar / Rechazar Inspección).");
       return;
     }
-    if (!observacionesTexto.trim()) {
-      alert("Es OBLIGATORIO ingresar las observaciones o informe técnico del inspector.");
+
+    if (!es2daVisita && resultadoDecisión === "rechazado") {
+      alert("En la primera visita únicamente se puede Aprobar u Observar la inspección.");
       return;
     }
+
+    if (resultadoDecisión === "observado" || resultadoDecisión === "rechazado") {
+      if (!observacionesTexto.trim()) {
+        alert("Es OBLIGATORIO ingresar el comentario de la observación o rechazo (máximo 100 caracteres).");
+        return;
+      }
+      if (observacionesTexto.trim().length > 100) {
+        alert("El comentario no puede exceder los 100 caracteres.");
+        return;
+      }
+    }
+
     if (evidencias.length === 0) {
       alert("Es OBLIGATORIO adjuntar al menos una (1) fotografía como evidencia técnica de la inspección.");
       return;
@@ -308,7 +326,6 @@ function PanelInspector({ seccion }) {
     try {
       const fechaHoraActual = formatearFechaHora();
       const nombreInspector = usuario?.nombre || usuario?.email || "Inspector Municipal";
-      const intentosPrevios = Number(solicitudAtencion.intentosInspeccion || 1);
       const expLimpio = String(solicitudAtencion.id).replace(/^EXP-/, "");
       const nombreCiudadano = obtenerNombreCiudadanoValido(solicitudAtencion);
       const dniCiudadano = obtenerDniValido(solicitudAtencion);
@@ -320,7 +337,7 @@ function PanelInspector({ seccion }) {
           hora: fechaHoraActual.split(",")[1]?.trim() || "",
           inspector: nombreInspector,
           accion: "Evaluación Técnica: APROBADO",
-          comentarios: observacionesTexto,
+          comentarios: observacionesTexto.trim().substring(0, 100),
           evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
         };
 
@@ -328,13 +345,14 @@ function PanelInspector({ seccion }) {
           estadoInspeccion: "Inspección aprobada",
           inspeccion: "Inspección aprobada",
           estado: "Inspección aprobada",
-          estadoNormalizado: "INSPECCION_APROBADA",
+          estadoNormalizado: "APROBADO",
           resultadoInspeccion: "aprobado",
-          observacionesInspector: observacionesTexto,
+          observacionesInspector: observacionesTexto.trim().substring(0, 100),
           evidenciasInspector: evidencias,
           fechaEvaluacionInspector: fechaHoraActual,
           inspectorNombre: nombreInspector,
           inspectorUid: usuario?.uid || "INSP-001",
+          licenciaEmitida: true,
           historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
         };
 
@@ -394,163 +412,162 @@ function PanelInspector({ seccion }) {
         }
 
         alert(`Inspección APROBADA con éxito. Se ha enviado la Licencia de Funcionamiento al correo del solicitante.`);
+      } else if (resultadoDecisión === "observado") {
+        // 2. OBSERVACIÓN EN 1RA VISITA (Reprogramación a 30 días hábiles en fecha disponible con máx 4 por día)
+        const fechaBaseVisita = solicitudAtencion.fechaVisitaInspector || solicitudAtencion.fechaVisita || new Date();
+        const inspTarget = solicitudAtencion.inspectorUid || solicitudAtencion.inspectorNombre || usuario?.uid || "INSP-001";
+        const fechaVisita30 = calcularFechaReinspeccionDisponible(solicitudes, fechaBaseVisita, inspTarget, solicitudAtencion.id);
+
+        const tipoEtiquetaMap = {
+          general: "Observación General",
+          plano: "Actualización de Plano",
+          hibrido: "Observación Híbrida (General y Plano)"
+        };
+
+        const logEntrada = {
+          fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+          hora: fechaHoraActual.split(",")[1]?.trim() || "",
+          inspector: nombreInspector,
+          accion: `Evaluación Técnica: OBSERVADO (${tipoEtiquetaMap[tipoObservacion] || "General"})`,
+          comentarios: `Visita 1 Observada [${tipoEtiquetaMap[tipoObservacion] || "General"}]: ${observacionesTexto.trim().substring(0, 100)}. Reprogramado para 2da inspección el ${fechaVisita30}.`,
+          evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
+        };
+
+        const cambios = {
+          intentosInspeccion: 2,
+          estadoInspeccion: `Inspección Observada (${tipoEtiquetaMap[tipoObservacion]}) - Reprogramada (Última Oportunidad)`,
+          inspeccion: "Inspección Observada (1er Intento)",
+          estado: "Inspección observada - Reprogramada (Última Oportunidad)",
+          estadoNormalizado: "OBSERVADO",
+          resultadoInspeccion: "observado_1er_intento",
+          tipoObservacion: tipoObservacion,
+          observacionesInspector: observacionesTexto.trim().substring(0, 100),
+          evidenciasInspector: evidencias,
+          fechaVisitaInspector: fechaVisita30,
+          fechaSegundaVisita: fechaVisita30,
+          proximaFechaInspeccion: fechaVisita30,
+          fechaEvaluacionInspector: fechaHoraActual,
+          inspectorNombre: nombreInspector,
+          inspectorUid: usuario?.uid || "INSP-001",
+          historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
+        };
+
+        await actualizarSolicitud(solicitudAtencion.id, cambios);
+
+        const htmlNotifObs = `
+          <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #d97706; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
+            <div style="text-align: center; border-bottom: 2px solid #d97706; padding-bottom: 16px; margin-bottom: 20px;">
+              <h2 style="margin: 0; color: #0f172a; font-size: 19px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+              <span style="font-size: 11.5px; color: #d97706; font-weight: bold; text-transform: uppercase;">Subgerencia de Licencias — Informe Técnico de Inspección</span>
+              
+              <div style="margin-top: 16px; background: #fffbeb; border: 1.5px solid #d97706; padding: 12px; border-radius: 8px;">
+                <h1 style="margin: 0; color: #b45309; font-size: 18px; font-weight: 900;">INSPECCIÓN TÉCNICA OBSERVADA (1ER INTENTO)</h1>
+                <p style="margin: 4px 0 0; font-size: 14px; font-weight: 800; color: #78350f;">Expediente N° EXP-${expLimpio}</p>
+              </div>
+            </div>
+
+            <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
+              <p style="margin: 0 0 14px;">Estimado(a) <strong>${nombreCiudadano}</strong>,</p>
+              <p style="margin: 0 0 14px; text-align: justify;">
+                Le informamos que la inspección realizada al establecimiento <strong>${solicitudAtencion.nombreNegocio}</strong> ha sido registrada como <strong>OBSERVADA (${tipoEtiquetaMap[tipoObservacion] || 'General'})</strong>:
+              </p>
+
+              <div style="background: #fffbeb; border-left: 4px solid #d97706; padding: 12px 16px; border-radius: 4px; margin-bottom: 18px; font-weight: 600; color: #78350f;">
+                "${observacionesTexto.trim().substring(0, 100)}"
+              </div>
+
+              <div style="background: #eff6ff; border: 1.5px solid #2563eb; padding: 14px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+                <h4 style="margin: 0 0 6px; color: #1e40af; font-size: 14.5px;">📅 2DA INSPECCIÓN PROGRAMADA (ÚLTIMA OPORTUNIDAD)</h4>
+                <p style="margin: 0; font-size: 16px; font-weight: 900; color: #1d4ed8;">
+                  Fecha de Visita: ${fechaVisita30}
+                </p>
+                <small style="color: #475569; display: block; margin-top: 4px;">Dispone de un plazo máximo de 30 días hábiles para subsanar las observaciones indicadas antes de la fecha agendada.</small>
+              </div>
+            </div>
+          </div>
+        `;
+
+        await crearNotificacion(
+          solicitudAtencion.uidUsuario || "",
+          {
+            titulo: "⚠️ Inspección Observada (1er Intento)",
+            descripcion: `Su inspección fue observada. Se ha reprogramado una 2da inspección para el día ${fechaVisita30} (Última oportunidad).`,
+            icono: "⚠️",
+            html: htmlNotifObs,
+          },
+          solicitudAtencion.correoUsuario || ""
+        );
+
+        alert(`Inspección registrada como OBSERVADA. Se reprogramó automáticamente la 2da inspección (Última oportunidad) para el ${fechaVisita30}.`);
       } else {
-        // 2. RECHAZAR INSPECCIÓN (1er intento -> REPROGRAMAR A 30 DÍAS / 2do intento -> CANCELACIÓN DEFINITIVA)
-        if (intentosPrevios < 2) {
-          // PRIMER RECHAZO: Reprogramación automática a 30 días en día hábil (sin sábados ni domingos)
-          const fechaBaseVisita = solicitudAtencion.fechaVisitaInspector || solicitudAtencion.fechaVisita || new Date();
-          const fechaVisita30 = calcularFecha30DiasMas(fechaBaseVisita);
+        // 3. RECHAZO DEFINITIVO EN 2DA VISITA
+        const logEntrada = {
+          fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
+          hora: fechaHoraActual.split(",")[1]?.trim() || "",
+          inspector: nombreInspector,
+          accion: "Evaluación Técnica: RECHAZADO DEFINITIVO (2do Intento)",
+          comentarios: `2do Rechazo Técnico Definitivo: ${observacionesTexto.trim().substring(0, 100)}. Trámite cancelado definitivamente.`,
+          evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
+        };
 
-          const inspTarget = solicitudAtencion.inspectorUid || solicitudAtencion.inspectorNombre || usuario?.uid || "INSP-001";
-          const slotLibreObj = obtenerPrimerSlotLibreParaInspector(solicitudes, inspTarget, fechaVisita30, solicitudAtencion.id);
+        const cambios = {
+          intentosInspeccion: 2,
+          estadoInspeccion: "Inspección Rechazada Definitivamente (2do Intento)",
+          inspeccion: "Rechazado Definitivo",
+          estado: "Solicitud Rechazada Definitivamente",
+          estadoNormalizado: "RECHAZADO",
+          resultadoInspeccion: "rechazado_definitivo",
+          observacionesInspector: observacionesTexto.trim().substring(0, 100),
+          evidenciasInspector: evidencias,
+          fechaEvaluacionInspector: fechaHoraActual,
+          inspectorNombre: nombreInspector,
+          inspectorUid: usuario?.uid || "INSP-001",
+          historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
+        };
 
-          const slotVal30 = slotLibreObj ? slotLibreObj.value : "08:00";
-          const horaLabel30 = slotLibreObj ? slotLibreObj.label : "08:00 a. m.";
+        await actualizarSolicitud(solicitudAtencion.id, cambios);
 
-          const logEntrada = {
-            fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
-            hora: fechaHoraActual.split(",")[1]?.trim() || "",
-            inspector: nombreInspector,
-            accion: "Evaluación Técnica: RECHAZADO (1er Intento)",
-            comentarios: `1er Rechazo Técnico: ${observacionesTexto}. Reprogramado automáticamente para 2da inspección el ${fechaVisita30} (${horaLabel30}).`,
-            evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
-          };
-
-          const cambios = {
-            intentosInspeccion: 2,
-            estadoInspeccion: "Inspección Observada (1er Intento) - Reprogramada a 30 días",
-            inspeccion: "Inspección Observada (1er Intento)",
-            estado: "Inspección observada - Reprogramada a 30 días",
-            estadoNormalizado: "INSPECCION_OBSERVADA",
-            resultadoInspeccion: "rechazado_1er_intento",
-            observacionesInspector: observacionesTexto,
-            evidenciasInspector: evidencias,
-            fechaVisitaInspector: fechaVisita30,
-            horaVisitaInspector: slotVal30,
-            horaVisitaLabel: horaLabel30,
-            fechaEvaluacionInspector: fechaHoraActual,
-            inspectorNombre: nombreInspector,
-            inspectorUid: usuario?.uid || "INSP-001",
-            historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
-          };
-
-          await actualizarSolicitud(solicitudAtencion.id, cambios);
-
-          const htmlNotifRechazo1 = `
-            <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #d97706; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
-              <div style="text-align: center; border-bottom: 2px solid #d97706; padding-bottom: 16px; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #0f172a; font-size: 19px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-                <span style="font-size: 11.5px; color: #d97706; font-weight: bold; text-transform: uppercase;">Subgerencia de Licencias — Informe Técnico de Inspección</span>
-                
-                <div style="margin-top: 16px; background: #fffbeb; border: 1.5px solid #d97706; padding: 12px; border-radius: 8px;">
-                  <h1 style="margin: 0; color: #b45309; font-size: 18px; font-weight: 900;">INSPECCIÓN TÉCNICA OBSERVADA (1ER INTENTO)</h1>
-                  <p style="margin: 4px 0 0; font-size: 14px; font-weight: 800; color: #78350f;">Expediente N° EXP-${expLimpio}</p>
-                </div>
-              </div>
-
-              <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
-                <p style="margin: 0 0 14px;">Estimado(a) <strong>${nombreCiudadano}</strong>,</p>
-                <p style="margin: 0 0 14px; text-align: justify;">
-                  Le informamos que la inspección técnica realizada al establecimiento <strong>${solicitudAtencion.nombreNegocio}</strong> no ha sido aprobada en primera instancia por los siguientes motivos u observaciones técnicas:
-                </p>
-
-                <div style="background: #fffbeb; border-left: 4px solid #d97706; padding: 12px 16px; border-radius: 4px; margin-bottom: 18px; font-weight: 600; color: #78350f;">
-                  "${observacionesTexto}"
-                </div>
-
-                <div style="background: #eff6ff; border: 1.5px solid #2563eb; padding: 14px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
-                  <h4 style="margin: 0 0 6px; color: #1e40af; font-size: 14.5px;">📅 2DA INSPECCIÓN PROGRAMADA AUTOMÁTICAMENTE</h4>
-                  <p style="margin: 0; font-size: 16px; font-weight: 900; color: #1d4ed8;">
-                    Fecha: ${fechaVisita30} — Hora: ${horaLabel30}
-                  </p>
-                  <small style="color: #475569; display: block; margin-top: 4px;">Dispone de un plazo máximo de 30 días para subsanar las observaciones indicadas antes de la fecha agendada.</small>
-                </div>
+        const htmlNotifRechazo2 = `
+          <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #dc2626; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
+            <div style="text-align: center; border-bottom: 2px solid #dc2626; padding-bottom: 16px; margin-bottom: 20px;">
+              <h2 style="margin: 0; color: #0f172a; font-size: 19px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+              <span style="font-size: 11.5px; color: #dc2626; font-weight: bold; text-transform: uppercase;">Subgerencia de Licencias — Resolución de Inspección Final</span>
+              
+              <div style="margin-top: 16px; background: #fef2f2; border: 1.5px solid #dc2626; padding: 12px; border-radius: 8px;">
+                <h1 style="margin: 0; color: #991b1b; font-size: 18px; font-weight: 900;">TRÁMITE RECHAZADO DEFINITIVAMENTE</h1>
+                <p style="margin: 4px 0 0; font-size: 14px; font-weight: 800; color: #991b1b;">Expediente N° EXP-${expLimpio}</p>
               </div>
             </div>
-          `;
 
-          await crearNotificacion(
-            solicitudAtencion.uidUsuario || "",
-            {
-              titulo: "⚠️ Inspección Observada (1er Intento)",
-              descripcion: `Su inspección técnica fue observada. Se ha reprogramado una 2da inspección para el día ${fechaVisita30} (${horaLabel30}) para subsanar las observaciones.`,
-              icono: "⚠️",
-              html: htmlNotifRechazo1,
-            },
-            solicitudAtencion.correoUsuario || ""
-          );
+            <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
+              <p style="margin: 0 0 14px;">Estimado(a) <strong>${nombreCiudadano}</strong>,</p>
+              <p style="margin: 0 0 14px; text-align: justify;">
+                Le notificamos que habiéndose realizado la segunda inspección técnica al establecimiento <strong>${solicitudAtencion.nombreNegocio}</strong>, el expediente no obtuvo informe favorable por persistir en las siguientes deficiencias:
+              </p>
 
-          alert(`1er Rechazo registrado. Se envió el informe al correo del solicitante y se reprogramó automáticamente la 2da inspección técnica para el ${fechaVisita30} (${horaLabel30}).`);
-        } else {
-          // SEGUNDO RECHAZO: Cancelación definitiva
-          const logEntrada = {
-            fecha: fechaHoraActual.split(",")[0] || fechaHoraActual,
-            hora: fechaHoraActual.split(",")[1]?.trim() || "",
-            inspector: nombreInspector,
-            accion: "Evaluación Técnica: RECHAZADO DEFINITIVO (2do Intento)",
-            comentarios: `2do Rechazo Técnico Definitivo: ${observacionesTexto}. Trámite cancelado definitivamente.`,
-            evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
-          };
-
-          const cambios = {
-            intentosInspeccion: 2,
-            estadoInspeccion: "Inspección Rechazada Definitivamente (2do Intento)",
-            inspeccion: "Rechazado Definitivo",
-            estado: "Solicitud Rechazada Definitivamente",
-            estadoNormalizado: "RECHAZADO",
-            resultadoInspeccion: "rechazado_definitivo",
-            observacionesInspector: observacionesTexto,
-            evidenciasInspector: evidencias,
-            fechaEvaluacionInspector: fechaHoraActual,
-            inspectorNombre: nombreInspector,
-            inspectorUid: usuario?.uid || "INSP-001",
-            historialAcciones: [...(solicitudAtencion.historialAcciones || []), logEntrada],
-          };
-
-          await actualizarSolicitud(solicitudAtencion.id, cambios);
-
-          const htmlNotifRechazo2 = `
-            <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 2.5px solid #dc2626; border-radius: 12px; overflow: hidden; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);">
-              <div style="text-align: center; border-bottom: 2px solid #dc2626; padding-bottom: 16px; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #0f172a; font-size: 19px; font-weight: 900;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-                <span style="font-size: 11.5px; color: #dc2626; font-weight: bold; text-transform: uppercase;">Subgerencia de Licencias — Resolución de Inspección Final</span>
-                
-                <div style="margin-top: 16px; background: #fef2f2; border: 1.5px solid #dc2626; padding: 12px; border-radius: 8px;">
-                  <h1 style="margin: 0; color: #991b1b; font-size: 18px; font-weight: 900;">TRÁMITE RECHAZADO DEFINITIVAMENTE</h1>
-                  <p style="margin: 4px 0 0; font-size: 14px; font-weight: 800; color: #991b1b;">Expediente N° EXP-${expLimpio}</p>
-                </div>
+              <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 4px; margin-bottom: 18px; font-weight: 600; color: #991b1b;">
+                "${observacionesTexto.trim().substring(0, 100)}"
               </div>
 
-              <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6;">
-                <p style="margin: 0 0 14px;">Estimado(a) <strong>${nombreCiudadano}</strong>,</p>
-                <p style="margin: 0 0 14px; text-align: justify;">
-                  Le notificamos que habiéndose realizado la segunda inspección técnica al establecimiento <strong>${solicitudAtencion.nombreNegocio}</strong>, el expediente no obtuvo informe favorable por persistir en las siguientes deficiencias:
-                </p>
-
-                <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 4px; margin-bottom: 18px; font-weight: 600; color: #991b1b;">
-                  "${observacionesTexto}"
-                </div>
-
-                <p style="margin: 0; font-weight: bold; color: #991b1b; background: #fee2e2; padding: 10px; border-radius: 6px; text-align: center;">
-                  El procedimiento administrativo ha quedado CANCELADO DEFINITIVAMENTE conforme a la normativa municipal vigente.
-                </p>
-              </div>
+              <p style="margin: 0; font-weight: bold; color: #991b1b; background: #fee2e2; padding: 10px; border-radius: 6px; text-align: center;">
+                El procedimiento administrativo ha quedado CANCELADO DEFINITIVAMENTE conforme a la normativa municipal vigente.
+              </p>
             </div>
-          `;
+          </div>
+        `;
 
-          await crearNotificacion(
-            solicitudAtencion.uidUsuario || "",
-            {
-              titulo: "🔴 Inspección Rechazada Definitivamente",
-              descripcion: `Su trámite fue RECHAZADO DEFINITIVAMENTE tras desaprobar por 2da vez la inspección técnica municipal.`,
-              icono: "🔴",
-              html: htmlNotifRechazo2,
-            },
-            solicitudAtencion.correoUsuario || ""
-          );
+        await crearNotificacion(
+          solicitudAtencion.uidUsuario || "",
+          {
+            titulo: "🔴 Inspección Rechazada Definitivamente",
+            descripcion: `Su trámite fue RECHAZADO DEFINITIVAMENTE tras desaprobar por 2da vez la inspección técnica municipal.`,
+            icono: "🔴",
+            html: htmlNotifRechazo2,
+          },
+          solicitudAtencion.correoUsuario || ""
+        );
 
-          alert(`La solicitud ha sido RECHAZADA DEFINITIVAMENTE por 2da vez y el trámite ha quedado cancelado. Se notificó al correo.`);
-        }
+        alert(`La solicitud ha sido RECHAZADA DEFINITIVAMENTE por 2da vez y el trámite ha quedado cancelado. Se notificó al correo.`);
       }
 
       setSolicitudAtencion(null);
@@ -592,131 +609,132 @@ function PanelInspector({ seccion }) {
 
 
         {solicitudesFiltradas.length === 0 ? (
-          <div className="empty-state">
-            <div style={{ fontSize: "36px", marginBottom: "10px" }}>🔍</div>
-            <h3>No hay inspecciones pendientes para hoy</h3>
-            <p>Las inspecciones agendadas para la fecha actual aparecerán en esta lista.</p>
+          <div className="empty-state" style={{ padding: "40px", textAlign: "center", background: "white", borderRadius: "16px", border: "1px dashed #cbd5e1" }}>
+            <div style={{ fontSize: "40px", marginBottom: "8px" }}>📅</div>
+            <h3 style={{ margin: "0 0 4px", color: "#0f172a", fontSize: "17px", fontWeight: "800" }}>No hay inspecciones programadas para el día de hoy</h3>
+            <p style={{ margin: 0, color: "#64748b", fontSize: "13.5px" }}>Solo se muestran las visitas agendadas estrictamente para la fecha actual ({formatearFechaLocal(new Date())}).</p>
           </div>
         ) : (
-          <div className="tabla-container">
-            <table className="modern-table">
-              <thead>
-                <tr>
-                  <th>Expediente</th>
-                  <th>Ciudadano / Representante</th>
-                  <th>Establecimiento Comercial</th>
-                  <th>Fecha y Hora Inspección</th>
-                  <th>Estado Inspección</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {solicitudesFiltradas.map((s) => {
-                  const expIdLimpio = String(s.id || "").replace(/^EXP-/, "");
-                  const nombreCiudadano = obtenerNombreCiudadanoValido(s);
-                  const dniCiudadano = obtenerDniValido(s);
-                  const celular = obtenerTelefonoValido(s);
-                  const correo = s.correoUsuario || s.correo || "---";
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "20px" }}>
+            {solicitudesFiltradas.map((s) => {
+              const expIdLimpio = String(s.id || "").replace(/^EXP-/, "");
+              const nombreCiudadano = obtenerNombreCiudadanoValido(s);
+              const dniCiudadano = obtenerDniValido(s);
+              const celular = obtenerTelefonoValido(s);
+              const correo = s.correoUsuario || s.correo || "---";
 
-                  const fechaVisitaStr = s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "22/07/2026";
-                  const horaVisitaStr = s.horaVisitaLabel || s.horaVisitaInspector || (s.horaVisita ? `${s.horaVisita} hrs` : "08:00 a. m.");
+              const fechaVisitaStr = s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || formatearFechaLocal(new Date());
 
-                  return (
-                    <tr key={s.id}>
-                      <td>
-                        <strong style={{ fontSize: "14px", color: "#0f172a" }}>EXP-{expIdLimpio}</strong>
-                      </td>
-                      <td>
-                        <strong style={{ color: "#0f172a", fontSize: "13px" }}>{nombreCiudadano}</strong>
-                        <small style={{ display: "block", color: "#475569", fontWeight: "600" }}>DNI: {dniCiudadano}</small>
-                        <small style={{ display: "block", color: "#2563eb", fontWeight: "600", marginTop: "3px" }}>
-                          📱 Cel: {celular}
-                        </small>
-                        <small style={{ display: "block", color: "#475569" }}>
-                          ✉️ {correo}
-                        </small>
-                      </td>
-                      <td>
-                        <strong style={{ color: "#0f172a" }}>{s.nombreNegocio || s.razonSocial}</strong>
+              const est = (s.estado || s.estadoNormalizado || "").toLowerCase();
+              const es2da = Number(s.intentosInspeccion) === 2 || est.includes("observada") || est.includes("reprogramada");
+
+              return (
+                <div
+                  key={s.id}
+                  style={{
+                    background: "white",
+                    borderRadius: "16px",
+                    padding: "20px",
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+                    border: es2da ? "2px solid #c084fc" : "2px solid #93c5fd",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    gap: "14px"
+                  }}
+                >
+                  <div>
+                    {/* ENCABEZADO TARJETA */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
+                      <div>
+                        <strong style={{ fontSize: "16px", color: "#0f172a", display: "block" }}>EXP-{expIdLimpio}</strong>
+                        <span style={{ fontSize: "11px", fontWeight: "800", color: es2da ? "#6b21a8" : "#1d4ed8", background: es2da ? "#f3e8ff" : "#eff6ff", padding: "3px 8px", borderRadius: "6px", display: "inline-block", marginTop: "4px" }}>
+                          {es2da ? "📌 2da Visita (Última Oportunidad)" : "🔍 1ra Visita Técnica"}
+                        </span>
+                      </div>
+                      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "6px 10px", borderRadius: "8px", textAlign: "right" }}>
+                        <span style={{ fontSize: "12.5px", fontWeight: "800", color: "#1e40af", display: "block" }}>
+                          📅 {fechaVisitaStr}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* DATOS REGISTRADOS EN CAJERA */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "13.5px", color: "#334155" }}>
+                      <div>
+                        <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748b", textTransform: "uppercase" }}>Establecimiento / Empresa</span>
+                        <strong style={{ display: "block", color: "#0f172a", fontSize: "14.5px" }}>{s.nombreNegocio || s.razonSocial}</strong>
                         {s.razonSocial && s.razonSocial !== s.nombreNegocio && (
-                          <small style={{ display: "block", color: "#334155" }}>Razón: {s.razonSocial}</small>
+                          <small style={{ display: "block", color: "#475569" }}>Razón: {s.razonSocial}</small>
                         )}
-                        <small style={{ display: "block", color: "#64748b", fontWeight: "600" }}>RUC: {s.ruc}</small>
-                        <small style={{ display: "block", color: "#0f766e", marginTop: "2px", fontWeight: "600" }}>
-                          📍 {s.direccion}
-                        </small>
-                      </td>
-                      <td>
-                        <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "6px 10px", borderRadius: "8px" }}>
-                          <span style={{ fontSize: "12px", fontWeight: "800", color: "#1e40af", display: "block" }}>
-                            📅 {fechaVisitaStr}
-                          </span>
-                          <span style={{ fontSize: "12px", fontWeight: "800", color: "#15803d", display: "block", marginTop: "2px" }}>
-                            🕒 {horaVisitaStr}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        {(() => {
-                          const est = (s.estado || s.estadoNormalizado || "").toLowerCase();
-                          const es2da = s.intentosInspeccion === 2 || est.includes("observada") || est.includes("reprogramada");
-                          const esAprob = est.includes("aprobado");
-                          const esRechDef = est.includes("rechazado definitivamente");
+                        <small style={{ display: "block", color: "#2563eb", fontWeight: "700" }}>RUC: {s.ruc}</small>
+                      </div>
 
-                          if (esAprob) {
-                            return (
-                              <span className="badge ok" style={{ background: "#dcfce7", color: "#15803d", border: "1px solid #86efac", padding: "6px 10px", fontWeight: "800" }}>
-                                ✅ Inspección Aprobada
+                      <div>
+                        <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748b", textTransform: "uppercase" }}>Domicilio Fiscal / Dirección</span>
+                        <p style={{ margin: "2px 0 0", color: "#0f766e", fontWeight: "600" }}>📍 {s.direccion} ({s.distrito || "Trujillo"})</p>
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748b", textTransform: "uppercase" }}>Contacto registrado en Cajera</span>
+                        <p style={{ margin: "2px 0 0", fontWeight: "700", color: "#0f172a" }}>👤 {nombreCiudadano} (DNI: {dniCiudadano})</p>
+                        <p style={{ margin: "2px 0 0", color: "#2563eb", fontWeight: "700" }}>📱 Celular: {celular}</p>
+                        {correo && <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: "12px" }}>✉️ {correo}</p>}
+                      </div>
+
+                      {/* PLANO DEL LOCAL Y ADJUNTOS */}
+                      {(s.planoUrl || s.archivosAdjuntos?.length > 0 || s.documentosResumen?.length > 0) && (
+                        <div style={{ marginTop: "4px", background: "#f8fafc", padding: "8px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                          <span style={{ fontSize: "11px", fontWeight: "800", color: "#475569" }}>📁 Documentos / Plano del local:</span>
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+                            {s.planoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => abrirPdf(s.planoUrl)}
+                                style={{ background: "#2563eb", color: "white", border: "none", padding: "4px 10px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer" }}
+                              >
+                                📐 Ver Plano del Local
+                              </button>
+                            )}
+                            {s.documentosResumen?.map((docNom, idx) => (
+                              <span key={idx} style={{ fontSize: "11px", background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", color: "#334155" }}>
+                                📄 {docNom}
                               </span>
-                            );
-                          }
-                          if (esRechDef) {
-                            return (
-                              <span className="badge danger" style={{ background: "#fef2f2", color: "#b91c1c", border: "1px solid #fca5a5", padding: "6px 10px", fontWeight: "800" }}>
-                                🚫 Rechazado Definitivamente
-                              </span>
-                            );
-                          }
-                          if (es2da) {
-                            const fecha1raObs = s.fechaEvaluacionInspector ? String(s.fechaEvaluacionInspector).split(",")[0] : (s.fechaVisitaOriginal || s.fecha || "Fecha previa");
-                            return (
-                              <div style={{ background: "#f3e8ff", border: "1.5px solid #c084fc", borderRadius: "8px", padding: "8px 12px", textAlign: "center", display: "inline-block", boxShadow: "0 1px 2px rgba(0,0,0,0.05)" }}>
-                                <strong style={{ color: "#6b21a8", fontSize: "12px", display: "block", fontWeight: "800" }}>
-                                  📌 2da Inspección Técnica
-                                </strong>
-                                <small style={{ color: "#5b21b6", display: "block", fontSize: "11px", fontWeight: "700", marginTop: "2px" }}>
-                                  (1ra Observada el {fecha1raObs})
-                                </small>
-                              </div>
-                            );
-                          }
-                          return (
-                            <div style={{ background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "8px", padding: "8px 12px", textAlign: "center", display: "inline-block", boxShadow: "0 1px 2px rgba(0,0,0,0.05)" }}>
-                              <strong style={{ color: "#1d4ed8", fontSize: "12px", display: "block", fontWeight: "800" }}>
-                                🔍 1ra Inspección Técnica
-                              </strong>
-                              <small style={{ color: "#1e40af", display: "block", fontSize: "11px", fontWeight: "700", marginTop: "2px" }}>
-                                (Programada)
-                              </small>
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={() => abrirModalAtencion(s, "evaluacion")}
-                          style={{ background: "#7c3aed", color: "white", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", fontSize: "12px" }}
-                        >
-                          🔍 Atender Expediente
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* BOTÓN ACCIÓN */}
+                  <div style={{ paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
+                    <button
+                      type="button"
+                      onClick={() => abrirModalAtencion(s, "evaluacion")}
+                      style={{
+                        width: "100%",
+                        background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+                        color: "white",
+                        padding: "12px",
+                        borderRadius: "10px",
+                        fontWeight: "800",
+                        fontSize: "14px",
+                        border: "none",
+                        cursor: "pointer",
+                        boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px"
+                      }}
+                    >
+                      🔍 Atender Expediente
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
@@ -790,69 +808,173 @@ function PanelInspector({ seccion }) {
 
                   <h4 style={{ color: "#1e293b", margin: "0 0 14px", fontSize: "15px" }}>Seleccione Resultado de la Evaluación Técnica:</h4>
                   
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px" }}>
-                    <button
-                      type="button"
-                      onClick={() => setResultadoDecisión("aprobado")}
-                      style={{
-                        padding: "16px",
-                        borderRadius: "10px",
-                        border: resultadoDecisión === "aprobado" ? "2px solid #16a34a" : "1px solid #cbd5e1",
-                        background: resultadoDecisión === "aprobado" ? "#f0fdf4" : "white",
-                        cursor: "pointer",
-                        fontWeight: "bold",
-                        color: resultadoDecisión === "aprobado" ? "#166534" : "#475569",
-                        textAlign: "center"
-                      }}
-                    >
-                      <div style={{ fontSize: "28px", marginBottom: "4px" }}>🟢</div>
-                      <span style={{ fontSize: "15px", display: "block" }}>Aprobar Inspección</span>
-                      <small style={{ color: "#166534", fontSize: "11.5px", fontWeight: "normal" }}>Emite la Licencia de Funcionamiento</small>
-                    </button>
+                  {(() => {
+                    const est = (solicitudAtencion.estado || solicitudAtencion.estadoNormalizado || "").toLowerCase();
+                    const es2da = Number(solicitudAtencion.intentosInspeccion) === 2 || est.includes("observada") || est.includes("reprogramada");
 
-                    <button
-                      type="button"
-                      onClick={() => setResultadoDecisión("rechazado")}
-                      style={{
-                        padding: "16px",
-                        borderRadius: "10px",
-                        border: resultadoDecisión === "rechazado" ? "2px solid #dc2626" : "1px solid #cbd5e1",
-                        background: resultadoDecisión === "rechazado" ? "#fef2f2" : "white",
-                        cursor: "pointer",
-                        fontWeight: "bold",
-                        color: resultadoDecisión === "rechazado" ? "#991b1b" : "#475569",
-                        textAlign: "center"
-                      }}
-                    >
-                      <div style={{ fontSize: "28px", marginBottom: "4px" }}>🔴</div>
-                      <span style={{ fontSize: "15px", display: "block" }}>Rechazar Inspección</span>
-                      <small style={{ color: "#991b1b", fontSize: "11.5px", fontWeight: "normal" }}>
-                        {Number(solicitudAtencion.intentosInspeccion || 1) < 2
-                          ? "Reprograma a 30 días (1er Rechazo)"
-                          : "Cancela definitivamente la solicitud (2do Rechazo)"}
-                      </small>
-                    </button>
-                  </div>
+                    if (!es2da) {
+                      // PRIMERA VISITA: SOLO APROBAR U OBSERVAR
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "16px" }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                            <button
+                              type="button"
+                              onClick={() => setResultadoDecisión("aprobado")}
+                              style={{
+                                padding: "16px",
+                                borderRadius: "10px",
+                                border: resultadoDecisión === "aprobado" ? "2px solid #16a34a" : "1px solid #cbd5e1",
+                                background: resultadoDecisión === "aprobado" ? "#f0fdf4" : "white",
+                                cursor: "pointer",
+                                fontWeight: "bold",
+                                color: resultadoDecisión === "aprobado" ? "#166534" : "#475569",
+                                textAlign: "center"
+                              }}
+                            >
+                              <div style={{ fontSize: "28px", marginBottom: "4px" }}>🟢</div>
+                              <span style={{ fontSize: "15px", display: "block" }}>Aprobar Inspección</span>
+                              <small style={{ color: "#166534", fontSize: "11.5px", fontWeight: "normal" }}>Emite la Licencia de Funcionamiento</small>
+                            </button>
 
-                  {resultadoDecisión === "rechazado" && (
-                    <div style={{ background: Number(solicitudAtencion.intentosInspeccion || 1) < 2 ? "#fffbeb" : "#fef2f2", border: Number(solicitudAtencion.intentosInspeccion || 1) < 2 ? "1px solid #fcd34d" : "1px solid #fca5a5", color: Number(solicitudAtencion.intentosInspeccion || 1) < 2 ? "#92400e" : "#991b1b", padding: "10px 14px", borderRadius: "8px", marginBottom: "16px", fontSize: "12.5px" }}>
-                      {Number(solicitudAtencion.intentosInspeccion || 1) < 2 ? (
-                        <span><strong>⚠️ 1er Rechazo:</strong> La inspección será reprogramada automáticamente a los 30 días para otorgar plazo de subsanación al solicitante.</span>
-                      ) : (
-                        <span><strong>🔴 2do Rechazo:</strong> Al rechazar por segunda vez, el expediente quedará cancelado definitivamente sin opción a reprogramación.</span>
-                      )}
-                    </div>
-                  )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResultadoDecisión("observado");
+                                if (!tipoObservacion) setTipoObservacion("general");
+                              }}
+                              style={{
+                                padding: "16px",
+                                borderRadius: "10px",
+                                border: resultadoDecisión === "observado" ? "2px solid #d97706" : "1px solid #cbd5e1",
+                                background: resultadoDecisión === "observado" ? "#fffbeb" : "white",
+                                cursor: "pointer",
+                                fontWeight: "bold",
+                                color: resultadoDecisión === "observado" ? "#b45309" : "#475569",
+                                textAlign: "center"
+                              }}
+                            >
+                              <div style={{ fontSize: "28px", marginBottom: "4px" }}>🟠</div>
+                              <span style={{ fontSize: "15px", display: "block" }}>Observar Inspección</span>
+                              <small style={{ color: "#b45309", fontSize: "11.5px", fontWeight: "normal" }}>Reprograma a 30 días hábiles (2da Visita)</small>
+                            </button>
+                          </div>
 
+                          {/* OPCIONES DE TIPO DE OBSERVACIÓN */}
+                          {resultadoDecisión === "observado" && (
+                            <div style={{ background: "#fffbeb", border: "1.5px solid #fcd34d", padding: "16px", borderRadius: "12px" }}>
+                              <label style={{ display: "block", fontSize: "13.5px", fontWeight: "800", color: "#92400e", marginBottom: "10px" }}>
+                                📌 Seleccione el Tipo de Observación (Obligatorio):
+                              </label>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                <label style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "13.5px", color: "#78350f", cursor: "pointer", fontWeight: "600" }}>
+                                  <input
+                                    type="radio"
+                                    name="tipoObs"
+                                    value="general"
+                                    checked={tipoObservacion === "general"}
+                                    onChange={() => setTipoObservacion("general")}
+                                  />
+                                  <span>📌 <strong>Observación General</strong> (ej. No tiene extintor, local sucio, falta botiquín, etc.)</span>
+                                </label>
+
+                                <label style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "13.5px", color: "#78350f", cursor: "pointer", fontWeight: "600" }}>
+                                  <input
+                                    type="radio"
+                                    name="tipoObs"
+                                    value="plano"
+                                    checked={tipoObservacion === "plano"}
+                                    onChange={() => setTipoObservacion("plano")}
+                                  />
+                                  <span>📐 <strong>Actualización de Plano</strong> (Requiere actualizar plano de distribución/arquitectura)</span>
+                                </label>
+
+                                <label style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "13.5px", color: "#78350f", cursor: "pointer", fontWeight: "600" }}>
+                                  <input
+                                    type="radio"
+                                    name="tipoObs"
+                                    value="hibrido"
+                                    checked={tipoObservacion === "hibrido"}
+                                    onChange={() => setTipoObservacion("hibrido")}
+                                  />
+                                  <span>🔀 <strong>Observación Híbrida</strong> (Observación General + Actualización de Plano)</span>
+                                </label>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    } else {
+                      // SEGUNDA VISITA: APROBAR O RECHAZAR DEFINITIVO
+                      return (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px" }}>
+                          <button
+                            type="button"
+                            onClick={() => setResultadoDecisión("aprobado")}
+                            style={{
+                              padding: "16px",
+                              borderRadius: "10px",
+                              border: resultadoDecisión === "aprobado" ? "2px solid #16a34a" : "1px solid #cbd5e1",
+                              background: resultadoDecisión === "aprobado" ? "#f0fdf4" : "white",
+                              cursor: "pointer",
+                              fontWeight: "bold",
+                              color: resultadoDecisión === "aprobado" ? "#166534" : "#475569",
+                              textAlign: "center"
+                            }}
+                          >
+                            <div style={{ fontSize: "28px", marginBottom: "4px" }}>🟢</div>
+                            <span style={{ fontSize: "15px", display: "block" }}>Aprobar Inspección</span>
+                            <small style={{ color: "#166534", fontSize: "11.5px", fontWeight: "normal" }}>Emite la Licencia de Funcionamiento</small>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setResultadoDecisión("rechazado")}
+                            style={{
+                              padding: "16px",
+                              borderRadius: "10px",
+                              border: resultadoDecisión === "rechazado" ? "2px solid #dc2626" : "1px solid #cbd5e1",
+                              background: resultadoDecisión === "rechazado" ? "#fef2f2" : "white",
+                              cursor: "pointer",
+                              fontWeight: "bold",
+                              color: resultadoDecisión === "rechazado" ? "#991b1b" : "#475569",
+                              textAlign: "center"
+                            }}
+                          >
+                            <div style={{ fontSize: "28px", marginBottom: "4px" }}>🔴</div>
+                            <span style={{ fontSize: "15px", display: "block" }}>Rechazar Definitivamente</span>
+                            <small style={{ color: "#991b1b", fontSize: "11.5px", fontWeight: "normal" }}>Cancela el trámite (2do Rechazo - Final)</small>
+                          </button>
+                        </div>
+                      );
+                    }
+                  })()}
+
+                  {/* CAMPO TEXTO CON MÁXIMO 100 CARACTERES */}
                   <div style={{ marginBottom: "16px" }}>
-                    <label style={{ display: "block", fontSize: "13.5px", fontWeight: "bold", color: "#334155", marginBottom: "6px" }}>
-                      Observaciones y Comentarios del Inspector *
-                    </label>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <label style={{ fontSize: "13.5px", fontWeight: "bold", color: "#334155" }}>
+                        {resultadoDecisión === "observado"
+                          ? "Comentario de la Observación (Obligatorio, máx. 100 caracteres) *"
+                          : resultadoDecisión === "rechazado"
+                          ? "Motivo del Rechazo Definitivo (Obligatorio, máx. 100 caracteres) *"
+                          : "Observaciones del Inspector (Máx. 100 caracteres):"}
+                      </label>
+                      <span style={{ fontSize: "12px", fontWeight: "700", color: observacionesTexto.length >= 90 ? "#dc2626" : "#64748b" }}>
+                        {observacionesTexto.length} / 100
+                      </span>
+                    </div>
                     <textarea
-                      rows="4"
+                      rows="3"
+                      maxLength={100}
                       value={observacionesTexto}
-                      onChange={(e) => setObservacionesTexto(e.target.value)}
-                      placeholder="Ingrese los hallazgos de la inspección, estado del aforo, extintores, señalética o motivos de subsanación..."
+                      onChange={(e) => setObservacionesTexto(e.target.value.slice(0, 100))}
+                      placeholder={
+                        resultadoDecisión === "observado"
+                          ? "Ej: Falta extintor vencido y requiere actualización de plano..."
+                          : resultadoDecisión === "rechazado"
+                          ? "Ej: No subsanó las observaciones de seguridad edilicia en plazo..."
+                          : "Comentarios sobre el cumplimiento técnico de la inspección..."
+                      }
                       style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
                     />
                   </div>

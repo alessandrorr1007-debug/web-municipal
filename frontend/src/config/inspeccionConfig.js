@@ -214,6 +214,35 @@ export const calcularFecha30DiasMas = (fechaBaseStr) => {
   return formatearFechaLocal(base);
 };
 
+export const calcularFechaReinspeccionDisponible = (solicitudes, fechaBaseStr, inspectorTarget, idExcluir = null) => {
+  let base = parsearFechaLocal(fechaBaseStr);
+  base.setDate(base.getDate() + 30);
+
+  while (!esDiaHabil(base)) {
+    base.setDate(base.getDate() + 1);
+  }
+
+  const maxBusqueda = 60;
+  let intentos = 0;
+
+  while (intentos < maxBusqueda) {
+    const fechaStr = formatearFechaLocal(base);
+    const conteo = obtenerConteoInspectorEnFecha(solicitudes, inspectorTarget, fechaStr, idExcluir);
+
+    if (conteo < MAX_INSPECCIONES_POR_DIA) {
+      return fechaStr;
+    }
+
+    base.setDate(base.getDate() + 1);
+    while (!esDiaHabil(base)) {
+      base.setDate(base.getDate() + 1);
+    }
+    intentos++;
+  }
+
+  return formatearFechaLocal(base);
+};
+
 export const HORA_INICIO = "08:00";
 export const HORA_FIN = "18:00";
 
