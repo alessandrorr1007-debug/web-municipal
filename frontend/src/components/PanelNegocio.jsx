@@ -6,6 +6,7 @@ import {
   guardarSolicitud,
   obtenerSolicitudes,
   obtenerNegociosPorUsuario,
+  eliminarSolicitud,
 } from "../services/solicitudService";
 import {
   generarComprobante,
@@ -473,12 +474,37 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
         cargarMisSolicitudes().catch(() => {});
         cambiarSeccion?.("mis-solicitudes");
       } else {
-        setEstadoPago("Pendiente");
+        const pagoPendienteStr = localStorage.getItem("flow_pago_pendiente");
+        let solIdAEliminar = resultado?.commerceOrder;
+        if (!solIdAEliminar && pagoPendienteStr) {
+          try {
+            const parsed = JSON.parse(pagoPendienteStr);
+            solIdAEliminar = parsed.solicitudId;
+          } catch (e) {}
+        }
+        if (solIdAEliminar) {
+          console.log("[FLOW] Eliminando borrador no pagado:", solIdAEliminar);
+          await eliminarSolicitud(solIdAEliminar);
+        }
         localStorage.removeItem("flow_pago_pendiente");
+        localStorage.removeItem("flow_pago_estado");
+        alert("⚠️ El pago en línea con Flow no fue completado. La solicitud no ha sido registrada.");
+        await cargarMisSolicitudes().catch(() => {});
       }
     } catch (error) {
       console.error("Error verificando pago Flow:", error);
-      alert(getErrorMessage(error) || "No se pudo verificar el estado del pago.");
+      const pagoPendienteStr = localStorage.getItem("flow_pago_pendiente");
+      if (pagoPendienteStr) {
+        try {
+          const parsed = JSON.parse(pagoPendienteStr);
+          if (parsed?.solicitudId) {
+            await eliminarSolicitud(parsed.solicitudId);
+          }
+        } catch (e) {}
+      }
+      localStorage.removeItem("flow_pago_pendiente");
+      alert("⚠️ No se pudo verificar el pago con Flow. La solicitud no ha sido registrada.");
+      await cargarMisSolicitudes().catch(() => {});
     } finally {
       setProcesandoPago(false);
     }
@@ -2412,9 +2438,9 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", marginTop: "14px" }}>
                             <div style={{ border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: "14px", padding: "18px" }}>
                               <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#128179;</div>
-                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "14px" }}>Pago en línea con Flow</h4>
-                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Red segura de pago. Se te redirigirá para completar el pago.</p>
-                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoFlow} disabled={procesandoPago} style={{ fontSize: "13px" }}>{procesandoPago ? "Generando..." : "Pagar con Flow"}</button>
+                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "14px" }}>📱 Pago Billetera Digital / Tarjeta (Flow)</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 10px" }}>Paga en línea con Billeteras Digitales (Yape/Plin), Tarjetas de Débito o Crédito a través de Flow.</p>
+                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoFlow} disabled={procesandoPago} style={{ fontSize: "13px" }}>{procesandoPago ? "Generando..." : "Pagar con Billetera Digital / Tarjeta"}</button>
                             </div>
                             <div style={{ border: "1px solid #cbd5e1", background: "#f8fafc", borderRadius: "14px", padding: "18px" }}>
                               <div style={{ fontSize: "26px", marginBottom: "6px" }}>&#127970;</div>

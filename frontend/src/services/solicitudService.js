@@ -5,6 +5,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   query,
   orderBy,
@@ -104,6 +105,17 @@ export const guardarSolicitud = async (solicitud) => {
     } catch (fsError) {
       throw new Error(`Error al registrar la solicitud: ${fsError.message}`);
     }
+  }
+};
+
+export const eliminarSolicitud = async (solicitudId) => {
+  if (!solicitudId) return;
+  try {
+    const docId = String(solicitudId).replace(/^EXP-/, "");
+    await deleteDoc(doc(db, COLLECTION_NAME, docId));
+    console.log(`[eliminarSolicitud] Solicitud ${docId} eliminada por pago no completado.`);
+  } catch (err) {
+    console.error(`[eliminarSolicitud] Error al eliminar solicitud ${solicitudId}:`, err);
   }
 };
 

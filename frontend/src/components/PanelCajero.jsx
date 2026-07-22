@@ -2401,9 +2401,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold" }}
                 >
                   <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                  <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
-                  <option value="Tarjeta de Crédito / Débito">💳 Tarjeta de Crédito / Débito</option>
-                  <option value="Pago Online Real con Flow (Flow.cl)">🌐 Pago Online Real con Flow (Flow.cl)</option>
+                  <option value="Pago Billetera Digital (Flow)">📱 Pago Billetera Digital / Tarjeta (Flow)</option>
                 </select>
               </div>
 
