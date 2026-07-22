@@ -24,8 +24,13 @@ const obtenerError = async (response) => {
   }
 };
 
-export const crearOrdenFlow = async ({ solicitudId, amount, email, buyerName, subject }) => {
+export const crearOrdenFlow = async ({ solicitudId, amount, email, buyerName, subject, urlReturn, urlConfirmation }) => {
   const headers = await authHeaders();
+
+  const defaultUrlReturn = typeof window !== "undefined" && window.location.origin
+    ? `${window.location.origin}/pago-exitoso`
+    : undefined;
+
   const response = await fetch(`${API_URL}/api/pagos/flow/crear-orden`, {
     method: "POST",
     headers: {
@@ -38,6 +43,8 @@ export const crearOrdenFlow = async ({ solicitudId, amount, email, buyerName, su
       email,
       buyerName,
       subject: subject || "Derecho de trámite - Licencia Municipal",
+      urlReturn: urlReturn || defaultUrlReturn,
+      ...(urlConfirmation ? { urlConfirmation } : {}),
     }),
   });
 

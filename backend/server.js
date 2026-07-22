@@ -864,6 +864,22 @@ app.post("/api/pagos/flow/crear-orden", verificarToken, async (req, res) => {
       }
     }
 
+    // Determinar la URL del sitio web dinámicamente desde la petición o la configuración
+    const requestOrigin = req.headers.origin || req.get("origin") || (req.get("referer") ? new URL(req.get("referer")).origin : null);
+    
+    // Para la redirección del navegador del usuario (urlReturn)
+    const frontendBaseUrl = (urlReturn ? null : requestOrigin) || process.env.FRONTEND_URL || MUNICIPALIDAD_CONFIG.url || "https://web-municipal-1.onrender.com";
+    const finalUrlReturn = urlReturn || `${frontendBaseUrl.replace(/\/$/, "")}/pago-exitoso`;
+
+    // Para el webhook de confirmación de Flow (urlConfirmation)
+    let backendBaseUrl = MUNICIPALIDAD_CONFIG.url || "https://web-municipal-1.onrender.com";
+    if (requestOrigin && !requestOrigin.includes("localhost")) {
+      backendBaseUrl = requestOrigin;
+    } else if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes("localhost")) {
+      backendBaseUrl = process.env.FRONTEND_URL;
+    }
+    const finalUrlConfirmation = urlConfirmation || `${backendBaseUrl.replace(/\/$/, "")}/api/pagos/flow/callback`;
+
     const realizarPeticionFlow = async (emailTarget) => {
       const params = {
         apiKey: FLOW_API_KEY,
@@ -872,8 +888,8 @@ app.post("/api/pagos/flow/crear-orden", verificarToken, async (req, res) => {
         currency: "PEN",
         amount: Number(amount),
         email: emailTarget,
-        urlConfirmation: urlConfirmation || `${MUNICIPALIDAD_CONFIG.url}/api/pagos/flow/callback`,
-        urlReturn: urlReturn || `${MUNICIPALIDAD_CONFIG.url}/pago-exitoso`,
+        urlConfirmation: finalUrlConfirmation,
+        urlReturn: finalUrlReturn,
       };
 
       const s = flowSign(params);
