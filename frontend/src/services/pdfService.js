@@ -85,54 +85,76 @@ export const abrirPdf = async (urlInput) => {
     return;
   }
 
-  // 1. Si es un Blob URL directo
+  // 1. Si ya es un Blob URL de navegador (blob:http...)
   if (url.startsWith("blob:")) {
     window.open(url, "_blank");
     return;
   }
 
-  // 2. Si es una cadena Base64 pura (empieza con JVBERi... magic header PDF o hash largo)
-  if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("data:") && (url.startsWith("JVBERi") || url.length > 100)) {
-    url = `data:application/pdf;base64,${url}`;
-  }
+  // 2. Si es una cadena Data URL, Base64 o documento incrustado
+  const esDataUrl = url.startsWith("data:");
+  const esBase64Puro = !esDataUrl && !url.startsWith("http://") && !url.startsWith("https://") && (url.startsWith("JVBERi") || url.length > 50);
 
-  // 3. Si es Data URL (Base64)
-  if (url.startsWith("data:")) {
+  if (esDataUrl || esBase64Puro) {
     try {
-      const parts = url.split(",");
-      const mime = parts[0].match(/:(.*?);/)?.[1] || "application/pdf";
-      const b64Data = parts[1] || "";
-      const byteCharacters = atob(b64Data);
-      const byteArrays = [];
+      let mime = "application/pdf";
+      let b64Data = url;
 
-      for (let offset = 0; offset < byteCharacters.length; offset += 1024) {
-        const slice = byteCharacters.slice(offset, offset + 1024);
-        const byteNumbers = new Array(slice.length);
-        for (let i = 0; i < slice.length; i++) {
-          byteNumbers[i] = slice.charCodeAt(i);
+      if (esDataUrl) {
+        const matches = url.match(/^data:(.*?);base64,(.*)$/s);
+        if (matches) {
+          mime = matches[1] || "application/pdf";
+          b64Data = matches[2];
+        } else {
+          const commaIdx = url.indexOf(",");
+          if (commaIdx !== -1) {
+            b64Data = url.substring(commaIdx + 1);
+          }
         }
-        byteArrays.push(new Uint8Array(byteNumbers));
       }
 
-      const blob = new Blob(byteArrays, { type: mime });
+      // Sanitizar Base64: eliminar espacios, saltos de línea (\r, \n, \t)
+      const cleanB64 = b64Data.replace(/[\s\r\n]+/g, "");
+
+      // Decodificar Base64 a Uint8Array
+      const byteCharacters = atob(cleanB64);
+      const byteNumbers = new Uint8Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+
+      const blob = new Blob([byteNumbers], { type: mime });
       const blobUrl = URL.createObjectURL(blob);
+
       const win = window.open(blobUrl, "_blank");
       if (!win) {
         const a = document.createElement("a");
         a.href = blobUrl;
         a.target = "_blank";
+        a.rel = "noopener,noreferrer";
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
       }
       setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
       return;
     } catch (err) {
-      console.error("Error al decodificar PDF en Base64:", err);
-      window.open(url, "_blank");
-      return;
+      console.error("Error al decodificar PDF Base64:", err);
+
+      try {
+        const blob = new Blob([url], { type: "application/pdf" });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, "_blank");
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        return;
+      } catch (e) {
+        alert("No se pudo previsualizar el documento PDF.");
+        return;
+      }
     }
   }
 
-  // 4. Si es HTTP / HTTPS
+  // 3. Si es una URL remota HTTP / HTTPS
   if (url.startsWith("http://") || url.startsWith("https://")) {
     const esFirebaseStorage = url.includes("firebasestorage.googleapis.com");
     const esCloudinary = url.includes("cloudinary.com");
