@@ -1774,9 +1774,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
                           >
                             <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                            <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
-                            <option value="Tarjeta de Crédito / Débito">💳 Tarjeta de Crédito / Débito</option>
-                            <option value="Pago Online Real con Flow (Flow.cl)">🌐 Pago Online Real con Flow (Flow.cl)</option>
+                            <option value="Pago Billetera Digital">📱 Pago Billetera Digital</option>
                           </select>
                         </div>
                       </div>
@@ -2052,7 +2050,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                               onClick={() => {
                                 setSolicitudRenovacion(s);
                                 setTipoComprobanteSeleccionado("Boleta");
-                                setMetodoPagoSeleccionado("Billetera Digital (Yape / Plin)");
+                                setMetodoPagoSeleccionado("Pago Billetera Digital");
                               }}
                               style={{ background: "#d97706", color: "white", padding: "6px 12px", borderRadius: "6px", fontWeight: "700", fontSize: "13px", cursor: "pointer", border: "none" }}
                             >
@@ -2914,7 +2912,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
                     >
                       <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                      <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
+                      <option value="Pago Billetera Digital">📱 Pago Billetera Digital</option>
                     </select>
                   </div>
 
@@ -3075,8 +3073,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
                     style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
                   >
-                    <option value="Billetera Digital (Yape / Plin)">📱 Billetera Digital (Yape / Plin)</option>
                     <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
+                    <option value="Pago Billetera Digital">📱 Pago Billetera Digital</option>
                   </select>
                 </div>
               </div>
