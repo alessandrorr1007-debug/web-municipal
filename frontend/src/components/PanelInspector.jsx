@@ -610,10 +610,10 @@ function PanelInspector({ seccion }) {
                             {s.planoUrl && (
                               <button
                                 type="button"
-                                onClick={() => abrirPdf({ url: s.planoUrl, nombre: `Plano_del_Local_EXP_${String(s.id).replace(/^EXP-/, "")}.pdf` })}
-                                style={{ background: "#16a34a", color: "white", border: "none", padding: "5px 12px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                                onClick={() => setDocumentoPdfVisor({ url: s.planoUrl, nombre: `Plano del Local — EXP-${String(s.id).replace(/^EXP-/, "")}` })}
+                                style={{ background: "#2563eb", color: "white", border: "none", padding: "5px 12px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
                               >
-                                📥 Descargar Plano del Local
+                                👁️ Ver Plano del Local
                               </button>
                             )}
                             {s.documentosResumen?.map((docNom, idx) => (
@@ -986,10 +986,10 @@ function PanelInspector({ seccion }) {
 
                                   <button
                                     type="button"
-                                    onClick={() => abrirPdf(doc)}
-                                    style={{ padding: "8px 16px", background: "#16a34a", color: "white", border: "none", borderRadius: "8px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+                                    onClick={() => setDocumentoPdfVisor(doc)}
+                                    style={{ padding: "8px 16px", background: "#2563eb", color: "white", border: "none", borderRadius: "8px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
                                   >
-                                    📥 Descargar Documento
+                                    👁️ Ver Documento
                                   </button>
                               </div>
                             );
