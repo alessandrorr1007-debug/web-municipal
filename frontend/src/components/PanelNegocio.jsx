@@ -21,6 +21,7 @@ import { abrirPdf, obtenerBlobUrlParaPdf, convertirPdfABase64, normalizarTexto }
 import { crearNotificacion, marcarComoLeida, marcarTodasComoLeidas } from "../services/notificacionService";
 import { determinarActividad, ACTIVIDADES_CONFIG } from "../config/documentosConfig";
 import { useAuth } from "../context/AuthContext";
+import VisualizadorDocumentoModal from "./VisualizadorDocumentoModal";
 import {
   actualizarPreferenciasNotificaciones,
   enviarOtpCorreoActual,
@@ -3154,83 +3155,12 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
           </div>
         </div>
         );
-      {/* MODAL VISOR INCORPORADO DE DOCUMENTOS PDF */}
+      {/* MODAL VISOR INCORPORADO DE DOCUMENTOS PDF E IMÁGENES */}
       {documentoPdfVisor && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(15, 23, 42, 0.8)",
-          backdropFilter: "blur(6px)",
-          zIndex: 99999,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "20px"
-        }}>
-          <div style={{
-            background: "#ffffff",
-            borderRadius: "16px",
-            width: "100%",
-            maxWidth: "1000px",
-            height: "88vh",
-            display: "flex",
-            flexDirection: "column",
-            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-            overflow: "hidden",
-            border: "1px solid #334155"
-          }}>
-            <div style={{
-              background: "#0f172a",
-              color: "white",
-              padding: "14px 20px",
-              display: "flex",
-              justify: "space-between",
-              alignItems: "center",
-              borderBottom: "2px solid #1e293b"
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontSize: "22px" }}>📄</span>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#f8fafc" }}>
-                    Visualizador Municipal de PDF
-                  </h3>
-                  <small style={{ color: "#94a3b8", fontSize: "12px", display: "block" }}>
-                    {documentoPdfVisor.nombre || documentoPdfVisor.archivoNombre || "Documento Adjunto.pdf"}
-                  </small>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                <button
-                  type="button"
-                  onClick={() => abrirPdf(documentoPdfVisor)}
-                  style={{ padding: "8px 14px", background: "#2563eb", color: "white", border: "none", borderRadius: "8px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer" }}
-                >
-                  ↗ Abrir en Nueva Pestaña
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDocumentoPdfVisor(null)}
-                  style={{ background: "#dc2626", color: "white", border: "none", width: "34px", height: "34px", borderRadius: "50%", fontWeight: "bold", fontSize: "18px", cursor: "pointer", display: "grid", placeItems: "center" }}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            <div style={{ flex: 1, background: "#475569", position: "relative" }}>
-              <iframe
-                src={obtenerBlobUrlParaPdf(documentoPdfVisor)}
-                style={{ width: "100%", height: "100%", border: "none", display: "block" }}
-                title="Vista Previa de Documento PDF"
-              />
-            </div>
-          </div>
-        </div>
+        <VisualizadorDocumentoModal
+          documento={documentoPdfVisor}
+          onCerrar={() => setDocumentoPdfVisor(null)}
+        />
       )}
     </div>
   );
