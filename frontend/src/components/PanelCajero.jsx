@@ -6,7 +6,7 @@ import {
   suscribirSolicitudes,
 } from "../services/solicitudService";
 import { crearNotificacion } from "../services/notificacionService";
-import { abrirPdf } from "../services/pdfService";
+import { abrirPdf, obtenerBlobUrlParaPdf } from "../services/pdfService";
 import { crearOrdenFlow } from "../services/pagoService";
 import { consultarDni } from "../services/dniService";
 import { consultarRuc } from "../services/rucService";
@@ -39,6 +39,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [solicitudCobro, setSolicitudCobro] = useState(null);
   const [solicitudVerDetalle, setSolicitudVerDetalle] = useState(null);
   const [solicitudVerBoleta, setSolicitudVerBoleta] = useState(null);
+  const [documentoPdfVisor, setDocumentoPdfVisor] = useState(null);
   const [solicitudRenovacion, setSolicitudRenovacion] = useState(null);
   const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("Efectivo en Caja Municipal");
   const [montoRecibidoInput, setMontoRecibidoInput] = useState("10.00");
@@ -2109,18 +2110,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     <strong>Cajero Responsable:</strong> {solicitudVerDetalle.cajeraResponsable}
                   </p>
                 )}
-                <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #a7f3d0" }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sol = solicitudVerDetalle;
-                      setSolicitudVerBoleta(sol);
-                    }}
-                    style={{ background: "#0f172a", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", border: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}
-                  >
-                    🧾 Verificar Boleta Electrónica
-                  </button>
-                </div>
               </div>
 
               <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "16px" }}>
@@ -2132,17 +2121,13 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     {(solicitudVerDetalle.archivosPdf || []).map((pdf, idx) => (
                       <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "white", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
                         <span style={{ fontSize: "13px", color: "#334155" }}>📄 {pdf.nombre || pdf.archivoNombre || `Documento_${idx + 1}`}</span>
-                        <a
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            const url = pdf.archivoUrl || pdf.url || pdf;
-                            abrirPdf(url);
-                          }}
-                          style={{ fontSize: "12.5px", color: "#2563eb", fontWeight: "bold" }}
+                        <button
+                          type="button"
+                          onClick={() => setDocumentoPdfVisor(pdf)}
+                          style={{ padding: "6px 12px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer" }}
                         >
-                          Ver PDF ↗
-                        </a>
+                          👁️ Ver Documento
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -2151,16 +2136,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             </div>
 
             <div className="admin-form-actions" style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const sol = solicitudVerDetalle;
-                  setSolicitudVerBoleta(sol);
-                }}
-                style={{ background: "#0f172a", color: "white", padding: "10px 18px", borderRadius: "8px", fontWeight: "bold", fontSize: "13.5px", cursor: "pointer", border: "none" }}
-              >
-                🧾 Verificar Boleta
-              </button>
               <button type="button" onClick={() => setSolicitudVerDetalle(null)}>Cerrar</button>
               {solicitudVerDetalle.estadoPago !== "Confirmado" && (
                 <button
@@ -3055,6 +3030,87 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   {procesando ? "Procesando Renovación..." : "💰 Confirmar Pago (S/ 3.00) y Renovar Licencia"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VISOR INCORPORADO DE DOCUMENTOS PDF (PUM! VISUALIZADOR DIRECTO EN PANTALLA) */}
+      {documentoPdfVisor && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(15, 23, 42, 0.8)",
+          backdropFilter: "blur(6px)",
+          zIndex: 99999,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px"
+        }}>
+          <div style={{
+            background: "#ffffff",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "1000px",
+            height: "88vh",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+            overflow: "hidden",
+            border: "1px solid #334155"
+          }}>
+            {/* ENCABEZADO DEL VISOR DE PDF */}
+            <div style={{
+              background: "#0f172a",
+              color: "white",
+              padding: "14px 20px",
+              display: "flex",
+              justify: "space-between",
+              alignItems: "center",
+              borderBottom: "2px solid #1e293b"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "22px" }}>📄</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#f8fafc" }}>
+                    Visualizador Municipal de PDF
+                  </h3>
+                  <small style={{ color: "#94a3b8", fontSize: "12px", display: "block" }}>
+                    {documentoPdfVisor.nombre || documentoPdfVisor.archivoNombre || "Documento Adjunto.pdf"}
+                  </small>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => abrirPdf(documentoPdfVisor)}
+                  style={{ padding: "8px 14px", background: "#2563eb", color: "white", border: "none", borderRadius: "8px", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  ↗ Abrir en Nueva Pestaña
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocumentoPdfVisor(null)}
+                  style={{ background: "#dc2626", color: "white", border: "none", width: "34px", height: "34px", borderRadius: "50%", fontWeight: "bold", fontSize: "18px", cursor: "pointer", display: "grid", placeItems: "center" }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* CONTENEDOR IFRAME INCORPORADO CON EL PDF DE INMEDIATO */}
+            <div style={{ flex: 1, background: "#475569", position: "relative" }}>
+              <iframe
+                src={obtenerBlobUrlParaPdf(documentoPdfVisor)}
+                style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+                title="Vista Previa de Documento PDF"
+              />
             </div>
           </div>
         </div>

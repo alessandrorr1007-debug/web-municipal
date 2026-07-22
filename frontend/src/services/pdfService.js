@@ -66,6 +66,73 @@ const normalizarTexto = (texto) => {
 };
 
 export { normalizarTexto };
+
+export const obtenerBlobUrlParaPdf = (urlInput) => {
+  if (!urlInput) return null;
+
+  let url = typeof urlInput === "object"
+    ? (urlInput.archivoUrl || urlInput.url || urlInput.base64 || urlInput.dataUrl || urlInput.fileUrl || urlInput.uri || "")
+    : String(urlInput);
+
+  url = (url || "").trim();
+  if (!url) return null;
+
+  if (url.startsWith("blob:")) return url;
+
+  if (url.includes("%PDF-")) {
+    try {
+      const pdfContent = url.substring(url.indexOf("%PDF-"));
+      const bytes = new Uint8Array(pdfContent.length);
+      for (let i = 0; i < pdfContent.length; i++) {
+        bytes[i] = pdfContent.charCodeAt(i) & 0xff;
+      }
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.error("Error al procesar %PDF-:", e);
+    }
+  }
+
+  const esDataUrl = url.startsWith("data:");
+  const esBase64Puro = !esDataUrl && !url.startsWith("http://") && !url.startsWith("https://") && (url.startsWith("JVBERi") || url.length > 30);
+
+  if (esDataUrl || esBase64Puro) {
+    try {
+      let mime = "application/pdf";
+      let b64 = url;
+
+      if (esDataUrl) {
+        const commaIdx = url.indexOf(",");
+        if (commaIdx !== -1) {
+          const header = url.substring(0, commaIdx);
+          const matchMime = header.match(/^data:(.*?);/);
+          if (matchMime) mime = matchMime[1] || "application/pdf";
+          b64 = url.substring(commaIdx + 1);
+        }
+      }
+
+      try {
+        if (b64.includes("%")) b64 = decodeURIComponent(b64);
+      } catch (e) {}
+
+      b64 = b64.replace(/ /g, "+").replace(/[^A-Za-z0-9+/=]/g, "");
+      while (b64.length % 4 !== 0) b64 += "=";
+
+      const binaryString = atob(b64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const blob = new Blob([bytes], { type: mime });
+      return URL.createObjectURL(blob);
+    } catch (err) {
+      console.error("Error al obtener Blob URL:", err);
+    }
+  }
+
+  return url;
+};
 export const abrirPdf = async (urlInput) => {
   if (!urlInput) {
     alert("El documento no está disponible actualmente.");
