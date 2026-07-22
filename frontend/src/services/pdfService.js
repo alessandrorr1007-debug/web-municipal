@@ -66,7 +66,6 @@ const normalizarTexto = (texto) => {
 };
 
 export { normalizarTexto };
-
 export const abrirPdf = async (urlInput) => {
   if (!urlInput) {
     alert("El documento no está disponible actualmente.");
@@ -91,39 +90,80 @@ export const abrirPdf = async (urlInput) => {
     return;
   }
 
-  // 2. Si es una cadena Data URL, Base64 o documento incrustado
+  // 2. Si la cadena contiene texto plano directo de PDF (%PDF-...)
+  if (url.includes("%PDF-")) {
+    try {
+      const pdfContent = url.substring(url.indexOf("%PDF-"));
+      const bytes = new Uint8Array(pdfContent.length);
+      for (let i = 0; i < pdfContent.length; i++) {
+        bytes[i] = pdfContent.charCodeAt(i) & 0xff;
+      }
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const blobUrl = URL.createObjectURL(blob);
+      const win = window.open(blobUrl, "_blank");
+      if (!win) {
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.target = "_blank";
+        a.rel = "noopener,noreferrer";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+      return;
+    } catch (e) {
+      console.error("Error al procesar PDF en texto plano:", e);
+    }
+  }
+
+  // 3. Si es una cadena Data URL o Base64
   const esDataUrl = url.startsWith("data:");
-  const esBase64Puro = !esDataUrl && !url.startsWith("http://") && !url.startsWith("https://") && (url.startsWith("JVBERi") || url.length > 50);
+  const esBase64Puro = !esDataUrl && !url.startsWith("http://") && !url.startsWith("https://") && (url.startsWith("JVBERi") || url.length > 30);
 
   if (esDataUrl || esBase64Puro) {
     try {
       let mime = "application/pdf";
-      let b64Data = url;
+      let b64 = url;
 
       if (esDataUrl) {
-        const matches = url.match(/^data:(.*?);base64,(.*)$/s);
-        if (matches) {
-          mime = matches[1] || "application/pdf";
-          b64Data = matches[2];
-        } else {
-          const commaIdx = url.indexOf(",");
-          if (commaIdx !== -1) {
-            b64Data = url.substring(commaIdx + 1);
-          }
+        const commaIdx = url.indexOf(",");
+        if (commaIdx !== -1) {
+          const header = url.substring(0, commaIdx);
+          const matchMime = header.match(/^data:(.*?);/);
+          if (matchMime) mime = matchMime[1] || "application/pdf";
+          b64 = url.substring(commaIdx + 1);
         }
       }
 
-      // Sanitizar Base64: eliminar espacios, saltos de línea (\r, \n, \t)
-      const cleanB64 = b64Data.replace(/[\s\r\n]+/g, "");
-
-      // Decodificar Base64 a Uint8Array
-      const byteCharacters = atob(cleanB64);
-      const byteNumbers = new Uint8Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      // Intentar decodificar URL Encoding si existe (%2B, %2F, %3D)
+      try {
+        if (b64.includes("%")) {
+          b64 = decodeURIComponent(b64);
+        }
+      } catch (e) {
+        // Ignorar si decodeURIComponent falla
       }
 
-      const blob = new Blob([byteNumbers], { type: mime });
+      // Convertir espacios en '+' (común cuando base64 pasa por HTTP/JSON)
+      b64 = b64.replace(/ /g, "+");
+
+      // Remover cualquier carácter que no sea de Base64 (saltos de línea, pestañas, etc.)
+      b64 = b64.replace(/[^A-Za-z0-9+/=]/g, "");
+
+      // Asegurar relleno de caracteres '='
+      while (b64.length % 4 !== 0) {
+        b64 += "=";
+      }
+
+      // Decodificar Base64 a Uint8Array binario
+      const binaryString = atob(b64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const blob = new Blob([bytes], { type: mime });
       const blobUrl = URL.createObjectURL(blob);
 
       const win = window.open(blobUrl, "_blank");
@@ -140,21 +180,12 @@ export const abrirPdf = async (urlInput) => {
       return;
     } catch (err) {
       console.error("Error al decodificar PDF Base64:", err);
-
-      try {
-        const blob = new Blob([url], { type: "application/pdf" });
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, "_blank");
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-        return;
-      } catch (e) {
-        alert("No se pudo previsualizar el documento PDF.");
-        return;
-      }
+      alert("El archivo PDF no tiene una codificación válida o está dañado.");
+      return;
     }
   }
 
-  // 3. Si es una URL remota HTTP / HTTPS
+  // 4. Si es una URL remota HTTP / HTTPS
   if (url.startsWith("http://") || url.startsWith("https://")) {
     const esFirebaseStorage = url.includes("firebasestorage.googleapis.com");
     const esCloudinary = url.includes("cloudinary.com");
@@ -170,7 +201,7 @@ export const abrirPdf = async (urlInput) => {
           return;
         }
       } catch (e) {
-        // Fallback abrir directo
+        // Fallback
       }
     }
 
@@ -191,7 +222,7 @@ export const abrirPdf = async (urlInput) => {
           }
         }
       } catch (e) {
-        // Fallback abrir directo
+        // Fallback
       }
     }
 
@@ -205,12 +236,12 @@ export const abrirPdf = async (urlInput) => {
         return;
       }
     } catch (e) {
-      // Fallback si falla fetch por CORS
+      // Fallback
     }
 
     window.open(url, "_blank");
     return;
   }
 
-  alert("No se pudo cargar el documento. Intente nuevamente.");
+  alert("No se pudo cargar el documento.");
 };
