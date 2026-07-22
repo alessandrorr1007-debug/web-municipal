@@ -23,13 +23,35 @@ const generarIdExpediente = () => {
   return "EXP-" + Date.now().toString().slice(-8);
 };
 
+// HELPER PARA EVITAR "Property array contains an invalid nested entity" EN FIRESTORE
+const sanitizarParaFirestore = (val) => {
+  if (val === undefined) return "";
+  if (val === null) return null;
+  if (typeof val !== "object") return val;
+
+  if (Array.isArray(val)) {
+    // Aplanar arreglos anidados y filtrar elementos indefinidos/nulos
+    const aplanado = val.flat(Infinity).filter((item) => item !== undefined && item !== null);
+    return aplanado.map((item) => sanitizarParaFirestore(item));
+  }
+
+  const res = {};
+  for (const [key, v] of Object.entries(val)) {
+    if (v !== undefined) {
+      res[key] = sanitizarParaFirestore(v);
+    }
+  }
+  return res;
+};
+
 export const sanitizarSolicitudPayload = (solicitud) => {
   if (!solicitud) return solicitud;
   const copia = JSON.parse(JSON.stringify(solicitud));
 
   const limpiarLista = (arr) => {
-    if (!Array.isArray(arr)) return arr;
-    return arr.map((pdf) => {
+    if (!Array.isArray(arr)) return [];
+    const aplanado = arr.flat(Infinity).filter(Boolean);
+    return aplanado.map((pdf) => {
       if (!pdf) return pdf;
       const url = pdf.archivoUrl || pdf.url || "";
       if (typeof url === "string" && url.startsWith("data:") && url.length > 200000) {
@@ -88,7 +110,7 @@ export const sanitizarSolicitudPayload = (solicitud) => {
   delete copia.uidInspector;
   delete copia.inspectorAsignadoUid;
 
-  return copia;
+  return sanitizarParaFirestore(copia);
 };
 
 export const guardarSolicitud = async (solicitud) => {
