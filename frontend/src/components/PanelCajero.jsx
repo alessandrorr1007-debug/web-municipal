@@ -480,6 +480,39 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       return;
     }
 
+    if (metodoPagoSeleccionado.toLowerCase().includes("flow")) {
+      setProcesando(true);
+      try {
+        const idExpLimpio = String(solicitudCobro.id).replace(/^EXP-/, "");
+        const emailCliente = solicitudCobro.correoUsuario || usuario?.email || "contribuyente@munitrujillo.gob.pe";
+        const nombreCliente = obtenerNombreCiudadanoValido(solicitudCobro);
+
+        const resFlow = await crearOrdenFlow({
+          solicitudId: idExpLimpio,
+          amount: MONTO_TRAMITE,
+          email: emailCliente,
+          buyerName: nombreCliente,
+          subject: `Derecho de Trámite Licencia EXP-${idExpLimpio}`,
+        });
+
+        console.log("[FLOW COBRO CAJERO] Orden creada:", resFlow);
+
+        if (resFlow && (resFlow.paymentUrl || resFlow.url)) {
+          const redirectUrl = resFlow.paymentUrl || `${resFlow.url}?token=${resFlow.token}`;
+          alert(`🌐 Redirigiendo a la pasarela segura de pago en línea Flow.cl...\n\nOrden de Pago N°: EXP-${idExpLimpio}\nMonto: S/ ${MONTO_TRAMITE.toFixed(2)}\nToken Flow: ${resFlow.token}`);
+          window.location.href = redirectUrl;
+          return;
+        } else {
+          throw new Error("No se obtuvo la URL de redirección de Flow.");
+        }
+      } catch (errFlow) {
+        console.error("[FLOW COBRO ERROR]", errFlow);
+        alert(`❌ Error al conectar con la pasarela Flow: ${errFlow.message || String(errFlow)}`);
+        setProcesando(false);
+        return;
+      }
+    }
+
     setProcesando(true);
     try {
       const codComprobante = "BOL-CAJA-2026-" + Date.now().toString().slice(-6);
