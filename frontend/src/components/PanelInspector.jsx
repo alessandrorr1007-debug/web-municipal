@@ -178,16 +178,15 @@ function PanelInspector({ seccion }) {
       if (filtroEstado === "aprobada" && !est.includes("aprobado")) return false;
       if (filtroEstado === "desaprobada" && (est.includes("aprobado") || (!est.includes("rechazad") && !est.includes("observad")))) return false;
 
-      // 2. Búsqueda por DNI, RUC o Código de Expediente en Historial
+      // 2. Búsqueda por RUC o Código de Expediente en Historial (sin DNI)
       if (!busqueda.trim()) return true;
       const q = busqueda.toLowerCase().trim();
-      const dni = (s.dniSolicitante || s.dni || "").toLowerCase();
       const idExp = (s.id || "").toLowerCase();
       const codExp = `exp-${idExp}`;
       const ruc = (s.ruc || "").toLowerCase();
-      const nombreSol = [s.nombresSolicitante, s.apellidosSolicitante, s.nombreSolicitante, s.nombreNegocio].filter(Boolean).join(" ").toLowerCase();
+      const nombreSol = [s.nombreNegocio, s.razonSocial].filter(Boolean).join(" ").toLowerCase();
 
-      return dni.includes(q) || idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
+      return idExp.includes(q) || codExp.includes(q) || ruc.includes(q) || nombreSol.includes(q);
     });
   }, [solicitudes, busqueda, filtroEstado, esHistorial, inspeccionesPendientes, inspeccionesFinalizadas]);
 
@@ -493,7 +492,7 @@ function PanelInspector({ seccion }) {
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
             <input
               type="text"
-              placeholder="🔍 Buscar por DNI, RUC o Código de Expediente (EXP-XXXX)..."
+              placeholder="🔍 Buscar por RUC o Código de Expediente (EXP-XXXX)..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               style={{ flex: 1, minWidth: "240px", padding: "12px 18px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px" }}
