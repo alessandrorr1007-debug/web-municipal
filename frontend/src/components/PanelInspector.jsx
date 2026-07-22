@@ -603,27 +603,34 @@ function PanelInspector({ seccion }) {
                       </div>
 
                       {/* PLANO DEL LOCAL Y ADJUNTOS */}
-                      {(s.planoUrl || s.archivosAdjuntos?.length > 0 || s.documentosResumen?.length > 0) && (
-                        <div style={{ marginTop: "4px", background: "#f8fafc", padding: "8px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                          <span style={{ fontSize: "11px", fontWeight: "800", color: "#475569" }}>📁 Documentos / Plano del local:</span>
-                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
-                            {s.planoUrl && (
-                              <button
-                                type="button"
-                                onClick={() => setDocumentoPdfVisor({ url: s.planoUrl, nombre: `Plano del Local — EXP-${String(s.id).replace(/^EXP-/, "")}` })}
-                                style={{ background: "#2563eb", color: "white", border: "none", padding: "5px 12px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
-                              >
-                                👁️ Ver Plano del Local
-                              </button>
-                            )}
-                            {s.documentosResumen?.map((docNom, idx) => (
-                              <span key={idx} style={{ fontSize: "11px", background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", color: "#334155" }}>
-                                📄 {docNom}
-                              </span>
-                            ))}
+                      {(() => {
+                        const urlPlanoExt = s.planoUrl || s.archivoUrl || s.archivosPdf?.[0]?.archivoUrl || s.archivosPdf?.[0]?.url || s.archivosPresenciales?.[0]?.archivoUrl || s.archivosPresenciales?.[0]?.url;
+                        const tieneDocumentos = urlPlanoExt || s.archivosPdf?.length > 0 || s.archivosPresenciales?.length > 0 || s.archivosAdjuntos?.length > 0 || s.documentosResumen?.length > 0;
+
+                        if (!tieneDocumentos) return null;
+
+                        return (
+                          <div style={{ marginTop: "4px", background: "#f8fafc", padding: "8px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                            <span style={{ fontSize: "11px", fontWeight: "800", color: "#475569" }}>📁 Documentos / Plano del local:</span>
+                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+                              {urlPlanoExt && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDocumentoPdfVisor({ url: urlPlanoExt, archivoUrl: urlPlanoExt, nombre: `Plano del Local — EXP-${String(s.id).replace(/^EXP-/, "")}` })}
+                                  style={{ background: "#2563eb", color: "white", border: "none", padding: "5px 12px", borderRadius: "6px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                                >
+                                  👁️ Ver Plano del Local
+                                </button>
+                              )}
+                              {s.documentosResumen?.map((docNom, idx) => (
+                                <span key={idx} style={{ fontSize: "11px", background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", color: "#334155" }}>
+                                  📄 {docNom}
+                                </span>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
 

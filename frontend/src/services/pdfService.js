@@ -198,10 +198,17 @@ export const diagnosticarYProcesarPdf = async (urlInput) => {
   }
 
   if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+    // Si es una URL de Cloudinary o de almacenamiento remoto válido, retornar directamente la URL remota para renderizado iframe
+    const esCloudinary = rawUrl.includes("cloudinary.com") || rawUrl.includes("res.cloudinary.com");
+    if (esCloudinary) {
+      console.log(`[PDF-DIAGNOSTICO ${ts}] OK: Se detectó URL remota de Cloudinary.`);
+      return { valido: true, blobUrl: rawUrl, esUrlDirecta: true, tipo: "application/pdf" };
+    }
+
     try {
       console.log(`[PDF-DIAGNOSTICO ${ts}] Solicitando HTTP GET a: ${rawUrl}`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const response = await fetch(rawUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
@@ -215,16 +222,13 @@ export const diagnosticarYProcesarPdf = async (urlInput) => {
         if (response.status === 401 || response.status === 403) {
           return { valido: false, codigoError: "403_FORBIDDEN", motivo: "Acceso denegado al archivo PDF. Permisos insuficientes o enlace privado (Error 403/401)." };
         }
-        return { valido: false, codigoError: "SERVER_ERROR", motivo: `El servidor devolvió un error HTTP ${response.status}: ${response.statusText}` };
+        // Retornar fallback con la URL remota
+        return { valido: true, blobUrl: rawUrl, esUrlDirecta: true, tipo: "application/pdf" };
       }
 
       const contentType = response.headers.get("content-type") || "";
-      console.log(`[PDF-DIAGNOSTICO ${ts}] Header Content-Type recibido: "${contentType}"`);
-
       const arrayBuffer = await response.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
-
-      console.log(`[PDF-DIAGNOSTICO ${ts}] Bytes descargados: ${bytes.length}`);
 
       if (bytes.length === 0) {
         return { valido: false, codigoError: "ARCHIVO_VACIO", motivo: "El servidor devolvió un archivo de 0 bytes (vacío)." };
@@ -234,16 +238,8 @@ export const diagnosticarYProcesarPdf = async (urlInput) => {
       const blobUrl = URL.createObjectURL(blob);
       return { valido: true, blobUrl, tamano: bytes.length, tipo: contentType || "application/pdf" };
     } catch (fetchErr) {
-      console.error(`[PDF-DIAGNOSTICO ${ts}] FAIL: Error en fetch HTTP:`, fetchErr.message);
-      if (fetchErr.name === "AbortError") {
-        return { valido: false, codigoError: "TIMEOUT", motivo: "Tiempo de espera agotado al descargar el archivo PDF (Timeout 15s)." };
-      }
-      return {
-        valido: false,
-        codigoError: "CORS_O_RED",
-        motivo: `No se pudo acceder al documento por restricciones CORS o fallo de red: ${fetchErr.message}`,
-        urlOriginal: rawUrl
-      };
+      console.warn(`[PDF-DIAGNOSTICO ${ts}] Aviso fetch HTTP (${fetchErr.message}). Utilizando URL directa como respaldo.`);
+      return { valido: true, blobUrl: rawUrl, esUrlDirecta: true, tipo: "application/pdf" };
     }
   }
 
