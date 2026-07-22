@@ -2438,9 +2438,9 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", marginTop: "14px" }}>
                             <div style={{ border: "2px solid #22c55e", background: "#f0fdf4", borderRadius: "14px", padding: "20px", boxShadow: "0 4px 12px rgba(34, 197, 94, 0.1)" }}>
                               <div style={{ fontSize: "28px", marginBottom: "8px" }}>📱</div>
-                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "15px", fontWeight: "800" }}>Pago Billetera Digital / Tarjeta (Flow)</h4>
-                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 12px" }}>Paga de forma segura en línea con Yape, Plin, Tarjeta de Débito o Crédito a través de Flow.cl.</p>
-                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoFlow} disabled={procesandoPago} style={{ fontSize: "13.5px", fontWeight: "bold" }}>{procesandoPago ? "Generando pago..." : "💳 Pagar con Billetera Digital / Tarjeta"}</button>
+                              <h4 style={{ margin: "0 0 6px", color: "#14532d", fontSize: "15px", fontWeight: "800" }}>📱 Pago Billetera Digital</h4>
+                              <p style={{ color: "#475569", lineHeight: "1.5", fontSize: "13px", margin: "0 0 12px" }}>Paga de forma segura en línea con tu billetera digital (Yape, Plin o Tarjeta).</p>
+                              <button type="button" className="btn-pago btn-full" onClick={iniciarPagoFlow} disabled={procesandoPago} style={{ fontSize: "13.5px", fontWeight: "bold" }}>{procesandoPago ? "Generando pago..." : "📱 Pagar con Billetera Digital"}</button>
                             </div>
 
                             <div style={{ border: "2px solid #94a3b8", background: "#f8fafc", borderRadius: "14px", padding: "20px", boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }}>

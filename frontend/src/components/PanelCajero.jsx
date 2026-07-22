@@ -2403,7 +2403,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", fontWeight: "bold" }}
                 >
                   <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                  <option value="Pago Billetera Digital (Flow)">📱 Pago Billetera Digital / Tarjeta (Flow)</option>
+                  <option value="Pago Billetera Digital">📱 Pago Billetera Digital</option>
                 </select>
               </div>
 
