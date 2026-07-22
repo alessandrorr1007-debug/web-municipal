@@ -331,6 +331,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [busquedaRuc, setBusquedaRuc] = useState("");
   const [filtroDistrito, setFiltroDistrito] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
@@ -1609,6 +1610,189 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     window.print();
   };
 
+  const descargarLicenciaConMarcaAgua = (sol, esVencido = false) => {
+    if (!sol) return;
+    const fechaAprobacion = sol.fechaEvaluacionInspector || sol.fechaAprobacion || sol.fechaSolicitud || "---";
+    const { fechaVencimientoStr } = calcularEstadoLicenciaVencimiento(sol);
+    const fechaExpiracion = sol.fechaExpiracion || fechaVencimientoStr || "---";
+
+    const marcaAguaHtml = esVencido ? `
+      <div style="
+        position: absolute;
+        top: 45%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-35deg);
+        font-size: 100px;
+        font-weight: 900;
+        color: rgba(220, 38, 38, 0.28);
+        border: 10px solid rgba(220, 38, 38, 0.35);
+        padding: 15px 45px;
+        border-radius: 20px;
+        letter-spacing: 12px;
+        text-transform: uppercase;
+        pointer-events: none;
+        z-index: 9999;
+        white-space: nowrap;
+        user-select: none;
+      ">
+        VENCIDO
+      </div>
+    ` : "";
+
+    const contenido = `
+      <!DOCTYPE html>
+      <html lang="es">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Licencia Municipal de Funcionamiento - EXP-${sol.id} ${esVencido ? '(VENCIDA)' : ''}</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; background: #f8fafc; color: #0f172a; margin: 0; }
+            .licencia { position: relative; max-width: 820px; margin: auto; background: white; border: 6px double ${esVencido ? '#dc2626' : '#1e3a8a'}; border-radius: 20px; padding: 45px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); overflow: hidden; }
+            .header { text-align: center; margin-bottom: 25px; border-bottom: 3px double #cbd5e1; padding-bottom: 20px; }
+            .header h1 { margin: 0; font-size: 26px; color: #0f172a; text-transform: uppercase; letter-spacing: 1.5px; }
+            .header h2 { margin-top: 6px; font-size: 20px; color: #2563eb; font-weight: 800; text-transform: uppercase; }
+            .datos { margin-top: 25px; }
+            .dato { margin: 12px 0; font-size: 15.5px; line-height: 1.5; border-bottom: 1px dashed #e2e8f0; padding-bottom: 6px; display: flex; justify-content: space-between; }
+            .dato strong { color: #1e293b; min-width: 220px; }
+            .vigencia { margin-top: 25px; padding: 18px; background: ${esVencido ? '#fef2f2' : '#eff6ff'}; border: 2px solid ${esVencido ? '#fca5a5' : '#3b82f6'}; border-radius: 12px; }
+            .vigencia h3 { margin-top: 0; color: ${esVencido ? '#991b1b' : '#1d4ed8'}; font-size: 16px; margin-bottom: 8px; }
+            .estado-banner { margin-top: 25px; padding: 16px; border-radius: 12px; text-align: center; background: ${esVencido ? '#fee2e2' : '#dcfce7'}; color: ${esVencido ? '#991b1b' : '#166534'}; font-size: 22px; font-weight: 900; border: 2.5px solid ${esVencido ? '#dc2626' : '#16a34a'}; letter-spacing: 2px; text-transform: uppercase; }
+            .qr-container { margin-top: 30px; text-align: center; }
+            .qr-container img { width: 120px; height: 120px; border: 1px solid #cbd5e1; padding: 5px; border-radius: 8px; }
+            .firmas { margin-top: 50px; display: flex; justify-content: space-around; text-align: center; }
+            .firma-box { text-align: center; }
+            .linea-firma { width: 220px; border-top: 2px solid #0f172a; margin: 0 auto 6px; }
+            .footer { margin-top: 35px; text-align: center; color: #64748b; font-size: 12.5px; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+          </style>
+        </head>
+        <body>
+          <div class="licencia">
+            ${marcaAguaHtml}
+            <div class="header">
+              <h1>MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h1>
+              <h2>LICENCIA MUNICIPAL DE FUNCIONAMIENTO</h2>
+              <small style="color: #64748b; font-weight: 700;">SUBGERENCIA DE LICENCIAS Y COMERCIALIZACIÓN</small>
+            </div>
+
+            <div class="datos">
+              <div class="dato"><strong>N° Licencia de Funcionamiento:</strong> <span>${sol.numeroLicencia || `LIC-2026-${sol.id}`}</span></div>
+              <div class="dato"><strong>N° de Expediente Municipal:</strong> <span>EXP-${String(sol.id).replace(/^EXP-/, "")}</span></div>
+              <div class="dato"><strong>RUC de la Empresa:</strong> <span>${sol.ruc || "---"}</span></div>
+              <div class="dato"><strong>Razón Social / Titular:</strong> <span>${sol.razonSocial || sol.nombreNegocio || "---"}</span></div>
+              <div class="dato"><strong>Nombre Comercial del Negocio:</strong> <span>${sol.nombreNegocio || "---"}</span></div>
+              <div class="dato"><strong>Dirección del Establecimiento:</strong> <span>${sol.direccion || "---"} (${sol.distrito || "Trujillo"})</span></div>
+              <div class="dato"><strong>Giro o Actividad Comercial:</strong> <span>${sol.giro || "---"}</span></div>
+            </div>
+
+            <div class="vigencia">
+              <h3>📅 Periodo de Vigencia de la Licencia</h3>
+              <div class="dato" style="border:none;"><strong>Fecha de Emisión:</strong> <span>${fechaAprobacion}</span></div>
+              <div class="dato" style="border:none;"><strong>Fecha de Expiración:</strong> <span>${fechaExpiracion}</span></div>
+            </div>
+
+            <div class="estado-banner">
+              ${esVencido ? '⚠️ LICENCIA VENCIDA — DOCUMENTO CADUCADO' : '✅ LICENCIA MUNICIPAL APROBADA Y VIGENTE'}
+            </div>
+
+            <div class="qr-container">
+              <p style="font-size: 13px; font-weight: 700; color: #475569; margin-bottom: 6px;">Código QR de Verificación Oficial MPT</p>
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`LICENCIA MPT | EXP: ${sol.id} | RUC: ${sol.ruc} | ESTADO: ${esVencido ? 'VENCIDO' : 'APROBADO'}`)}" alt="QR Verificación" />
+            </div>
+
+            <div class="firmas">
+              <div class="firma-box">
+                <div class="linea-firma"></div>
+                <p style="margin: 0; font-size: 13px; font-weight: 700;">Subgerente de Licencias</p>
+                <small style="color: #64748b;">Municipalidad Provincial de Trujillo</small>
+              </div>
+            </div>
+
+            <div class="footer">
+              Documento digital emitido de conformidad con la Ley N° 28976 — Ley Marco de Licencias de Funcionamiento.
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([contenido], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.download = `Licencia_RUC_${sol.ruc}_${esVencido ? "VENCIDO" : "APROBADO"}.html`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    URL.revokeObjectURL(url);
+  };
+
+  const clasificarEstadoTramiteCajera = (s) => {
+    if (!s) return { tipo: "PENDIENTE", titulo: "Pendiente" };
+
+    const est = (s.estado || s.estadoInspeccion || s.inspeccion || "").toLowerCase();
+    const estNorm = (s.estadoNormalizado || "").toUpperCase();
+    const { aptoRenovacion, diasRestantes, fechaVencimientoStr } = calcularEstadoLicenciaVencimiento(s);
+
+    const esVencido = (diasRestantes !== null && diasRestantes <= 0) || est.includes("vencid") || estNorm === "VENCIDO" || s.licenciaVencida === true;
+    const esAprobado = (est.includes("aprobad") || est.includes("aceptad") || estNorm === "APROBADO" || s.licenciaEmitida === true) && !esVencido;
+    const esRechazado = est.includes("rechazad") || estNorm === "RECHAZADO";
+    const esObservado = est.includes("observad") || est.includes("reinspecc") || est.includes("segunda") || estNorm === "OBSERVADO";
+
+    if (esVencido) {
+      return {
+        tipo: "VENCIDO",
+        titulo: "⚠️ Vencido (Licencia Expirada)",
+        badgeColor: "#dc2626",
+        badgeBg: "#fee2e2",
+        aptoRenovacion: true,
+        diasRestantes,
+        fechaVencimientoStr: fechaVencimientoStr || "Más de 1 año transcurrido"
+      };
+    }
+
+    if (esAprobado) {
+      return {
+        tipo: "APROBADO",
+        titulo: "✅ Aceptado / Aprobado",
+        badgeColor: "#166534",
+        badgeBg: "#dcfce7",
+        fechaVencimientoStr
+      };
+    }
+
+    if (esRechazado) {
+      return {
+        tipo: "RECHAZADO",
+        titulo: "❌ Rechazado",
+        badgeColor: "#991b1b",
+        badgeBg: "#fee2e2",
+        motivoRechazo: s.comentarioInspector || s.observaciones || s.motivoRechazo || s.detallesObservacion || s.motivo || "No se detallaron observaciones en el informe del inspector."
+      };
+    }
+
+    if (esObservado) {
+      return {
+        tipo: "OBSERVADO",
+        titulo: "⚠️ Observado (Segunda visita del inspector - Última oportunidad)",
+        badgeColor: "#6b21a8",
+        badgeBg: "#f3e8ff",
+        proximaFechaInspeccion: s.fechaSegundaVisita || s.fechaReinspeccion || s.fechaVisitaInspector || s.fechaInspeccion || "Por asignar",
+        horaInspeccion: s.horaVisitaLabel || s.horaVisitaInspector || ""
+      };
+    }
+
+    // Pendiente por defecto
+    return {
+      tipo: "PENDIENTE",
+      titulo: "⏳ Pendiente (Espera a su primera visita)",
+      badgeColor: "#1e40af",
+      badgeBg: "#dbeafe",
+      fechaInspeccion: s.fechaVisitaInspector || s.fechaInspeccion || s.fechaSolicitud || "Por asignar",
+      horaInspeccion: s.horaVisitaLabel || s.horaVisitaInspector || ""
+    };
+  };
+
   return (
     <div className="panel panel-cajero">
       {/* HERO INSTITUCIONAL DE CAJA Y ATENCIÓN */}
@@ -2388,273 +2572,232 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         </section>
       )}
 
-      {/* VISTA 2: CONSULTA DE ESTADO */}
+      {/* VISTA 2: CONSULTA DE ESTADO DE TRÁMITE POR RUC */}
       {seccion === "consulta-expedientes" && (
         <section className="section-card">
           <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <h2>🔍 Consulta y Estado de Trámites</h2>
-              <p>Busca expedientes por N° Expediente, RUC del establecimiento o filtra por los 12 distritos de la Provincia de Trujillo.</p>
+              <h2>🔍 Consulta y Estado de Trámites por RUC</h2>
+              <p>Ingrese el RUC de la empresa para consultar el estado actual del trámite y la información requerida.</p>
             </div>
           </div>
 
-          {/* BARRA DE BÚSQUEDA Y FILTROS POR DISTRITO Y FECHAS */}
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px", alignItems: "center" }}>
-            <div style={{ flex: 1, minWidth: "240px" }}>
+          {/* BÚSQUEDA EXCLUSIVA POR RUC */}
+          <div style={{ background: "#f8fafc", border: "1.5px solid #cbd5e1", borderRadius: "14px", padding: "20px", marginBottom: "24px" }}>
+            <label style={{ display: "block", fontSize: "14px", fontWeight: "800", color: "#0f172a", marginBottom: "8px" }}>
+              🏢 Ingrese el RUC de la empresa (11 dígitos):
+            </label>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
               <input
                 type="text"
-                placeholder="🔍 Buscar por N° Expediente, RUC (11 dígitos) o negocio..."
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                style={{ width: "100%", padding: "12px 18px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px" }}
+                placeholder="🔍 Ingrese RUC de la empresa (Ej: 20601234567)..."
+                value={busquedaRuc}
+                onChange={(e) => setBusquedaRuc(e.target.value)}
+                maxLength={11}
+                style={{ flex: 1, minWidth: "260px", padding: "14px 18px", borderRadius: "10px", border: "2px solid #2563eb", fontSize: "16px", fontWeight: "700", background: "white", color: "#0f172a", outline: "none" }}
               />
+              {busquedaRuc && (
+                <button
+                  type="button"
+                  onClick={() => setBusquedaRuc("")}
+                  style={{ padding: "14px 20px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: "800", fontSize: "14px", cursor: "pointer" }}
+                >
+                  🧹 Limpiar
+                </button>
+              )}
             </div>
-
-            <div>
-              <select
-                value={filtroDistrito}
-                onChange={(e) => setFiltroDistrito(e.target.value)}
-                style={{ padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700", background: "#f8fafc", color: "#0f172a", cursor: "pointer" }}
-              >
-                <option value="todos">🏛️ Todos los distritos (12 Trujillo)</option>
-                {DISTRITOS_TRUJILLO.map((dist) => (
-                  <option key={dist} value={dist}>📍 {dist}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "13px", fontWeight: "700", color: "#475569" }}>📅 Desde:</span>
-              <input
-                type="date"
-                min="2026-07-15"
-                max={obtenerFechaHoyStr()}
-                value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
-                onBlur={() => {
-                  if (fechaDesde) {
-                    const hoyStr = obtenerFechaHoyStr();
-                    if (fechaDesde < "2026-07-15") setFechaDesde("2026-07-15");
-                    else if (fechaDesde > hoyStr) setFechaDesde(hoyStr);
-                  }
-                }}
-                style={{ padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", background: "#fff" }}
-              />
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "13px", fontWeight: "700", color: "#475569" }}>📅 Hasta:</span>
-              <input
-                type="date"
-                min="2026-07-15"
-                value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
-                onBlur={() => {
-                  if (fechaHasta && fechaHasta < "2026-07-15") {
-                    setFechaHasta("2026-07-15");
-                  }
-                }}
-                style={{ padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", background: "#fff" }}
-              />
-            </div>
-
-            {(fechaDesde || fechaHasta || busqueda || filtroDistrito !== "todos") && (
-              <button
-                type="button"
-                onClick={() => {
-                  setBusqueda("");
-                  setFiltroDistrito("todos");
-                  setFechaDesde("");
-                  setFechaHasta("");
-                }}
-                style={{ padding: "11px 14px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: "700", fontSize: "13px", cursor: "pointer" }}
-                title="Limpiar todos los filtros"
-              >
-                🧹 Limpiar
-              </button>
-            )}
-
-            {errorFechaRange && (
-              <div style={{ flex: "1 1 100%", background: "#fef2f2", color: "#991b1b", border: "1px solid #fca5a5", padding: "10px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
-                ⚠️ {errorFechaRange}
-              </div>
-            )}
           </div>
 
-        {solicitudesFiltradas.length === 0 ? (
-          <div className="empty-state">
-            <h3>No se encontraron solicitudes</h3>
-            <p>Ajusta el filtro por distrito o el término de búsqueda para localizar expedientes.</p>
-          </div>
-        ) : (
-          <div className="tabla-container">
-            <table className="modern-table">
-              <thead>
-                <tr>
-                  <th>Expediente</th>
-                  <th>Ciudadano / DNI</th>
-                  <th>Establecimiento</th>
-                  <th>Trámite / Derecho</th>
-                  <th>Estado del Trámite</th>
-                  <th>Acciones de Caja</th>
-                </tr>
-              </thead>
-              <tbody>
-                {solicitudesFiltradas.map((s) => {
-                  const nombreCiudadano = obtenerNombreCiudadanoValido(s);
-                  const dniCiudadano = obtenerDniValido(s);
-                  const esPagado = s.estadoPago === "Confirmado" || (s.estado || "").toLowerCase().includes("pagado");
-                  const esFacturaDoc = (s.tipoComprobante || s.comprobantePago || s.numeroOperacion || "").toLowerCase().includes("factura") || (s.numeroOperacion || "").startsWith("F");
-                  const etiquetaComprobante = esFacturaDoc ? "Factura emitida" : "Boleta emitida";
+          {/* RESULTADOS DE BÚSQUEDA */}
+          {(() => {
+            const rucLimpio = busquedaRuc.trim().toLowerCase();
+            const tramitesCoincidentes = rucLimpio
+              ? solicitudes.filter((s) => (s.ruc || "").toLowerCase().includes(rucLimpio) || (s.id || "").toLowerCase().includes(rucLimpio))
+              : solicitudes;
 
-                  const { aptoRenovacion, diasRestantes, fechaVencimientoStr } = calcularEstadoLicenciaVencimiento(s);
+            if (!rucLimpio) {
+              return (
+                <div style={{ background: "#eff6ff", border: "1px dashed #3b82f6", borderRadius: "14px", padding: "36px", textAlign: "center", color: "#1e40af" }}>
+                  <span style={{ fontSize: "40px", display: "block", marginBottom: "8px" }}>🔍</span>
+                  <h3 style={{ margin: "0 0 6px", fontSize: "18px", fontWeight: "800" }}>Consulta de Trámites por RUC</h3>
+                  <p style={{ margin: 0, fontSize: "14px", color: "#475569" }}>Ingrese el número de RUC de la empresa en la casilla superior para buscar y consultar su estado.</p>
+                </div>
+              );
+            }
+
+            if (tramitesCoincidentes.length === 0) {
+              return (
+                <div className="empty-state" style={{ padding: "40px", textAlign: "center", background: "#fff1f2", border: "1px solid #fecaca", borderRadius: "14px" }}>
+                  <span style={{ fontSize: "40px", display: "block", marginBottom: "8px" }}>📭</span>
+                  <h3 style={{ color: "#991b1b", margin: "0 0 6px" }}>No se encontraron trámites</h3>
+                  <p style={{ color: "#7f1d1d", margin: 0 }}>No existe ningún expediente registrado con el RUC "<strong>{busquedaRuc}</strong>". Verifique el número e intente de nuevo.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                {tramitesCoincidentes.map((s) => {
+                  const estInfo = clasificarEstadoTramiteCajera(s);
 
                   return (
-                    <tr
+                    <div
                       key={s.id}
-                      onClick={(e) => {
-                        // Si se hace clic en un botón interno, no duplicar la apertura
-                        if (e.target.tagName === "BUTTON" || e.target.closest("button")) return;
-                        setSolicitudVerDetalle(s);
+                      style={{
+                        background: "white",
+                        border: `2px solid ${estInfo.badgeColor}`,
+                        borderRadius: "16px",
+                        padding: "24px",
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "16px"
                       }}
-                      style={{ cursor: "pointer" }}
-                      title="Toca el expediente para ver la Línea de Tiempo Vertical"
                     >
-                      <td>
-                        <strong style={{ color: "#2563eb", textDecoration: "underline" }}>EXP-{String(s.id).replace(/^EXP-/, "")}</strong>
-                        <small style={{ display: "block", color: "#64748b" }}>{s.fecha || "---"}</small>
-                      </td>
-                      <td>
-                        <strong>{nombreCiudadano}</strong>
-                        <small style={{ display: "block", color: "#475569" }}>DNI: {dniCiudadano}</small>
-                      </td>
-                      <td>
-                        <strong>{s.nombreNegocio}</strong>
-                        <small style={{ display: "block", color: "#64748b" }}>RUC: {s.ruc}</small>
-                        <small style={{ display: "block", color: "#2563eb", fontWeight: "700", marginTop: "2px" }}>📍 {s.distrito || "Trujillo"}</small>
-                      </td>
-                      <td>
-                        <span className="badge info">{s.tipoTramite || "Nueva Licencia"}</span>
-                        <strong style={{ display: "block", color: "#0f766e", marginTop: "2px" }}>S/ {MONTO_TRAMITE.toFixed(2)}</strong>
-                      </td>
-                      <td>
-                        <span className={`badge ${esPagado ? "ok" : "warning"}`}>
-                          {esPagado ? "Pagado / Confirmado" : "Pendiente de Pago"}
-                        </span>
+                      {/* ENCABEZADO DE ESTADO */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", background: estInfo.badgeBg, padding: "14px 20px", borderRadius: "12px", border: `1px solid ${estInfo.badgeColor}` }}>
+                        <div>
+                          <span style={{ fontSize: "12px", fontWeight: "800", color: estInfo.badgeColor, textTransform: "uppercase", letterSpacing: "0.5px", display: "block" }}>ESTADO DEL TRÁMITE</span>
+                          <strong style={{ fontSize: "18px", color: estInfo.badgeColor, display: "block", marginTop: "2px" }}>{estInfo.titulo}</strong>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <span style={{ fontSize: "13px", fontWeight: "700", color: "#475569" }}>Expediente:</span>
+                          <strong style={{ fontSize: "16px", color: "#2563eb", display: "block" }}>EXP-{String(s.id).replace(/^EXP-/, "")}</strong>
+                        </div>
+                      </div>
 
-                        <small style={{ display: "block", marginTop: "4px", fontWeight: "700", color: (s.estado || "").toLowerCase().includes("observad") ? "#6b21a8" : (s.estado || "").toLowerCase().includes("aprobado") ? "#15803d" : (s.estado || "").toLowerCase().includes("rechazad") ? "#dc2626" : "#1e40af" }}>
-                          📌 {s.estadoInspeccion || s.inspeccion || s.estado || "Programada"}
-                        </small>
+                      {/* DATOS ESPECÍFICOS SEGÚN ESTADO */}
+                      {estInfo.tipo === "PENDIENTE" && (
+                        <div style={{ background: "#f8fafc", padding: "18px 20px", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
+                          <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏢 RUC de la Empresa:</strong> {s.ruc}</p>
+                          <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏪 Nombre Comercial / Razón Social:</strong> {s.nombreNegocio || s.razonSocial}</p>
+                          <p style={{ margin: "10px 0 0", fontSize: "16px", color: "#1e40af", fontWeight: "800" }}>
+                            📅 <strong>Fecha de Inspección (1ra Visita):</strong> {estInfo.fechaInspeccion} {estInfo.horaInspeccion ? `(${estInfo.horaInspeccion})` : ""}
+                          </p>
+                        </div>
+                      )}
 
-                        {aptoRenovacion && (
-                          <span className="badge warning" style={{ display: "block", marginTop: "4px", background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}>
-                            ⚠️ {diasRestantes <= 0 ? "Licencia Vencida" : "Renovación Cercana"}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                          <button
-                            type="button"
-                            onClick={() => setSolicitudVerDetalle(s)}
-                            style={{
-                              background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
-                              color: "white",
-                              padding: "7px 14px",
-                              borderRadius: "8px",
-                              fontSize: "12.5px",
-                              fontWeight: "800",
-                              border: "none",
-                              cursor: "pointer",
-                              boxShadow: "0 2px 4px rgba(124, 58, 237, 0.2)"
-                            }}
-                          >
-                            Ver Detalles
-                          </button>
+                      {estInfo.tipo === "OBSERVADO" && (
+                        <div style={{ background: "#faf5ff", padding: "18px 20px", borderRadius: "12px", border: "1px solid #e9d5ff" }}>
+                          <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏢 RUC de la Empresa:</strong> {s.ruc}</p>
+                          <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏪 Nombre Comercial / Razón Social:</strong> {s.nombreNegocio || s.razonSocial}</p>
+                          <p style={{ margin: "10px 0 0", fontSize: "16px", color: "#6b21a8", fontWeight: "800" }}>
+                            📅 <strong>Próxima Fecha de Inspección (Segunda visita - Última oportunidad):</strong> {estInfo.proximaFechaInspeccion} {estInfo.horaInspeccion ? `(${estInfo.horaInspeccion})` : ""}
+                          </p>
+                        </div>
+                      )}
 
-                          {esPagado ? (
+                      {estInfo.tipo === "RECHAZADO" && (
+                        <div style={{ background: "#fef2f2", padding: "20px", borderRadius: "12px", border: "1.5px solid #fca5a5" }}>
+                          <p style={{ margin: "0 0 10px", fontSize: "15px", color: "#991b1b", fontWeight: "800" }}>
+                            📝 Motivo del Rechazo (Comentario del Inspector):
+                          </p>
+                          <div style={{ background: "white", border: "1px solid #fecaca", padding: "14px 18px", borderRadius: "10px", fontSize: "14.5px", color: "#7f1d1d", fontWeight: "600", lineHeight: 1.6 }}>
+                            "{estInfo.motivoRechazo}"
+                          </div>
+                        </div>
+                      )}
+
+                      {estInfo.tipo === "APROBADO" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                          <div style={{ background: "#f0fdf4", padding: "18px 20px", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
+                            <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏢 RUC de la Empresa:</strong> {s.ruc}</p>
+                            <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏪 Razón Social / Nombre Comercial:</strong> {s.nombreNegocio || s.razonSocial}</p>
+                            <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>📍 Dirección del Establecimiento:</strong> {s.direccion} ({s.distrito || "Trujillo"})</p>
+                            <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🛒 Giro Comercial:</strong> {s.giro}</p>
+                            <p style={{ margin: "4px 0", fontSize: "15px", color: "#166534" }}><strong>📅 Fecha de Emisión:</strong> {s.fechaEvaluacionInspector || s.fechaAprobacion || "---"}</p>
+                          </div>
+                          <div>
                             <button
                               type="button"
-                              onClick={() => setSolicitudVerBoleta(s)}
+                              onClick={() => descargarLicenciaConMarcaAgua(s, false)}
                               style={{
-                                background: "#0f172a",
+                                background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
                                 color: "white",
-                                padding: "7px 14px",
-                                borderRadius: "8px",
-                                fontSize: "12.5px",
-                                fontWeight: "800",
                                 border: "none",
+                                padding: "12px 24px",
+                                borderRadius: "10px",
+                                fontSize: "14.5px",
+                                fontWeight: "800",
                                 cursor: "pointer",
-                                boxShadow: "0 2px 4px rgba(15, 23, 42, 0.2)"
+                                boxShadow: "0 4px 12px rgba(22, 163, 74, 0.25)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px"
                               }}
                             >
-                              🧾 Ver Boleta / Factura SUNAT
+                              📥 Descargar Licencia de Funcionamiento
                             </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSolicitudCobro(s);
-                                setMetodoPagoSeleccionado("Efectivo en Caja Municipal");
-                                setMontoRecibidoInput("");
-                              }}
-                              style={{
-                                background: "#16a34a",
-                                color: "white",
-                                padding: "7px 14px",
-                                borderRadius: "8px",
-                                fontWeight: "800",
-                                fontSize: "12.5px",
-                                border: "none",
-                                cursor: "pointer"
-                              }}
-                            >
-                              💰 Registrar Pago (S/ 3.00)
-                            </button>
-                          )}
+                          </div>
+                        </div>
+                      )}
 
-                          {/* BOTÓN RENOVAR TRÁMITE (HABILITADO SOLO A PARTIR DE LOS 11 MESES DE VIGENCIA) */}
-                          {((s.estado || "").toLowerCase().includes("aprobad") || (s.estado || "").toLowerCase().includes("renovad")) && (
+                      {estInfo.tipo === "VENCIDO" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                          <div style={{ background: "#fef2f2", padding: "18px 20px", borderRadius: "12px", border: "1px solid #fecaca" }}>
+                            <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏢 RUC de la Empresa:</strong> {s.ruc}</p>
+                            <p style={{ margin: "4px 0", fontSize: "15px", color: "#0f172a" }}><strong>🏪 Razón Social / Nombre Comercial:</strong> {s.nombreNegocio || s.razonSocial}</p>
+                            <p style={{ margin: "4px 0", fontSize: "15px", color: "#991b1b", fontWeight: "800" }}>
+                              ⚠️ <strong>Fecha de Vencimiento:</strong> {estInfo.fechaVencimientoStr} (Ha transcurrido más de 1 año desde su emisión)
+                            </p>
+                          </div>
+                          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
                             <button
                               type="button"
-                              disabled={!aptoRenovacion}
                               onClick={() => {
-                                if (!aptoRenovacion) return;
                                 setSolicitudRenovacion(s);
                                 setTipoComprobanteSeleccionado("Boleta");
-                                setMetodoPagoSeleccionado("Pago Billetera Digital");
+                                setMetodoPagoSeleccionado("Efectivo en Caja Municipal");
                               }}
                               style={{
-                                background: aptoRenovacion ? "linear-gradient(135deg, #d97706 0%, #b45309 100%)" : "#f1f5f9",
-                                color: aptoRenovacion ? "#ffffff" : "#94a3b8",
-                                padding: "7px 14px",
-                                borderRadius: "8px",
+                                background: "linear-gradient(135deg, #d97706 0%, #b45309 100%)",
+                                color: "white",
+                                border: "none",
+                                padding: "12px 24px",
+                                borderRadius: "10px",
+                                fontSize: "14.5px",
                                 fontWeight: "800",
-                                fontSize: "12.5px",
-                                border: aptoRenovacion ? "none" : "1px solid #cbd5e1",
-                                cursor: aptoRenovacion ? "pointer" : "not-allowed",
-                                boxShadow: aptoRenovacion ? "0 2px 6px rgba(217, 119, 6, 0.3)" : "none",
-                                opacity: aptoRenovacion ? 1 : 0.75,
+                                cursor: "pointer",
+                                boxShadow: "0 4px 12px rgba(217, 119, 6, 0.25)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px"
                               }}
-                              title={
-                                aptoRenovacion
-                                  ? `Licencia apta para renovación (${diasRestantes <= 0 ? "Vencida" : `Vence en ${diasRestantes} días`})`
-                                  : "La renovación solo se habilita al cumplir 11 meses de vigencia de la Licencia (Faltan más de 30 días para cumplir el año)"
-                              }
                             >
-                              🔄 Renovar Trámite {aptoRenovacion ? `(${diasRestantes <= 0 ? "Vencida" : `Vence en ${diasRestantes}d`})` : "🔒 (Inhabilitado < 11 meses)"}
+                              🔄 Pagar Renovación (S/ 3.00)
                             </button>
-                          )}
+
+                            <button
+                              type="button"
+                              onClick={() => descargarLicenciaConMarcaAgua(s, true)}
+                              style={{
+                                background: "#dc2626",
+                                color: "white",
+                                border: "none",
+                                padding: "12px 24px",
+                                borderRadius: "10px",
+                                fontSize: "14.5px",
+                                fontWeight: "800",
+                                cursor: "pointer",
+                                boxShadow: "0 4px 12px rgba(220, 38, 38, 0.25)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px"
+                              }}
+                            >
+                              📥 Descargar Licencia (VENCIDA)
+                            </button>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
+                      )}
+
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </div>
+            );
+          })()}
+        </section>
       )}
 
       {/* MODAL DETALLE COMPLETO Y VERIFICACIÓN INFORMACIÓN */}
