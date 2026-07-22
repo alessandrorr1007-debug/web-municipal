@@ -2417,11 +2417,36 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     type="number"
                     step="0.10"
                     min="3.00"
-                    placeholder="Ej. 10.00"
+                    max="200.00"
+                    placeholder="Ej. 10, 20, 50, 100 o 200"
                     value={montoRecibidoInput}
                     onChange={(e) => setMontoRecibidoInput(e.target.value)}
                     style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #d97706", fontSize: "16px", fontWeight: "800", color: "#0f172a", background: "white" }}
                   />
+
+                  {/* SELECCIÓN RÁPIDA DE BILLETES PERUANOS (S/ 3 - S/ 200) */}
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "10px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: "bold", color: "#92400e", width: "100%" }}>Billetes / Monedas de Pago Rápido:</span>
+                    {[3, 5, 10, 20, 50, 100, 200].map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setMontoRecibidoInput(String(val))}
+                        style={{
+                          padding: "5px 10px",
+                          background: montoRecibidoInput === String(val) ? "#d97706" : "#ffffff",
+                          color: montoRecibidoInput === String(val) ? "white" : "#78350f",
+                          border: "1.5px solid #d97706",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                        }}
+                      >
+                        S/ {val === 3 ? "3 (Exacto)" : val}
+                      </button>
+                    ))}
+                  </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "12px", background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #fcd34d", textAlign: "center" }}>
                     <div>
@@ -2436,15 +2461,27 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     </div>
                     <div>
                       <small style={{ color: "#64748b", fontWeight: "bold", fontSize: "10.5px" }}>VUELTO</small>
-                      <p style={{ margin: "2px 0 0", fontWeight: "800", fontSize: "14.5px", color: (parseFloat(montoRecibidoInput) || 0) >= MONTO_TRAMITE ? "#16a34a" : "#dc2626" }}>
+                      <p style={{ margin: "2px 0 0", fontWeight: "800", fontSize: "14.5px", color: (parseFloat(montoRecibidoInput) || 0) >= MONTO_TRAMITE && (parseFloat(montoRecibidoInput) || 0) <= 200 ? "#16a34a" : "#dc2626" }}>
                         S/ {Math.max(0, (parseFloat(montoRecibidoInput) || 0) - MONTO_TRAMITE).toFixed(2)}
                       </p>
                     </div>
                   </div>
 
-                  {(parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE && (
+                  {!montoRecibidoInput.trim() ? (
+                    <div style={{ background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1", padding: "8px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", marginTop: "10px", textAlign: "center" }}>
+                      ℹ️ Ingrese el monto en efectivo entregado por el ciudadano o toque una denominación de billete arriba.
+                    </div>
+                  ) : (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE ? (
                     <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", padding: "8px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", marginTop: "10px", textAlign: "center" }}>
-                      ⚠️ El monto recibido es menor al total a pagar (S/ {MONTO_TRAMITE.toFixed(2)}). Por favor ingrese un monto suficiente.
+                      ⚠️ El monto ingresado (S/ {(parseFloat(montoRecibidoInput) || 0).toFixed(2)}) es menor a la tasa del trámite (S/ {MONTO_TRAMITE.toFixed(2)}).
+                    </div>
+                  ) : (parseFloat(montoRecibidoInput) || 0) > 200 ? (
+                    <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", padding: "8px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", marginTop: "10px", textAlign: "center" }}>
+                      🚫 El monto no puede superar S/ 200.00 (máxima denominación de billete peruano).
+                    </div>
+                  ) : (
+                    <div style={{ background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0", padding: "8px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", marginTop: "10px", textAlign: "center" }}>
+                      ✓ Monto correcto. Vuelto a entregar: S/ {((parseFloat(montoRecibidoInput) || 0) - MONTO_TRAMITE).toFixed(2)}
                     </div>
                   )}
                 </div>
@@ -2519,12 +2556,14 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 disabled={
                   procesando ||
                   !inspectorElegido ||
-                  (metodoPagoSeleccionado.toLowerCase().includes("efectivo") && (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE)
+                  (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
+                    ((parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
                 }
                 style={{
                   background:
                     inspectorElegido &&
-                    (!metodoPagoSeleccionado.toLowerCase().includes("efectivo") || (parseFloat(montoRecibidoInput) || 0) >= MONTO_TRAMITE)
+                    (!metodoPagoSeleccionado.toLowerCase().includes("efectivo") ||
+                      ((parseFloat(montoRecibidoInput) || 0) >= MONTO_TRAMITE && (parseFloat(montoRecibidoInput) || 0) <= 200))
                       ? "#16a34a"
                       : "#cbd5e1",
                   color: "white"
