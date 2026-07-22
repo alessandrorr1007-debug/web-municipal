@@ -67,74 +67,127 @@ const normalizarTexto = (texto) => {
 
 export { normalizarTexto };
 
-export const abrirPdf = async (url) => {
-  if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
+export const abrirPdf = async (urlInput) => {
+  if (!urlInput) {
     alert("El documento no está disponible actualmente.");
     return;
   }
 
-  const esFirebaseStorage = url.includes("firebasestorage.googleapis.com");
-  const esCloudinary = url.includes("cloudinary.com");
+  // Extraer string si se pasa un objeto
+  let url = typeof urlInput === "object"
+    ? (urlInput.archivoUrl || urlInput.url || urlInput.base64 || urlInput.dataUrl || urlInput.fileUrl || urlInput.uri || "")
+    : String(urlInput);
 
-  if (esFirebaseStorage) {
+  url = (url || "").trim();
+
+  if (!url) {
+    alert("El documento no está disponible actualmente.");
+    return;
+  }
+
+  // 1. Si es un Blob URL directo
+  if (url.startsWith("blob:")) {
+    window.open(url, "_blank");
+    return;
+  }
+
+  // 2. Si es una cadena Base64 pura (empieza con JVBERi... magic header PDF o hash largo)
+  if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("data:") && (url.startsWith("JVBERi") || url.length > 100)) {
+    url = `data:application/pdf;base64,${url}`;
+  }
+
+  // 3. Si es Data URL (Base64)
+  if (url.startsWith("data:")) {
+    try {
+      const parts = url.split(",");
+      const mime = parts[0].match(/:(.*?);/)?.[1] || "application/pdf";
+      const b64Data = parts[1] || "";
+      const byteCharacters = atob(b64Data);
+      const byteArrays = [];
+
+      for (let offset = 0; offset < byteCharacters.length; offset += 1024) {
+        const slice = byteCharacters.slice(offset, offset + 1024);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        byteArrays.push(new Uint8Array(byteNumbers));
+      }
+
+      const blob = new Blob(byteArrays, { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      const win = window.open(blobUrl, "_blank");
+      if (!win) {
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.target = "_blank";
+        a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+      return;
+    } catch (err) {
+      console.error("Error al decodificar PDF en Base64:", err);
+      window.open(url, "_blank");
+      return;
+    }
+  }
+
+  // 4. Si es HTTP / HTTPS
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    const esFirebaseStorage = url.includes("firebasestorage.googleapis.com");
+    const esCloudinary = url.includes("cloudinary.com");
+
+    if (esFirebaseStorage) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, "_blank");
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+          return;
+        }
+      } catch (e) {
+        // Fallback abrir directo
+      }
+    }
+
+    if (esCloudinary) {
+      try {
+        const token = await (await import("../firebase")).getIdToken();
+        if (token) {
+          const proxyUrl = `${API_URL}/api/documento-proxy?url=${encodeURIComponent(url)}`;
+          const res = await fetch(proxyUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            window.open(blobUrl, "_blank");
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+            return;
+          }
+        }
+      } catch (e) {
+        // Fallback abrir directo
+      }
+    }
+
     try {
       const res = await fetch(url);
       if (res.ok) {
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, "_blank");
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
         return;
       }
     } catch (e) {
-      // fall through
+      // Fallback si falla fetch por CORS
     }
-  }
 
-  if (esCloudinary) {
-    try {
-      const token = await (await import("../firebase")).getIdToken();
-      if (token) {
-        const proxyUrl = `${API_URL}/api/documento-proxy?url=${encodeURIComponent(url)}`;
-        const res = await fetch(proxyUrl, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const blob = await res.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          window.open(blobUrl, "_blank");
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-          return;
-        }
-        if (res.status === 404) {
-          alert("El documento no fue encontrado.");
-          return;
-        }
-        if (res.status === 401) {
-          alert("No tiene autorización para visualizar este documento.");
-          return;
-        }
-      }
-    } catch (e) {
-      // fall through
-    }
-  }
-
-  try {
-    const res = await fetch(url);
-    if (res.ok) {
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank");
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-      return;
-    }
-    if (res.status === 404) {
-      alert("El documento no fue encontrado.");
-      return;
-    }
-  } catch (e) {
-    // fall through
+    window.open(url, "_blank");
+    return;
   }
 
   alert("No se pudo cargar el documento. Intente nuevamente.");

@@ -104,11 +104,7 @@ function DetDocumentCard({ archivo, index }) {
         className="det-doc-btn"
         onClick={(e) => {
           e.preventDefault();
-          if (typeof url === "string" && url.startsWith("http")) {
-            abrirPdf(url);
-          } else {
-            alert("No se puede visualizar el documento directamente.");
-          }
+          abrirPdf(url);
         }}
       >
         Ver
@@ -463,9 +459,7 @@ function ModalRevisarDocumentos({ solicitud, onCerrar, onAprobarDocs, onRechazar
                     href="#"
                     onClick={(e) => {
                       e.preventDefault();
-                      const url = pdf.archivoUrl || pdf.url || pdf;
-                      if (typeof url === "string" && url.startsWith("http")) abrirPdf(url);
-                      else alert("No se puede visualizar el documento.");
+                      abrirPdf(pdf);
                     }}
                     style={{ fontSize: "12.5px", color: "#2563eb", fontWeight: "bold", textDecoration: "underline" }}
                   >
