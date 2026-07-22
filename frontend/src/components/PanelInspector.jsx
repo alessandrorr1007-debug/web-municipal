@@ -37,9 +37,7 @@ function PanelInspector({ seccion }) {
 
   // ESTADOS DEL FORMULARIO DE ATENCION
   const [resultadoDecisión, setResultadoDecisión] = useState("aprobado"); // "aprobado", "observado", "rechazado"
-  const [tipoObservacion, setTipoObservacion] = useState("general"); // "general", "plano", "hibrido"
   const [observacionesTexto, setObservacionesTexto] = useState("");
-  const [evidencias, setEvidencias] = useState([]);
   const [fechaVisita, setFechaVisita] = useState("");
   const [procesando, setProcesando] = useState(false);
 
@@ -193,38 +191,8 @@ function PanelInspector({ seccion }) {
     setResultadoDecisión("aprobado");
     setTipoObservacion(solicitud.tipoObservacion || "general");
     setObservacionesTexto("");
-    setEvidencias([]);
     setFechaVisita(solicitud.fechaVisitaInspector || formatearFechaLocal(new Date()));
     setTabModal(tabInicial);
-  };
-
-  // IMÁGENES DE EVIDENCIA EN BASE64
-  const convertirImagenABase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve({ nombre: file.name, url: reader.result });
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleSubirEvidencias = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    if (evidencias.length + files.length > 2) {
-      alert("Solo se pueden adjuntar hasta 2 fotografías de evidencia.");
-      return;
-    }
-    try {
-      const convertidas = await Promise.all(files.map(convertirImagenABase64));
-      setEvidencias((prev) => [...prev, ...convertidas]);
-    } catch {
-      alert("Error al cargar fotografías.");
-    }
-  };
-
-  const quitarEvidencia = (index) => {
-    setEvidencias((prev) => prev.filter((_, i) => i !== index));
   };
 
   // PROGRAMAR VISITA DE INSPECCIÓN
@@ -343,7 +311,6 @@ function PanelInspector({ seccion }) {
           estadoNormalizado: "APROBADO",
           resultadoInspeccion: "aprobado",
           observacionesInspector: observacionesTexto.trim().substring(0, 100),
-          evidenciasInspector: evidencias,
           fechaEvaluacionInspector: fechaHoraActual,
           inspectorNombre: nombreInspector,
           inspectorUid: usuario?.uid || "INSP-001",
@@ -387,7 +354,6 @@ function PanelInspector({ seccion }) {
           inspector: nombreInspector,
           accion: `Evaluación Técnica: OBSERVADO (${tipoEtiquetaMap[tipoObservacion] || "General"})`,
           comentarios: `Visita 1 Observada [${tipoEtiquetaMap[tipoObservacion] || "General"}]: ${observacionesTexto.trim().substring(0, 100)}. Reprogramado para 2da inspección el ${fechaVisita30}.`,
-          evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
         };
 
         const cambios = {
@@ -399,7 +365,6 @@ function PanelInspector({ seccion }) {
           resultadoInspeccion: "observado_1er_intento",
           tipoObservacion: tipoObservacion,
           observacionesInspector: observacionesTexto.trim().substring(0, 100),
-          evidenciasInspector: evidencias,
           fechaVisitaInspector: fechaVisita30,
           fechaSegundaVisita: fechaVisita30,
           proximaFechaInspeccion: fechaVisita30,
@@ -464,7 +429,6 @@ function PanelInspector({ seccion }) {
           inspector: nombreInspector,
           accion: "Evaluación Técnica: RECHAZADO DEFINITIVO (2do Intento)",
           comentarios: `2do Rechazo Técnico Definitivo: ${observacionesTexto.trim().substring(0, 100)}. Trámite cancelado definitivamente.`,
-          evidencias: evidencias.map((e) => e.nombre || "Fotografía de evidencia"),
         };
 
         const cambios = {
@@ -475,7 +439,6 @@ function PanelInspector({ seccion }) {
           estadoNormalizado: "RECHAZADO",
           resultadoInspeccion: "rechazado_definitivo",
           observacionesInspector: observacionesTexto.trim().substring(0, 100),
-          evidenciasInspector: evidencias,
           fechaEvaluacionInspector: fechaHoraActual,
           inspectorNombre: nombreInspector,
           inspectorUid: usuario?.uid || "INSP-001",
