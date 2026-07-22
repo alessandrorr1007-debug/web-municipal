@@ -2483,7 +2483,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
         {solicitudesFiltradas.length === 0 ? (
           <div className="empty-state">
-            <div style={{ fontSize: "36px", marginBottom: "10px" }}>💳</div>
             <h3>No se encontraron solicitudes</h3>
             <p>Ajusta el filtro por distrito o el término de búsqueda para localizar expedientes.</p>
           </div>
