@@ -2883,53 +2883,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   </div>
                 )}
               </div>
-
-              {/* MODIFICACIÓN DE FECHA EXPIRACIÓN DE LICENCIA (ADMINISTRATIVO / PRUEBAS) */}
-              <div style={{ background: "#f0f9ff", border: "1.5px solid #0284c7", padding: "16px", borderRadius: "10px", marginBottom: "16px" }}>
-                <h4 style={{ margin: "0 0 6px", color: "#0369a1", fontSize: "14px", fontWeight: "800", display: "flex", alignItems: "center", gap: "6px" }}>
-                  ⚙️ Modificar fechaExpiracionLicencia en Firebase
-                </h4>
-                <p style={{ margin: "0 0 10px", fontSize: "12.5px", color: "#334155" }}>
-                  Ajusta manualmente la fecha para probar las reglas de renovación (ej. colocar fecha con 11 meses de antigüedad).
-                </p>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                  <input
-                    type="date"
-                    defaultValue={
-                      (solicitudVerDetalle.fechaExpiracionLicencia ||
-                       solicitudVerDetalle.fechaEvaluacionInspector ||
-                       solicitudVerDetalle.fechaSolicitud || "").split(",")[0].split("/").reverse().join("-") || "2026-07-22"
-                    }
-                    id={`input-fecha-exp-${solicitudVerDetalle.id}`}
-                    style={{ padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", background: "#ffffff" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const inputElem = document.getElementById(`input-fecha-exp-${solicitudVerDetalle.id}`);
-                      if (!inputElem || !inputElem.value) {
-                        alert("⚠️ Seleccione una fecha válida.");
-                        return;
-                      }
-                      const nuevaFechaStr = inputElem.value;
-                      setProcesando(true);
-                      try {
-                        await actualizarFechaLicenciamiento(solicitudVerDetalle.id, nuevaFechaStr);
-                        alert(`✅ Campo 'fechaExpiracionLicencia' actualizado a "${nuevaFechaStr}" en la Base de Datos para el expediente EXP-${solicitudVerDetalle.id}.`);
-                        await cargarSolicitudes();
-                        setSolicitudVerDetalle(null);
-                      } catch (errExp) {
-                        alert(`❌ Error al actualizar fechaExpiracionLicencia: ${errExp.message}`);
-                      } finally {
-                        setProcesando(false);
-                      }
-                    }}
-                    style={{ padding: "9px 18px", background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: "800", fontSize: "13px", cursor: "pointer", boxShadow: "0 2px 6px rgba(2,132,199,0.3)" }}
-                  >
-                    💾 Guardar fechaExpiracionLicencia
-                  </button>
-                </div>
-              </div>
             </div>
 
             <div className="admin-form-actions" style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
