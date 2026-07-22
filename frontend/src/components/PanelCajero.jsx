@@ -4,6 +4,7 @@ import {
   actualizarSolicitud,
   guardarSolicitud,
   suscribirSolicitudes,
+  actualizarFechaLicenciamiento,
 } from "../services/solicitudService";
 import { crearNotificacion } from "../services/notificacionService";
 import { abrirPdf, obtenerBlobUrlParaPdf } from "../services/pdfService";
@@ -25,7 +26,10 @@ import {
   formatearFechaYYYYMMDD,
   MAX_INSPECCIONES_POR_DIA,
   buscarSiguienteDisponibilidad,
+  esSlotOcupadoParaInspector,
+  obtenerConteoInspectorEnFecha,
 } from "../config/inspeccionConfig";
+import { DISTRITOS_TRUJILLO, coincideDistrito } from "../config/estadosSolicitud";
 
 const MONTO_TRAMITE = 3.0;
 
@@ -38,20 +42,30 @@ const VisualizadorComprobanteSUNAT = ({ datos, idContainer = "comprobante-sunat-
   const numOperacion = datos.codComprobante || datos.numeroOperacion || solComp.numeroOperacion || "";
   const esFactura = tipoNorm.includes("factura") || numOperacion.startsWith("F");
 
-  const expId = `EXP-${String(datos.id || solComp.id || "").replace(/^EXP-/, "")}`;
-  const codComprobanteStr = numOperacion || `${esFactura ? "F001" : "B001"}-${expId.replace(/^EXP-/, "")}`;
+  const expIdNum = String(datos.id || solComp.id || "").replace(/^EXP-/, "");
+  const expId = `EXP-${expIdNum}`;
+  const codComprobanteStr = numOperacion.includes("-")
+    ? numOperacion
+    : `${esFactura ? "F001" : "B001"}-${expIdNum}`;
 
-  const fechaHora = solComp.fechaPago || datos.fechaPago || datos.fechaSolicitud || "22/07/2026, 11:27:01 p. m.";
+  const fechaHora = solComp.fechaPago || datos.fechaPago || datos.fechaSolicitud || datos.fecha || new Date().toLocaleString("es-PE");
+
+  // DATOS DEL ESTABLECIMIENTO
   const rucEstablecimiento = solComp.ruc || datos.ruc || "---";
-  const razonSocial = solComp.razonSocial || datos.razonSocial || solComp.nombreNegocio || datos.nombreNegocio || "CONTRIBUYENTE REGISTRADO S.A.C.";
-  const nombreComercial = solComp.nombreNegocio || datos.nombreNegocio || razonSocial;
-  const clienteNombre = obtenerNombreCiudadanoValido(solComp) || datos.nombreSolicitante || "SOLICITANTE";
-  const clienteDni = obtenerDniValido(solComp) || datos.dniSolicitante || "---";
-  const direccionFiscal = solComp.direccion || datos.direccion || "TRUJILLO - LA LIBERTAD";
+  const razonSocialEstablecimiento = solComp.razonSocial || datos.razonSocial || solComp.nombreNegocio || datos.nombreNegocio || "CONTRIBUYENTE REGISTRADO";
+  const nombreComercialEstablecimiento = solComp.nombreNegocio || datos.nombreNegocio || razonSocialEstablecimiento;
+  const direccionEstablecimiento = solComp.direccion || datos.direccion || "TRUJILLO - LA LIBERTAD";
 
+  // DATOS DEL CLIENTE / ADQUIRENTE
+  const clienteNombre = (solComp.nombresSolicitante && solComp.apellidosSolicitante)
+    ? `${solComp.nombresSolicitante} ${solComp.apellidosSolicitante}`
+    : (obtenerNombreCiudadanoValido(solComp) || datos.nombreSolicitante || "SOLICITANTE");
+  const clienteDni = obtenerDniValido(solComp) || datos.dniSolicitante || datos.dni || "---";
+
+  // MONTO E IGV (18% DESGLOSADO EXACTO: TOTAL S/ 3.00 = VALOR VENTA S/ 2.54 + IGV S/ 0.46)
   const montoTotal = Number(solComp.montoPagado || datos.montoPagado || MONTO_TRAMITE || 3.00);
-  const subtotalVal = (montoTotal / 1.18);
-  const igvVal = (montoTotal - subtotalVal);
+  const valorVentaVal = Math.round((montoTotal / 1.18) * 100) / 100;
+  const igvVal = Math.round((montoTotal - valorVentaVal) * 100) / 100;
 
   const metodoPagoStr = String(solComp.metodoPago || datos.metodoPago || "EFECTIVO EN CAJA MUNICIPAL");
   const esEfectivo = metodoPagoStr.toLowerCase().includes("efectivo");
@@ -59,33 +73,35 @@ const VisualizadorComprobanteSUNAT = ({ datos, idContainer = "comprobante-sunat-
   const montoRecibidoNum = Number(solComp.montoRecibido || datos.montoRecibido || 10.00);
   const vueltoNum = Number(solComp.vuelto || datos.vuelto || Math.max(0, montoRecibidoNum - montoTotal));
 
-  // NOMBRE REAL DEL CAJERO LOGUEADO
+  // CAJERO AUTÉNTICO LOGUEADO
   const nombreUsuarioActual = usuario?.nombre || usuario?.displayName || usuario?.email || "MARÍA LÓPEZ";
-  const cajeroResp = String(solComp.cajeraResponsable || datos.cajeraResponsable || solComp.usuarioCajero || nombreUsuarioActual).toUpperCase();
-  const codigoCajero = "CAJ-001";
-  const numeroCaja = "CAJA N° 01 - VENTANILLA PRINCIPAL";
-  const codigoInternoOp = `OP-2026-${expId.replace(/^EXP-/, "")}`;
+  const cajeroNombreReal = String(solComp.cajeraResponsable || datos.cajeraResponsable || solComp.usuarioCajero || nombreUsuarioActual).toUpperCase();
+  const codigoCajero = String(solComp.uidCajero || datos.uidCajero || usuario?.uid || "CAJ-001").slice(0, 10).toUpperCase();
 
-  const flowCode = solComp.flowOrder || solComp.codigoOperacion || datos.codigoOperacion || `FLOW-${expId.replace(/^EXP-/, "")}`;
-  const authCode = `AUTH-FLOW-${expId.replace(/^EXP-/, "")}`;
+  const codigoInternoOp = `OP-2026-${expIdNum}`;
+  const flowCode = solComp.flowOrder || solComp.codigoOperacion || datos.codigoOperacion || `FLOW-${expIdNum}`;
 
-  // HASH SHA-256 COMPLETO SIN RECORTES
-  const seedString = `${rucEstablecimiento}-${codComprobanteStr}-${montoTotal.toFixed(2)}-${fechaHora}`;
+  // CÓDIGO VERIFICACIÓN Y HASH SHA-256 SIMULADO DETERMINÍSTICO
+  const seedString = `${rucEstablecimiento}-${codComprobanteStr}-${montoTotal.toFixed(2)}-${expIdNum}`;
   let hashHex = "";
   for (let i = 0; i < 40; i++) {
-    const charCode = (seedString.charCodeAt(i % seedString.length) * (i + 13) * 7) % 16;
+    const charCode = (seedString.charCodeAt(i % seedString.length) * (i + 17) * 13) % 16;
     hashHex += charCode.toString(16);
   }
-  const codigoVerificacionStr = `V-${expId.replace(/^EXP-/, "")}-2026`;
+  const codigoVerificacionStr = `V-${expIdNum}-${hashHex.slice(0, 6).toUpperCase()}`;
 
-  const qrString = `20145532000|${esFactura ? "01" : "03"}|${codComprobanteStr}|${igvVal.toFixed(2)}|${montoTotal.toFixed(2)}|2026-07-22|${esFactura ? "6" : "1"}|${esFactura ? rucEstablecimiento : clienteDni}|${hashHex}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&margin=0&data=${encodeURIComponent(qrString)}`;
+  // QR CODE SUNAT OFICIAL
+  const tipoDocSunat = esFactura ? "01" : "03";
+  const tipoDocCliente = esFactura ? "6" : "1";
+  const docClienteNum = esFactura ? rucEstablecimiento : clienteDni;
+  const fechaDocSunat = new Date().toISOString().split("T")[0];
+  const qrString = `20145532000|${tipoDocSunat}|${codComprobanteStr}|${igvVal.toFixed(2)}|${montoTotal.toFixed(2)}|${fechaDocSunat}|${tipoDocCliente}|${docClienteNum}|${hashHex}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(qrString)}`;
 
-  // ESTADO DINÁMICO DEL EXPEDIENTE
+  // ESTADOS DEL EXPEDIENTE MUNICIPAL
   const estEstado = (solComp.estado || solComp.estadoNormalizado || "").toLowerCase();
-  const estPagoConfirmado = (solComp.estadoPago || "").toLowerCase() === "confirmado" || solComp.estadoPago === "Confirmado" || true;
   const estEnviadoFuncionario = Boolean(solComp.id || solComp.fechaSolicitud);
-  const estRevisionDocAprobada = estEstado.includes("revisado") || estEstado.includes("inspección") || estEstado.includes("aprobado");
+  const estRevisionDocAprobada = estEstado.includes("revisado") || estEstado.includes("validad") || estEstado.includes("inspección") || estEstado.includes("aprobado");
   const estInspeccionAprobada = estEstado.includes("aprobado") || estEstado.includes("licencia emitida");
 
   return (
@@ -94,20 +110,20 @@ const VisualizadorComprobanteSUNAT = ({ datos, idContainer = "comprobante-sunat-
       style={{
         background: "#ffffff",
         border: "2px solid #0f172a",
-        borderRadius: "10px",
+        borderRadius: "12px",
         padding: "24px",
         maxWidth: "680px",
         margin: "0 auto",
         textAlign: "left",
         fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+        boxShadow: "0 4px 24px rgba(15, 23, 42, 0.08)",
         color: "#0f172a"
       }}
     >
-      {/* 1. ENCABEZADO INSTITUCIONAL CON URL OFICIAL Y UN SOLO RUC MUNICIPAL */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px", borderBottom: "2px solid #0f172a", paddingBottom: "16px" }}>
+      {/* 1. ENCABEZADO INSTITUCIONAL CON RUC ÚNICO MUNICIPAL */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px", borderBottom: "2px solid #0f172a", paddingBottom: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-          <div style={{ width: "48px", height: "48px", background: "#0f172a", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontSize: "14px", fontWeight: "900", letterSpacing: "1px" }}>
+          <div style={{ width: "48px", height: "48px", background: "#0f172a", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontSize: "14px", fontWeight: "900", letterSpacing: "1px" }}>
             MPT
           </div>
           <div>
@@ -115,18 +131,15 @@ const VisualizadorComprobanteSUNAT = ({ datos, idContainer = "comprobante-sunat-
               MUNICIPALIDAD PROVINCIAL DE TRUJILLO
             </h2>
             <span style={{ fontSize: "11px", fontWeight: "700", color: "#2563eb", display: "block", marginTop: "2px" }}>
-              Gerencia de Desarrollo Económico Local — Subgerencia de Licencias de Funcionamiento
+              Gerencia de Desarrollo Económico Local — Subgerencia de Licencias
             </span>
             <span style={{ fontSize: "10.5px", color: "#475569", display: "block", marginTop: "2px" }}>
               Jr. Diego de Almagro N° 525, Trujillo — Tel: (044) 486000
             </span>
-            <span style={{ fontSize: "10.5px", color: "#2563eb", fontWeight: "700", display: "block" }}>
-              https://web-municipal-1.onrender.com
-            </span>
           </div>
         </div>
 
-        {/* RECUADRO FISCAL DERECHO - RUC UNICO DE MUNICIPALIDAD */}
+        {/* RECUADRO FISCAL DERECHO DE EMISIÓN */}
         <div style={{ border: `2.5px solid ${esFactura ? "#dc2626" : "#2563eb"}`, borderRadius: "8px", background: esFactura ? "#fef2f2" : "#eff6ff", padding: "10px 14px", textAlign: "center", minWidth: "210px" }}>
           <span style={{ fontSize: "11px", fontWeight: "900", textTransform: "uppercase", letterSpacing: "0.5px", color: "#475569", display: "block" }}>RUC: 20145532000</span>
           <span style={{ fontSize: "13.5px", fontWeight: "900", textTransform: "uppercase", color: esFactura ? "#991b1b" : "#1e40af", display: "block", margin: "3px 0" }}>
@@ -138,50 +151,59 @@ const VisualizadorComprobanteSUNAT = ({ datos, idContainer = "comprobante-sunat-
         </div>
       </div>
 
-      {/* 2. DATOS DE METADATA DE EMISIÓN (SIN DUPLICAR ESTADO DEL PAGO) */}
+      {/* 2. METADATA DE EMISIÓN (MONEDA ÚNICA: PEN) */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", background: "#f8fafc", padding: "10px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "16px", fontSize: "12px" }}>
         <div><strong>Código Expediente:</strong> <span style={{ color: "#2563eb", fontWeight: "800" }}>{expId}</span></div>
         <div><strong>Fecha/Hora Emisión:</strong> {fechaHora}</div>
         <div><strong>Moneda:</strong> PEN (Soles Peruanos)</div>
       </div>
 
-      {/* 3. DATOS DEL CLIENTE / CONTRIBUYENTE */}
-      <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "8px", padding: "14px", marginBottom: "16px" }}>
-        {esFactura ? (
-          <>
-            <h4 style={{ margin: "0 0 8px", color: "#991b1b", fontSize: "13px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "4px", textTransform: "uppercase" }}>
-              Datos del Cliente / Adquirente (Persona Jurídica)
-            </h4>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", fontSize: "12px" }}>
-              <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Razón Social:</strong> {razonSocial}</p>
-              <p style={{ margin: 0 }}><strong>RUC Contribuyente:</strong> {rucEstablecimiento}</p>
-              <p style={{ margin: 0 }}><strong>Nombre Comercial:</strong> {nombreComercial}</p>
-              <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Dirección Fiscal:</strong> {direccionFiscal}</p>
-            </div>
-          </>
-        ) : (
-          <>
-            <h4 style={{ margin: "0 0 8px", color: "#1e40af", fontSize: "13px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "4px", textTransform: "uppercase" }}>
-              Datos del Cliente / Adquirente (Persona Natural)
-            </h4>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", fontSize: "12px" }}>
-              <p style={{ margin: 0 }}><strong>Cliente / Adquirente:</strong> {clienteNombre}</p>
-              <p style={{ margin: 0 }}><strong>DNI / Doc. Identidad:</strong> {clienteDni}</p>
-            </div>
-          </>
-        )}
+      {/* 3. DATOS COMPLETOS DEL ESTABLECIMIENTO COMERCIAL Y DEL CLIENTE */}
+      <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "8px", padding: "14px", marginBottom: "16px", display: "grid", gap: "12px" }}>
+        {/* BLOQUE ESTABLECIMIENTO */}
+        <div>
+          <h4 style={{ margin: "0 0 6px", color: "#0f172a", fontSize: "12.5px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "3px", textTransform: "uppercase" }}>
+            🏢 Datos del Establecimiento Comercial
+          </h4>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", fontSize: "12px", color: "#334155" }}>
+            <p style={{ margin: 0 }}><strong>Razón Social:</strong> {razonSocialEstablecimiento}</p>
+            <p style={{ margin: 0 }}><strong>Nombre Comercial:</strong> {nombreComercialEstablecimiento}</p>
+            <p style={{ margin: 0 }}><strong>RUC del Local:</strong> {rucEstablecimiento}</p>
+            <p style={{ margin: 0 }}><strong>Dirección Fiscal:</strong> {direccionEstablecimiento}</p>
+          </div>
+        </div>
+
+        {/* BLOQUE CLIENTE / ADQUIRENTE */}
+        <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: "8px" }}>
+          <h4 style={{ margin: "0 0 6px", color: esFactura ? "#991b1b" : "#1e40af", fontSize: "12.5px", fontWeight: "800", borderBottom: "1px solid #e2e8f0", paddingBottom: "3px", textTransform: "uppercase" }}>
+            👤 Datos del Cliente / Adquirente
+          </h4>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", fontSize: "12px", color: "#334155" }}>
+            <p style={{ margin: 0 }}><strong>Cliente / Adquirente:</strong> {clienteNombre}</p>
+            <p style={{ margin: 0 }}><strong>DNI / Doc. Identidad:</strong> {clienteDni}</p>
+          </div>
+        </div>
       </div>
 
-      {/* 4. TABLA DE DETALLE ALINEADA */}
+      {/* 4. TABLA DE DETALLE SEGÚN TIPO DE COMPROBANTE (BOLETA DE VENTA VS FACTURA ELECTRÓNICA) */}
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px", fontSize: "12px", border: "1px solid #cbd5e1" }}>
         <thead>
-          <tr style={{ background: "#0f172a", color: "#ffffff" }}>
-            <th style={{ padding: "8px", textAlign: "center", width: "8%", textTransform: "uppercase" }}>CANT</th>
+          <tr style={{ background: esFactura ? "#7f1d1d" : "#0f172a", color: "#ffffff" }}>
+            <th style={{ padding: "8px", textAlign: "center", width: "7%", textTransform: "uppercase" }}>CANT</th>
             <th style={{ padding: "8px", textAlign: "left", textTransform: "uppercase" }}>DESCRIPCIÓN</th>
-            <th style={{ padding: "8px", textAlign: "right", width: "16%", textTransform: "uppercase" }}>VALOR UNIT</th>
-            <th style={{ padding: "8px", textAlign: "right", width: "16%", textTransform: "uppercase" }}>VALOR VENTA</th>
-            <th style={{ padding: "8px", textAlign: "right", width: "14%", textTransform: "uppercase" }}>IGV</th>
-            <th style={{ padding: "8px", textAlign: "right", width: "16%", textTransform: "uppercase" }}>IMPORTE</th>
+            {esFactura ? (
+              <>
+                <th style={{ padding: "8px", textAlign: "right", width: "16%", textTransform: "uppercase" }}>VAL. UNIT</th>
+                <th style={{ padding: "8px", textAlign: "right", width: "16%", textTransform: "uppercase" }}>VAL. VENTA</th>
+                <th style={{ padding: "8px", textAlign: "right", width: "14%", textTransform: "uppercase" }}>IGV (18%)</th>
+                <th style={{ padding: "8px", textAlign: "right", width: "16%", textTransform: "uppercase" }}>IMPORTE</th>
+              </>
+            ) : (
+              <>
+                <th style={{ padding: "8px", textAlign: "right", width: "18%", textTransform: "uppercase" }}>PRECIO UNIT.</th>
+                <th style={{ padding: "8px", textAlign: "right", width: "20%", textTransform: "uppercase" }}>IMPORTE TOTAL</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -191,48 +213,68 @@ const VisualizadorComprobanteSUNAT = ({ datos, idContainer = "comprobante-sunat-
               <strong>Derecho de Trámite — {solComp.tipoTramite || datos.tipoTramite || "Licencia Municipal de Funcionamiento"}</strong>
               <small style={{ display: "block", color: "#64748b" }}>Expediente Municipal N° {expId}</small>
             </td>
-            <td style={{ padding: "10px", textAlign: "right" }}>S/ {subtotalVal.toFixed(2)}</td>
-            <td style={{ padding: "10px", textAlign: "right" }}>S/ {subtotalVal.toFixed(2)}</td>
-            <td style={{ padding: "10px", textAlign: "right" }}>S/ {esFactura ? igvVal.toFixed(2) : "0.00"}</td>
-            <td style={{ padding: "10px", textAlign: "right", fontWeight: "800", color: "#0f172a" }}>S/ {montoTotal.toFixed(2)}</td>
+            {esFactura ? (
+              <>
+                <td style={{ padding: "10px", textAlign: "right" }}>S/ {valorVentaVal.toFixed(2)}</td>
+                <td style={{ padding: "10px", textAlign: "right" }}>S/ {valorVentaVal.toFixed(2)}</td>
+                <td style={{ padding: "10px", textAlign: "right" }}>S/ {igvVal.toFixed(2)}</td>
+                <td style={{ padding: "10px", textAlign: "right", fontWeight: "800", color: "#0f172a" }}>S/ {montoTotal.toFixed(2)}</td>
+              </>
+            ) : (
+              <>
+                <td style={{ padding: "10px", textAlign: "right", fontWeight: "700" }}>S/ {montoTotal.toFixed(2)}</td>
+                <td style={{ padding: "10px", textAlign: "right", fontWeight: "900", color: "#0f172a" }}>S/ {montoTotal.toFixed(2)}</td>
+              </>
+            )}
           </tr>
         </tbody>
       </table>
 
-      {/* 5. SECCIÓN DE TOTALES (SIN REPETIR TOTAL PAGADO) */}
-      <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "8px", border: "1px solid #cbd5e1", marginBottom: "16px" }}>
-        <p style={{ margin: "0 0 8px", fontWeight: "800", fontSize: "12px", color: "#0f172a" }}>
-          {convertirNumeroALetras(montoTotal)}
-        </p>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #e2e8f0", paddingTop: "8px", fontSize: "12px" }}>
-          {esFactura ? (
-            <div style={{ color: "#475569", width: "100%", display: "flex", justifyContent: "space-between" }}>
-              <span>VALOR DE VENTA: <strong>S/ {subtotalVal.toFixed(2)}</strong></span>
-              <span>IGV (18%): <strong>S/ {igvVal.toFixed(2)}</strong></span>
-              <span style={{ fontSize: "13.5px", fontWeight: "900", color: "#dc2626" }}>IMPORTE TOTAL: S/ {montoTotal.toFixed(2)}</span>
-            </div>
-          ) : (
-            <div style={{ color: "#475569", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>RESUMEN IMPORTE: <strong>S/ {montoTotal.toFixed(2)}</strong></span>
-              <span style={{ fontSize: "13.5px", fontWeight: "900", color: "#2563eb" }}>IMPORTE TOTAL: S/ {montoTotal.toFixed(2)}</span>
-            </div>
+      {/* 5. RESUMEN UNIFICADO DE TOTALES SIN DUPLICADOS */}
+      <div style={{ background: "#f8fafc", padding: "14px 18px", borderRadius: "8px", border: "1px solid #cbd5e1", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
+        <div style={{ fontSize: "12px", color: "#334155", flex: 1 }}>
+          <p style={{ margin: "0 0 6px", fontWeight: "800", color: "#0f172a" }}>
+            {convertirNumeroALetras(montoTotal)}
+          </p>
+          {esFactura && (
+            <p style={{ margin: 0, fontSize: "11.5px", color: "#64748b" }}>
+              Operación Gravada sujeta al Impuesto General a las Ventas (18%).
+            </p>
           )}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: "240px", fontSize: "12px" }}>
+          {esFactura && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
+                <span>Valor de Venta:</span>
+                <strong>S/ {valorVentaVal.toFixed(2)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
+                <span>IGV (18%):</span>
+                <strong>S/ {igvVal.toFixed(2)}</strong>
+              </div>
+            </>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", borderTop: esFactura ? "1.5px solid #0f172a" : "none", paddingTop: "6px", fontSize: "14px", fontWeight: "900", color: "#0f172a" }}>
+            <span>Importe Total:</span>
+            <span style={{ color: esFactura ? "#dc2626" : "#2563eb" }}>S/ {montoTotal.toFixed(2)}</span>
+          </div>
         </div>
       </div>
 
-      {/* 6. INFORMACIÓN DEL PAGO COMPLETA CON USUARIO REAL */}
+      {/* 6. INFORMACIÓN DEL PAGO Y CAJERO CON NOMBRE REAL */}
       <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "8px", padding: "12px 14px", marginBottom: "16px", fontSize: "11.5px" }}>
         <strong style={{ color: "#0f172a", fontSize: "12px", display: "block", marginBottom: "6px", borderBottom: "1px solid #e2e8f0", paddingBottom: "3px", textTransform: "uppercase" }}>
-          Información Detallada del Pago
+          Información del Pago y Ventanilla
         </strong>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px" }}>
           <p style={{ margin: 0 }}><strong>Método de Pago:</strong> {metodoPagoStr.toUpperCase()}</p>
           <p style={{ margin: 0 }}><strong>Estado del Pago:</strong> <span style={{ color: "#16a34a", fontWeight: "bold" }}>CONFIRMADO</span></p>
           <p style={{ margin: 0 }}><strong>Fecha y Hora:</strong> {fechaHora}</p>
-          <p style={{ margin: 0 }}><strong>Cajero Responsable:</strong> {cajeroResp}</p>
+          <p style={{ margin: 0 }}><strong>Cajero Responsable:</strong> {cajeroNombreReal}</p>
           <p style={{ margin: 0 }}><strong>Código del Cajero:</strong> {codigoCajero}</p>
-          <p style={{ margin: 0 }}><strong>Caja:</strong> {numeroCaja}</p>
+          <p style={{ margin: 0 }}><strong>Ventanilla:</strong> Ventanilla Principal - Caja 01</p>
           <p style={{ margin: 0, gridColumn: "span 2" }}><strong>Código Interno de Operación:</strong> {codigoInternoOp}</p>
 
           {esEfectivo ? (
@@ -242,33 +284,41 @@ const VisualizadorComprobanteSUNAT = ({ datos, idContainer = "comprobante-sunat-
             </>
           ) : (
             <>
-              <p style={{ margin: 0, fontWeight: "bold" }}><strong>ID de Transacción:</strong> {flowCode}</p>
-              <p style={{ margin: 0, color: "#2563eb", fontWeight: "bold" }}><strong>Código Autorización:</strong> {authCode}</p>
-              <p style={{ margin: 0, color: "#16a34a", fontWeight: "bold" }}><strong>Estado Transacción:</strong> APROBADO</p>
+              <p style={{ margin: 0, fontWeight: "bold" }}><strong>ID Transacción Flow:</strong> {flowCode}</p>
+              <p style={{ margin: 0, color: "#2563eb", fontWeight: "bold" }}><strong>Estado Pasarela:</strong> APROBADO</p>
             </>
           )}
         </div>
       </div>
 
-      {/* 7. PIE DE SEGURIDAD ELECTRÓNICA Y QR */}
+      {/* 7. PIE DE SEGURIDAD ELECTRÓNICA, CÓDIGO VERIFICACIÓN, HASH Y QR REAL */}
       <div style={{ borderTop: "1.5px solid #cbd5e1", paddingTop: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
-        <div style={{ fontSize: "11px", color: "#475569", flex: 1, lineHeight: "1.4" }}>
-          <p style={{ margin: "0 0 2px", fontWeight: "bold", color: "#0f172a" }}>
+        <div style={{ fontSize: "10.5px", color: "#475569", flex: 1, lineHeight: "1.45" }}>
+          <p style={{ margin: "0 0 3px", fontWeight: "bold", color: "#0f172a", fontSize: "11px" }}>
             Representación impresa de la {esFactura ? "Factura Electrónica" : "Boleta de Venta Electrónica"}
           </p>
-          <p style={{ margin: 0, fontSize: "10.5px", color: "#64748b" }}>
-            Moneda: PEN (Soles Peruanos)
+          <p style={{ margin: "0 0 3px" }}>
+            <strong>Cód. Verificación:</strong> {codigoVerificacionStr}
+          </p>
+          <p style={{ margin: "0 0 6px", wordBreak: "break-all", fontFamily: "monospace", fontSize: "9.5px", color: "#64748b" }}>
+            <strong>Hash SHA-256:</strong> {hashHex}
+          </p>
+          <p style={{ margin: 0, fontSize: "9.5px", fontStyle: "italic", color: "#64748b", borderTop: "1px solid #e2e8f0", paddingTop: "4px" }}>
+            {esFactura
+              ? "Representación impresa de la Factura Electrónica emitida en el Sistema de Emisión Electrónica SUNAT."
+              : "Representación impresa de la Boleta de Venta Electrónica. Este comprobante no otorga derecho a crédito fiscal conforme a la normativa tributaria vigente."}
           </p>
         </div>
 
-        <div style={{ border: "1px solid #0f172a", padding: "6px", borderRadius: "6px", background: "white", textAlign: "center", width: "135px" }}>
+        {/* CÓDIGO QR REAL DE SEGURIDAD */}
+        <div style={{ border: "1px solid #0f172a", padding: "6px", borderRadius: "6px", background: "white", textAlign: "center", minWidth: "120px" }}>
           <img
             src={qrUrl}
             alt="Código QR SUNAT"
             style={{ width: "95px", height: "95px", display: "block", margin: "0 auto" }}
           />
-          <span style={{ fontSize: "7.5px", fontWeight: "600", color: "#475569", display: "block", marginTop: "4px", lineHeight: "1.2" }}>
-            Escanee este código para verificar la autenticidad del comprobante.
+          <span style={{ fontSize: "7.5px", fontWeight: "700", color: "#475569", display: "block", marginTop: "4px", lineHeight: "1.2" }}>
+            Escanee este QR para validar en SUNAT
           </span>
         </div>
       </div>
@@ -281,6 +331,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [filtroDistrito, setFiltroDistrito] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [errorFechaRange, setErrorFechaRange] = useState("");
@@ -399,14 +450,13 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const dirNorm = (dir || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const distNorm = (dist || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-      const distritosTrujillo = [
-        "trujillo", "victor larco", "moche", "el porvenir", "la esperanza",
-        "florencia de mora", "huanchaco", "salaverry", "laredo", "simbal", "poroto"
-      ];
+      const distritosTrujilloNorm = DISTRITOS_TRUJILLO.map((d) =>
+        d.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      );
 
       const esEnTrujillo =
         provNorm.includes("trujillo") ||
-        (depNorm.includes("libertad") && distritosTrujillo.some((d) => distNorm.includes(d) || dirNorm.includes(d))) ||
+        (depNorm.includes("libertad") && distritosTrujilloNorm.some((d) => distNorm.includes(d) || dirNorm.includes(d))) ||
         (depNorm.includes("libertad") && provNorm.includes("trujillo"));
 
       // Inferir giro comercial según actividad económica obtenida de SUNAT
@@ -467,55 +517,38 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     reader.readAsDataURL(file);
   };
 
-  const obtenerConteoInspectorEnFecha = useCallback((inspectorUid, fechaStr) => {
-    if (!fechaStr || !inspectorUid) return 0;
-    return solicitudes.filter((s) => {
-      const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
-      const esMismo = u === inspectorUid || u.includes(inspectorUid);
-      const esFecha = s.fechaVisitaInspector === fechaStr;
-      const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
-      return esMismo && esFecha && noCerrado;
-    }).length;
+  const obtenerConteoInspectorEnFechaLocal = useCallback((inspectorUid, fechaStr) => {
+    return obtenerConteoInspectorEnFecha(solicitudes, inspectorUid, fechaStr);
   }, [solicitudes]);
 
   const esHorarioOcupado = useCallback((inspectorUid, fechaStr, slotValue) => {
-    if (!fechaStr || !inspectorUid || !slotValue) return false;
-    return solicitudes.some((s) => {
-      const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
-      const esMismo = u === inspectorUid || u.includes(inspectorUid);
-      const esFecha = s.fechaVisitaInspector === fechaStr;
-      const esSlot = (s.horaVisitaInspector === slotValue || (s.horaVisitaLabel || "").includes(slotValue));
-      const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
-      return esMismo && esFecha && esSlot && noCerrado;
-    });
+    return esSlotOcupadoParaInspector(solicitudes, inspectorUid, fechaStr, slotValue);
   }, [solicitudes]);
 
-  // EJECUCIÓN AUTOMÁTICA DE ASIGNACIÓN
-  useEffect(() => {
-    const res = buscarSiguienteDisponibilidad(solicitudes);
-    if (res.exito) {
+  // EJECUCIÓN AUTOMÁTICA DE ASIGNACIÓN (SIGUIENTE HORARIO Y DÍA LIBRE)
+  const autoAsignarHorarioLibre = useCallback((lista = solicitudes) => {
+    const res = buscarSiguienteDisponibilidad(lista);
+    if (res && res.exito) {
       setFechaInspeccion(res.fechaInspeccion);
       setSlotInspeccion(res.slotInspeccion);
       setInspectorElegido(res.inspector);
       setSinDisponibilidadInspeccion(false);
+      return res;
     } else {
       setSinDisponibilidadInspeccion(true);
+      return null;
     }
   }, [solicitudes]);
 
   useEffect(() => {
+    autoAsignarHorarioLibre(solicitudes);
+  }, [solicitudes, autoAsignarHorarioLibre]);
+
+  useEffect(() => {
     if (solicitudCobro) {
-      const res = buscarSiguienteDisponibilidad(solicitudes);
-      if (res.exito) {
-        setFechaInspeccion(res.fechaInspeccion);
-        setSlotInspeccion(res.slotInspeccion);
-        setInspectorElegido(res.inspector);
-        setSinDisponibilidadInspeccion(false);
-      } else {
-        setSinDisponibilidadInspeccion(true);
-      }
+      autoAsignarHorarioLibre(solicitudes);
     }
-  }, [solicitudCobro, solicitudes]);
+  }, [solicitudCobro, solicitudes, autoAsignarHorarioLibre]);
 
   const cargarSolicitudes = async () => {
     try {
@@ -668,28 +701,93 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     return `${y}-${m}-${d}`;
   }, []);
 
-  // BUSQUEDA Y FILTRADO DE EXPEDIENTES (RUC, CÓDIGO EXP- O NOMBRE DE NEGOCIO)
+  const parseFechaGenerica = useCallback((val) => {
+    if (!val) return null;
+    if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+    if (typeof val === "object" && val.seconds) {
+      return new Date(val.seconds * 1000);
+    }
+    if (typeof val === "object" && typeof val.toDate === "function") {
+      try { return val.toDate(); } catch (e) {}
+    }
+    if (typeof val === "number") return new Date(val);
+    const str = String(val).trim();
+    if (!str) return null;
+    if (str.includes("T")) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) return d;
+    }
+    if (str.includes("-")) {
+      const parts = str.split("-");
+      if (parts.length === 3) {
+        const y = parts[0].length === 4 ? Number(parts[0]) : Number(parts[2]);
+        const m = Number(parts[1]) - 1;
+        const d = parts[0].length === 4 ? Number(parts[2]) : Number(parts[0]);
+        return new Date(y, m, d);
+      }
+    }
+    if (str.includes("/")) {
+      const parts = str.split("/");
+      if (parts.length === 3) {
+        const d = Number(parts[0]);
+        const m = Number(parts[1]) - 1;
+        const y = parts[2].length === 4 ? Number(parts[2]) : Number(`20${parts[2]}`);
+        return new Date(y, m, d);
+      }
+    }
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? null : d;
+  }, []);
+
+  // BUSQUEDA Y FILTRADO DE EXPEDIENTES (RUC, CÓDIGO EXP-, NOMBRE DE NEGOCIO O DISTRITO DE TRUJILLO)
   const solicitudesFiltradas = useMemo(() => {
     const lista = Array.isArray(solicitudes) ? solicitudes : [];
 
     return lista.filter((s) => {
       if (!s) return false;
 
-      // Si el campo de búsqueda está vacío, mostrar TODAS las solicitudes registradas
+      // Filtro por Distrito (12 Distritos de Trujillo)
+      if (filtroDistrito && filtroDistrito !== "todos") {
+        if (!coincideDistrito(s.distrito || s.distritoEstablecimiento, filtroDistrito)) {
+          return false;
+        }
+      }
+
+      // Filtro por Rango de Fechas (Desde / Hasta)
+      if (fechaDesde) {
+        const fSol = parseFechaGenerica(s.fechaVisitaInspector || s.fechaSolicitud || s.fecha || s.creadoEn);
+        const fDesde = parseFechaGenerica(fechaDesde);
+        if (fSol && fDesde) {
+          fDesde.setHours(0, 0, 0, 0);
+          if (fSol < fDesde) return false;
+        }
+      }
+      if (fechaHasta) {
+        const fSol = parseFechaGenerica(s.fechaVisitaInspector || s.fechaSolicitud || s.fecha || s.creadoEn);
+        const fHasta = parseFechaGenerica(fechaHasta);
+        if (fSol && fHasta) {
+          fHasta.setHours(23, 59, 59, 999);
+          if (fSol > fHasta) return false;
+        }
+      }
+
+      // Si el campo de búsqueda está vacío, mostrar TODAS las solicitudes registradas del distrito y rango de fecha
       if (!busqueda || !busqueda.trim()) return true;
       const q = busqueda.toLowerCase().trim();
       const ruc = String(s.ruc || "").toLowerCase();
       const idExp = String(s.id || "").toLowerCase();
       const codExp = `exp-${idExp}`;
       const negocio = String(s.nombreNegocio || s.razonSocial || "").toLowerCase();
+      const distritoStr = String(s.distrito || "").toLowerCase();
 
-      return ruc.includes(q) || idExp.includes(q) || codExp.includes(q) || negocio.includes(q);
+      return ruc.includes(q) || idExp.includes(q) || codExp.includes(q) || negocio.includes(q) || distritoStr.includes(q);
     });
-  }, [solicitudes, busqueda]);
+  }, [solicitudes, busqueda, filtroDistrito, fechaDesde, fechaHasta, parseFechaGenerica]);
 
   // CONFIRMAR PAGO Y PROGRAMAR INSPECCIÓN OFICIAL
   const ejecutarCobro = async () => {
     if (!solicitudCobro) return;
+    const idExpLimpio = String(solicitudCobro.id).replace(/^EXP-/, "");
     if (!inspectorElegido) {
       alert("⚠️ Por favor seleccione un inspector para la visita técnica.");
       return;
@@ -764,7 +862,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
     setProcesando(true);
     try {
-      const codComprobante = "BOL-CAJA-2026-" + Date.now().toString().slice(-6);
+      const idExpLimpio = String(solicitudCobro.id).replace(/^EXP-/, "");
+      const esFacturaDoc = (solicitudCobro.tipoComprobante || "").toLowerCase().includes("factura");
+      const codComprobante = esFacturaDoc ? `F001-${idExpLimpio}` : `B001-${idExpLimpio}`;
       const fechaHoraActual = formatearFechaHora();
       const nombreCajera = usuario?.nombre || usuario?.email || "Cajera de Ventanilla";
       const uidCajera = usuario?.uid || "CAJERA-001";
@@ -834,7 +934,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const actualizada = { ...solicitudCobro, ...cambios, codComprobante };
       setComprobanteGenerado(actualizada);
       setSolicitudCobro(null);
-      setInspectorElegido(null);
+      autoAsignarHorarioLibre(solicitudes);
       await cargarSolicitudes();
     } catch (err) {
       console.error(err);
@@ -874,23 +974,21 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       alert("⚠️ Complete los datos obligatorios del establecimiento comercial.");
       return;
     }
-    if (!inspectorElegido) {
-      alert("⚠️ Seleccione un inspector para la visita técnica.");
-      return;
+    let inspActual = inspectorElegido;
+    let fechaActual = fechaInspeccion;
+    let slotActual = slotInspeccion;
+
+    if (!inspActual || esHorarioOcupado(inspActual.uid || inspActual.nombre, fechaActual, slotActual)) {
+      const resAuto = autoAsignarHorarioLibre(solicitudes);
+      if (resAuto && resAuto.exito) {
+        inspActual = resAuto.inspector;
+        fechaActual = resAuto.fechaInspeccion;
+        slotActual = resAuto.slotInspeccion;
+      }
     }
 
-    // Validaciones de inspección
-    if (esHorarioPasado(fechaInspeccion, "00:00")) {
-      alert("⚠️ No se permite programar inspecciones para fechas pasadas.");
-      return;
-    }
-    const cuposActuales = obtenerConteoInspectorEnFecha(inspectorElegido.uid || inspectorElegido.nombre, fechaInspeccion);
-    if (cuposActuales >= 4) {
-      alert(`⚠️ El inspector ${inspectorElegido.nombre} ha alcanzado el límite máximo de 4 inspecciones para el ${fechaInspeccion}.`);
-      return;
-    }
-    if (esHorarioOcupado(inspectorElegido.uid || inspectorElegido.nombre, fechaInspeccion, slotInspeccion)) {
-      alert(`⚠️ El inspector ${inspectorElegido.nombre} ya tiene una visita asignada a las ${slotInspeccion} el día ${fechaInspeccion}.`);
+    if (!inspActual) {
+      alert("⚠️ No hay inspectores con cupos disponibles en este momento. Seleccione otra fecha.");
       return;
     }
 
@@ -915,11 +1013,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
     setProcesando(true);
     try {
-      const idExp = Date.now().toString().slice(-6);
+      const idExp = Date.now().toString().slice(-8);
       const esFactura = tipoComprobanteSeleccionado === "Factura";
       const codComprobante = esFactura
-        ? "F001-" + Date.now().toString().slice(-6)
-        : "B001-" + Date.now().toString().slice(-6);
+        ? `F001-${idExp}`
+        : `B001-${idExp}`;
       const nombreComprobanteTitulo = esFactura ? "FACTURA ELECTRÓNICA" : "BOLETA DE VENTA ELECTRÓNICA";
       const fechaHoraActual = formatearFechaHora();
       const nombreCajera = usuario?.nombre || usuario?.email || "Cajera de Ventanilla";
@@ -937,6 +1035,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         nombreSolicitante: (nombresForm && apellidosForm) ? `${nombresForm} ${apellidosForm}` : (razonSocialForm || nombreNegocioForm || "SOLICITANTE PRESENCIAL"),
         correoUsuario: correoForm || `${rucForm}@empresa.pe`,
         telefono: telefonoForm,
+        telefonoSolicitante: telefonoForm,
+        telefonoContacto: telefonoForm,
+        celular: telefonoForm,
         ruc: rucForm,
         nombreNegocio: nombreNegocioForm,
         razonSocial: razonSocialForm || nombreNegocioForm,
@@ -1026,7 +1127,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           </div>
         `;
 
-        // CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO OFICIAL (BOLETA O FACTURA CON ESTRUCTURA SUNAT SOLICITADA - 100% COMPATIBLE CON GMAIL)
+        // CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO OFICIAL (BOLETA O FACTURA CON ESTRUCTURA SUNAT SOLICITADA)
         const isFacturaMail = tipoComprobanteSeleccionado === "Factura";
         const nombreComprobanteMail = isFacturaMail ? "FACTURA ELECTRÓNICA" : "BOLETA DE VENTA ELECTRÓNICA";
         const serieNumMail = codComprobante;
@@ -1034,63 +1135,73 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         const igvMail = "0.46";
         const totalMail = "3.00";
         const totalLetrasMail = "SON: TRES Y 00/100 SOLES.";
-        const hashMail = `MUNI-TRU-2026-${serieNumMail.replace('-', '')}-SHA256`;
-        const verifCodeMail = `VERIF-${serieNumMail.replace('-', '')}`;
+        const hashMail = `MUNI-TRU-2026-${serieNumMail.replace('-', '')}-SHA256-A8F9`;
+        const verifCodeMail = `V-${expIdLimpio}-${hashMail.slice(-6)}`;
         const qrMailUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(`20145532000|${isFacturaMail ? '01' : '03'}|${serieNumMail}|0.46|3.00|2026-07-22|${isFacturaMail ? '6' : '1'}|${isFacturaMail ? rucForm : dniForm}|${hashMail}`)}`;
+        const cajeroMailNombre = (usuario?.nombre || usuario?.displayName || usuario?.email || "María López").toUpperCase();
 
         const htmlBoletaElectronica = `
           <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 2px solid #0f172a; border-radius: 12px; padding: 24px; color: #0f172a;">
             <!-- ENCABEZADO MUNICIPAL -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; color: #ffffff; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; color: #ffffff; border-radius: 8px; margin-bottom: 16px; text-align: center;">
               <tr>
                 <td style="padding: 16px;">
                   <h2 style="margin: 0; font-size: 18px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
-                  <span style="font-size: 11px; opacity: 0.9; text-transform: uppercase; font-weight: bold; display: block; margin-top: 4px; color: #cbd5e1;">Módulo de Atención y Caja Municipal</span>
+                  <span style="font-size: 11px; opacity: 0.9; text-transform: uppercase; font-weight: bold; display: block; margin-top: 4px; color: #cbd5e1;">Subgerencia de Licencias — Módulo de Atención y Caja Municipal</span>
                   <span style="font-size: 10.5px; opacity: 0.8; display: block; margin-top: 2px; color: #94a3b8;">RUC: 20145532000 — Jr. Diego de Almagro N° 525, Trujillo</span>
                 </td>
               </tr>
             </table>
 
             <!-- NUMERACIÓN DE COMPROBANTE -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="border: 2px solid ${isFacturaMail ? '#dc2626' : '#2563eb'}; background-color: ${isFacturaMail ? '#fef2f2' : '#eff6ff'}; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="border: 2px solid ${isFacturaMail ? '#dc2626' : '#2563eb'}; background-color: ${isFacturaMail ? '#fef2f2' : '#eff6ff'}; border-radius: 8px; margin-bottom: 16px; text-align: center;">
               <tr>
                 <td style="padding: 14px;">
                   <span style="font-weight: 900; font-size: 15px; display: block; color: ${isFacturaMail ? '#991b1b' : '#1e40af'}; text-transform: uppercase;">${nombreComprobanteMail}</span>
                   <span style="font-size: 18px; font-weight: 900; color: ${isFacturaMail ? '#dc2626' : '#2563eb'}; display: block; margin-top: 2px;">N° ${serieNumMail}</span>
-                  <p style="margin: 4px 0 0; font-size: 12px; color: #475569;">Fecha: ${fechaHoraActual}</p>
+                  <p style="margin: 4px 0 0; font-size: 12px; color: #475569;">Fecha/Hora: ${fechaHoraActual} | Moneda: PEN</p>
                 </td>
               </tr>
             </table>
 
-            <!-- DATOS DEL CONTRIBUYENTE Y CLIENTE -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
+            <!-- DATOS DE ESTABLECIMIENTO Y CLIENTE -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 16px; font-size: 12.5px;">
               <tr>
-                <td style="padding: 16px;">
-                  <h4 style="margin: 0 0 10px; color: #0f172a; font-size: 14px; font-weight: 800; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px;">
-                    ${isFacturaMail ? "🏢 Datos del Cliente (Factura Electrónica)" : "📄 Datos del Cliente / Adquirente (Boleta de Venta)"}
+                <td style="padding: 14px;">
+                  <h4 style="margin: 0 0 8px; color: #0f172a; font-size: 13px; font-weight: 800; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; text-transform: uppercase;">
+                    🏢 Datos del Establecimiento Comercial
                   </h4>
-                  ${isFacturaMail ? `
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>Razón Social:</strong> ${razonSocialForm || nombreNegocioForm}</p>
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>RUC Contribuyente:</strong> ${rucForm}</p>
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>Dirección Fiscal:</strong> ${direccionForm}</p>
-                  ` : `
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>Código Expediente:</strong> EXP-${expIdLimpio}</p>
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>Cliente / Adquirente:</strong> ${nombresForm} ${apellidosForm}</p>
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>DNI / Doc. Identidad:</strong> ${dniForm}</p>
-                  `}
+                  <p style="margin: 3px 0;"><strong>Razón Social:</strong> ${razonSocialForm || nombreNegocioForm}</p>
+                  <p style="margin: 3px 0;"><strong>Nombre Comercial:</strong> ${nombreNegocioForm}</p>
+                  <p style="margin: 3px 0;"><strong>RUC del Local:</strong> ${rucForm}</p>
+                  <p style="margin: 3px 0;"><strong>Dirección Fiscal:</strong> ${direccionForm}</p>
+                  <div style="border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 6px;">
+                    <h4 style="margin: 0 0 6px; color: ${isFacturaMail ? '#991b1b' : '#1e40af'}; font-size: 13px; font-weight: 800; text-transform: uppercase;">
+                      👤 Datos del Cliente / Adquirente
+                    </h4>
+                    <p style="margin: 3px 0;"><strong>Cliente / Adquirente:</strong> ${nombresForm} ${apellidosForm}</p>
+                    <p style="margin: 3px 0;"><strong>DNI / Doc. Identidad:</strong> ${dniForm}</p>
+                    <p style="margin: 3px 0;"><strong>Código Expediente:</strong> EXP-${expIdLimpio}</p>
+                  </div>
                 </td>
               </tr>
             </table>
 
             <!-- GRILLA TABULAR -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-bottom: 20px; font-size: 12.5px; border: 1px solid #cbd5e1;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-bottom: 16px; font-size: 12px; border: 1px solid #cbd5e1;">
               <thead>
-                <tr style="background-color: #0f172a; color: #ffffff;">
-                  <th style="padding: 8px; text-align: center; width: 10%; color: #ffffff;">CANT</th>
+                <tr style="background-color: ${isFacturaMail ? '#7f1d1d' : '#0f172a'}; color: #ffffff;">
+                  <th style="padding: 8px; text-align: center; width: 8%; color: #ffffff;">CANT</th>
                   <th style="padding: 8px; text-align: left; color: #ffffff;">DESCRIPCIÓN</th>
-                  <th style="padding: 8px; text-align: right; width: 20%; color: #ffffff;">P. UNIT</th>
-                  ${isFacturaMail ? `<th style="padding: 8px; text-align: right; width: 20%; color: #ffffff;">VALOR VENTA</th>` : ''}
-                  <th style="padding: 8px; text-align: right; width: 20%; color: #ffffff;">IMPORTE</th>
+                  ${isFacturaMail ? `
+                    <th style="padding: 8px; text-align: right; width: 18%; color: #ffffff;">VAL. UNIT</th>
+                    <th style="padding: 8px; text-align: right; width: 18%; color: #ffffff;">VAL. VENTA</th>
+                    <th style="padding: 8px; text-align: right; width: 16%; color: #ffffff;">IGV (18%)</th>
+                    <th style="padding: 8px; text-align: right; width: 18%; color: #ffffff;">IMPORTE</th>
+                  ` : `
+                    <th style="padding: 8px; text-align: right; width: 22%; color: #ffffff;">PRECIO UNIT.</th>
+                    <th style="padding: 8px; text-align: right; width: 22%; color: #ffffff;">IMPORTE TOTAL</th>
+                  `}
                 </tr>
               </thead>
               <tbody>
@@ -1098,21 +1209,28 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   <td style="padding: 10px; text-align: center; font-weight: bold; border-bottom: 1px solid #e2e8f0;">1</td>
                   <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">
                     <strong style="color: #0f172a;">Derecho de Trámite — ${tipoTramiteSeleccionado}</strong>
-                    <span style="display: block; color: #64748b; font-size: 11.5px;">Expediente N° EXP-${expIdLimpio}</span>
+                    <span style="display: block; color: #64748b; font-size: 11px;">Expediente N° EXP-${expIdLimpio}</span>
                   </td>
-                  <td style="padding: 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">S/ ${isFacturaMail ? subtotalMail : totalMail}</td>
-                  ${isFacturaMail ? `<td style="padding: 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">S/ ${subtotalMail}</td>` : ''}
-                  <td style="padding: 10px; text-align: right; font-weight: bold; border-bottom: 1px solid #e2e8f0;">S/ ${totalMail}</td>
+                  ${isFacturaMail ? `
+                    <td style="padding: 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">S/ ${subtotalMail}</td>
+                    <td style="padding: 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">S/ ${subtotalMail}</td>
+                    <td style="padding: 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">S/ ${igvMail}</td>
+                    <td style="padding: 10px; text-align: right; font-weight: bold; border-bottom: 1px solid #e2e8f0;">S/ ${totalMail}</td>
+                  ` : `
+                    <td style="padding: 10px; text-align: right; font-weight: bold; border-bottom: 1px solid #e2e8f0;">S/ ${totalMail}</td>
+                    <td style="padding: 10px; text-align: right; font-weight: 900; border-bottom: 1px solid #e2e8f0;">S/ ${totalMail}</td>
+                  `}
                 </tr>
               </tbody>
             </table>
 
             <!-- RESUMEN FINANCIERO -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 20px; font-size: 12.5px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 16px; font-size: 12px;">
               <tr>
                 <td style="padding: 14px; vertical-align: top; width: 55%;">
                   <p style="margin: 0 0 6px; font-weight: bold; color: #0f172a;">${totalLetrasMail}</p>
                   <p style="margin: 2px 0; color: #334155;"><strong>MÉTODO DE PAGO:</strong> ${metodoPagoSeleccionado.toUpperCase()}</p>
+                  <p style="margin: 2px 0; color: #334155;"><strong>CAJERO RESPONSABLE:</strong> ${cajeroMailNombre}</p>
                   ${metodoPagoSeleccionado.toLowerCase().includes("efectivo") ? `
                     <p style="margin: 2px 0; color: #334155;"><strong>MONTO RECIBIDO:</strong> S/ ${montoRecibidoNum.toFixed(2)}</p>
                     <p style="margin: 2px 0; color: #16a34a; font-weight: bold;"><strong>VUELTO ENTREGADO:</strong> S/ ${vueltoCalculado.toFixed(2)}</p>
@@ -1122,43 +1240,40 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   `}
                 </td>
                 <td style="padding: 14px; vertical-align: top; width: 45%; text-align: right;">
-                  <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 12.5px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 12px;">
                     ${isFacturaMail ? `
                       <tr>
-                        <td style="color: #475569; padding: 2px 0;">OP. GRAVADA:</td>
+                        <td style="color: #475569; padding: 2px 0;">Valor de Venta:</td>
                         <td style="font-weight: bold; text-align: right; color: #0f172a;">S/ ${subtotalMail}</td>
                       </tr>
                       <tr>
-                        <td style="color: #475569; padding: 2px 0;">I.G.V. (18%):</td>
+                        <td style="color: #475569; padding: 2px 0;">IGV (18%):</td>
                         <td style="font-weight: bold; text-align: right; color: #0f172a;">S/ ${igvMail}</td>
                       </tr>
-                    ` : `
-                      <tr>
-                        <td style="color: #475569; padding: 2px 0;">TOTAL IMPORTE:</td>
-                        <td style="font-weight: bold; text-align: right; color: #0f172a;">S/ ${totalMail}</td>
-                      </tr>
-                    `}
+                    ` : ''}
                     <tr>
-                      <td style="padding-top: 6px; font-weight: 900; color: #0f172a; border-top: 1.5px solid #0f172a; font-size: 14px;">TOTAL PAGADO:</td>
-                      <td style="padding-top: 6px; font-weight: 900; text-align: right; color: ${isFacturaMail ? '#dc2626' : '#2563eb'}; border-top: 1.5px solid #0f172a; font-size: 14px;">S/ ${totalMail}</td>
+                      <td style="padding-top: 6px; font-weight: 900; color: #0f172a; border-top: ${isFacturaMail ? '1.5px solid #0f172a' : 'none'}; font-size: 14px;">Importe Total:</td>
+                      <td style="padding-top: 6px; font-weight: 900; text-align: right; color: ${isFacturaMail ? '#dc2626' : '#2563eb'}; border-top: ${isFacturaMail ? '1.5px solid #0f172a' : 'none'}; font-size: 14px;">S/ ${totalMail}</td>
                     </tr>
                   </table>
                 </td>
               </tr>
             </table>
 
-            <!-- PIE DE SEGURIDAD SUNAT Y MENSAJE INSTITUCIONAL MANDATORIO -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid #cbd5e1; padding-top: 12px; font-size: 11px; color: #475569;">
+            <!-- PIE DE SEGURIDAD SUNAT -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid #cbd5e1; padding-top: 12px; font-size: 10.5px; color: #475569;">
               <tr>
                 <td style="vertical-align: top; width: 75%;">
                   <p style="margin: 0 0 2px; font-weight: bold; color: #0f172a;">Representación Impresa de la ${nombreComprobanteMail} — Moneda: PEN</p>
-                  <p style="margin: 0 0 6px; font-size: 10.5px;"><strong>Cód. Verificación:</strong> ${verifCodeMail} | <strong>Hash:</strong> ${hashMail}</p>
-                  <p style="margin: 0; font-size: 10px; font-style: italic; color: #64748b; line-height: 1.35;">
-                    "Este comprobante acredita únicamente el pago del derecho de trámite y no constituye la aprobación de la licencia de funcionamiento. La licencia será emitida únicamente si el procedimiento administrativo concluye favorablemente."
+                  <p style="margin: 0 0 4px; font-size: 10px;"><strong>Cód. Verificación:</strong> ${verifCodeMail} | <strong>Hash:</strong> ${hashMail}</p>
+                  <p style="margin: 0; font-size: 9.5px; font-style: italic; color: #64748b; line-height: 1.35;">
+                    ${isFacturaMail
+                      ? "Representación impresa de la Factura Electrónica emitida en el Sistema de Emisión Electrónica SUNAT."
+                      : "Representación impresa de la Boleta de Venta Electrónica. Este comprobante no otorga derecho a crédito fiscal conforme a la normativa tributaria vigente."}
                   </p>
                 </td>
                 <td style="vertical-align: top; width: 25%; text-align: right;">
-                  <img src="${qrMailUrl}" alt="QR SUNAT" width="80" height="80" style="display: block; margin-left: auto; border: 1px solid #0f172a; padding: 2px;" />
+                  <img src="${qrMailUrl}" alt="QR SUNAT" width="85" height="85" style="display: block; margin-left: auto; border: 1px solid #0f172a; padding: 2px;" />
                 </td>
               </tr>
             </table>
@@ -1297,8 +1412,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const idExpLimpio = String(sol.id).replace(/^EXP-/, "");
       const esFactura = tipoComprobanteSeleccionado === "Factura";
       const codComprobante = esFactura
-        ? "F001-" + Date.now().toString().slice(-6)
-        : "B001-" + Date.now().toString().slice(-6);
+        ? `F001-${idExpLimpio}`
+        : `B001-${idExpLimpio}`;
       const nombreComprobanteTitulo = esFactura ? "FACTURA ELECTRÓNICA" : "BOLETA DE VENTA ELECTRÓNICA";
       const fechaHoraActual = formatearFechaHora();
       const nombreCajera = usuario?.nombre || usuario?.email || "Cajera de Ventanilla";
@@ -1598,12 +1713,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     setRazonSocialForm("");
                     setDireccionForm("");
                     setArchivosPresenciales([]);
-                    setInspectorElegido(null);
                     setDniValidado(false);
                     setRucValidado(false);
                     setPasoActual(1);
                     setPagoConfirmadoLocal(false);
                     setResultadoRegistroExitoso(null);
+                    autoAsignarHorarioLibre(solicitudes);
                   }}
                   style={{ padding: "12px 24px", background: "#16a34a", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", fontSize: "14.5px", cursor: "pointer", boxShadow: "0 2px 6px rgba(22,163,74,0.2)" }}
                 >
@@ -2279,24 +2394,88 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <h2>🔍 Consulta y Estado de Trámites</h2>
-              <p>Busca expedientes únicamente por el número de RUC de 11 dígitos del establecimiento.</p>
+              <p>Busca expedientes por N° Expediente, RUC del establecimiento o filtra por los 12 distritos de la Provincia de Trujillo.</p>
             </div>
           </div>
 
-          {/* BARRA DE BÚSQUEDA Y FILTROS */}
-          <div style={{ display: "grid", gap: "16px", marginBottom: "20px" }}>
-            <div>
+          {/* BARRA DE BÚSQUEDA Y FILTROS POR DISTRITO Y FECHAS */}
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px", alignItems: "center" }}>
+            <div style={{ flex: 1, minWidth: "240px" }}>
               <input
                 type="text"
-                placeholder="🔍 Buscar por RUC del establecimiento (11 dígitos)..."
+                placeholder="🔍 Buscar por N° Expediente, RUC (11 dígitos) o negocio..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 style={{ width: "100%", padding: "12px 18px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14.5px" }}
               />
             </div>
 
+            <div>
+              <select
+                value={filtroDistrito}
+                onChange={(e) => setFiltroDistrito(e.target.value)}
+                style={{ padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700", background: "#f8fafc", color: "#0f172a", cursor: "pointer" }}
+              >
+                <option value="todos">🏛️ Todos los distritos (12 Trujillo)</option>
+                {DISTRITOS_TRUJILLO.map((dist) => (
+                  <option key={dist} value={dist}>📍 {dist}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "13px", fontWeight: "700", color: "#475569" }}>📅 Desde:</span>
+              <input
+                type="date"
+                min="2026-07-15"
+                max={obtenerFechaHoyStr()}
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+                onBlur={() => {
+                  if (fechaDesde) {
+                    const hoyStr = obtenerFechaHoyStr();
+                    if (fechaDesde < "2026-07-15") setFechaDesde("2026-07-15");
+                    else if (fechaDesde > hoyStr) setFechaDesde(hoyStr);
+                  }
+                }}
+                style={{ padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", background: "#fff" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "13px", fontWeight: "700", color: "#475569" }}>📅 Hasta:</span>
+              <input
+                type="date"
+                min="2026-07-15"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+                onBlur={() => {
+                  if (fechaHasta && fechaHasta < "2026-07-15") {
+                    setFechaHasta("2026-07-15");
+                  }
+                }}
+                style={{ padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", background: "#fff" }}
+              />
+            </div>
+
+            {(fechaDesde || fechaHasta || busqueda || filtroDistrito !== "todos") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBusqueda("");
+                  setFiltroDistrito("todos");
+                  setFechaDesde("");
+                  setFechaHasta("");
+                }}
+                style={{ padding: "11px 14px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: "700", fontSize: "13px", cursor: "pointer" }}
+                title="Limpiar todos los filtros"
+              >
+                🧹 Limpiar
+              </button>
+            )}
+
             {errorFechaRange && (
-              <div style={{ background: "#fef2f2", color: "#991b1b", border: "1px solid #fca5a5", padding: "10px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
+              <div style={{ flex: "1 1 100%", background: "#fef2f2", color: "#991b1b", border: "1px solid #fca5a5", padding: "10px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>
                 ⚠️ {errorFechaRange}
               </div>
             )}
@@ -2306,7 +2485,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           <div className="empty-state">
             <div style={{ fontSize: "36px", marginBottom: "10px" }}>💳</div>
             <h3>No se encontraron solicitudes</h3>
-            <p>Ajusta el filtro o el término de búsqueda para localizar expedientes.</p>
+            <p>Ajusta el filtro por distrito o el término de búsqueda para localizar expedientes.</p>
           </div>
         ) : (
           <div className="tabla-container">
@@ -2317,7 +2496,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   <th>Ciudadano / DNI</th>
                   <th>Establecimiento</th>
                   <th>Trámite / Derecho</th>
-                  <th>Estado Pago</th>
+                  <th>Estado del Trámite</th>
                   <th>Acciones de Caja</th>
                 </tr>
               </thead>
@@ -2332,9 +2511,18 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   const { aptoRenovacion, diasRestantes, fechaVencimientoStr } = calcularEstadoLicenciaVencimiento(s);
 
                   return (
-                    <tr key={s.id}>
+                    <tr
+                      key={s.id}
+                      onClick={(e) => {
+                        // Si se hace clic en un botón interno, no duplicar la apertura
+                        if (e.target.tagName === "BUTTON" || e.target.closest("button")) return;
+                        setSolicitudVerDetalle(s);
+                      }}
+                      style={{ cursor: "pointer" }}
+                      title="Toca el expediente para ver la Línea de Tiempo Vertical"
+                    >
                       <td>
-                        <strong>EXP-{String(s.id).replace(/^EXP-/, "")}</strong>
+                        <strong style={{ color: "#2563eb", textDecoration: "underline" }}>EXP-{String(s.id).replace(/^EXP-/, "")}</strong>
                         <small style={{ display: "block", color: "#64748b" }}>{s.fecha || "---"}</small>
                       </td>
                       <td>
@@ -2344,6 +2532,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       <td>
                         <strong>{s.nombreNegocio}</strong>
                         <small style={{ display: "block", color: "#64748b" }}>RUC: {s.ruc}</small>
+                        <small style={{ display: "block", color: "#2563eb", fontWeight: "700", marginTop: "2px" }}>📍 {s.distrito || "Trujillo"}</small>
                       </td>
                       <td>
                         <span className="badge info">{s.tipoTramite || "Nueva Licencia"}</span>
@@ -2353,6 +2542,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         <span className={`badge ${esPagado ? "ok" : "warning"}`}>
                           {esPagado ? "Pagado / Confirmado" : "Pendiente de Pago"}
                         </span>
+
+                        <small style={{ display: "block", marginTop: "4px", fontWeight: "700", color: (s.estado || "").toLowerCase().includes("observad") ? "#6b21a8" : (s.estado || "").toLowerCase().includes("aprobado") ? "#15803d" : (s.estado || "").toLowerCase().includes("rechazad") ? "#dc2626" : "#1e40af" }}>
+                          📌 {s.estadoInspeccion || s.inspeccion || s.estado || "Programada"}
+                        </small>
+
                         {aptoRenovacion && (
                           <span className="badge warning" style={{ display: "block", marginTop: "4px", background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}>
                             ⚠️ {diasRestantes <= 0 ? "Licencia Vencida" : "Renovación Cercana"}
@@ -2360,55 +2554,97 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         )}
                       </td>
                       <td>
-                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                           <button
                             type="button"
-                            className="btn-info"
                             onClick={() => setSolicitudVerDetalle(s)}
-                            style={{ background: "#2563eb", color: "white", padding: "6px 12px", borderRadius: "6px", fontSize: "13px" }}
+                            style={{
+                              background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+                              color: "white",
+                              padding: "7px 14px",
+                              borderRadius: "8px",
+                              fontSize: "12.5px",
+                              fontWeight: "800",
+                              border: "none",
+                              cursor: "pointer",
+                              boxShadow: "0 2px 4px rgba(124, 58, 237, 0.2)"
+                            }}
                           >
-                            👁 Verificar Detalle
+                            Ver Detalles
                           </button>
 
-                          {esPagado && (
+                          {esPagado ? (
                             <button
                               type="button"
                               onClick={() => setSolicitudVerBoleta(s)}
-                              style={{ background: "#0f172a", color: "white", padding: "6px 10px", borderRadius: "6px", fontSize: "12.5px", fontWeight: "bold", border: "none", cursor: "pointer" }}
+                              style={{
+                                background: "#0f172a",
+                                color: "white",
+                                padding: "7px 14px",
+                                borderRadius: "8px",
+                                fontSize: "12.5px",
+                                fontWeight: "800",
+                                border: "none",
+                                cursor: "pointer",
+                                boxShadow: "0 2px 4px rgba(15, 23, 42, 0.2)"
+                              }}
                             >
-                              🧾 Verificar Boleta
+                              🧾 Ver Boleta / Factura SUNAT
                             </button>
-                          )}
-
-                          {!esPagado ? (
+                          ) : (
                             <button
                               type="button"
-                              className="btn-ok"
                               onClick={() => {
                                 setSolicitudCobro(s);
                                 setMetodoPagoSeleccionado("Efectivo en Caja Municipal");
                                 setMontoRecibidoInput("");
                               }}
-                              style={{ background: "#16a34a", color: "white", padding: "6px 14px", borderRadius: "6px", fontWeight: "700", fontSize: "13px" }}
+                              style={{
+                                background: "#16a34a",
+                                color: "white",
+                                padding: "7px 14px",
+                                borderRadius: "8px",
+                                fontWeight: "800",
+                                fontSize: "12.5px",
+                                border: "none",
+                                cursor: "pointer"
+                              }}
                             >
-                              💰 Registrar Pago
+                              💰 Registrar Pago (S/ 3.00)
                             </button>
-                          ) : aptoRenovacion ? (
+                          )}
+
+                          {/* BOTÓN RENOVAR TRÁMITE (HABILITADO SOLO A PARTIR DE LOS 11 MESES DE VIGENCIA) */}
+                          {((s.estado || "").toLowerCase().includes("aprobad") || (s.estado || "").toLowerCase().includes("renovad")) && (
                             <button
                               type="button"
+                              disabled={!aptoRenovacion}
                               onClick={() => {
+                                if (!aptoRenovacion) return;
                                 setSolicitudRenovacion(s);
                                 setTipoComprobanteSeleccionado("Boleta");
                                 setMetodoPagoSeleccionado("Pago Billetera Digital");
                               }}
-                              style={{ background: "#d97706", color: "white", padding: "6px 12px", borderRadius: "6px", fontWeight: "700", fontSize: "13px", cursor: "pointer", border: "none" }}
+                              style={{
+                                background: aptoRenovacion ? "linear-gradient(135deg, #d97706 0%, #b45309 100%)" : "#f1f5f9",
+                                color: aptoRenovacion ? "#ffffff" : "#94a3b8",
+                                padding: "7px 14px",
+                                borderRadius: "8px",
+                                fontWeight: "800",
+                                fontSize: "12.5px",
+                                border: aptoRenovacion ? "none" : "1px solid #cbd5e1",
+                                cursor: aptoRenovacion ? "pointer" : "not-allowed",
+                                boxShadow: aptoRenovacion ? "0 2px 6px rgba(217, 119, 6, 0.3)" : "none",
+                                opacity: aptoRenovacion ? 1 : 0.75,
+                              }}
+                              title={
+                                aptoRenovacion
+                                  ? `Licencia apta para renovación (${diasRestantes <= 0 ? "Vencida" : `Vence en ${diasRestantes} días`})`
+                                  : "La renovación solo se habilita al cumplir 11 meses de vigencia de la Licencia (Faltan más de 30 días para cumplir el año)"
+                              }
                             >
-                              🔄 Renovación Directa ({diasRestantes <= 0 ? "Vencida" : `Vence en ${diasRestantes} días`})
+                              🔄 Renovar Trámite {aptoRenovacion ? `(${diasRestantes <= 0 ? "Vencida" : `Vence en ${diasRestantes}d`})` : "🔒 (Inhabilitado < 11 meses)"}
                             </button>
-                          ) : (
-                            <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              ✓ Enviado ({etiquetaComprobante})
-                            </span>
                           )}
                         </div>
                       </td>
@@ -2492,6 +2728,141 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 )}
               </div>
 
+              {/* LÍNEA DE TIEMPO VERTICAL DE TRAZABILIDAD DEL EXPEDIENTE */}
+              <div style={{ background: "#ffffff", padding: "18px", borderRadius: "12px", border: "1px solid #cbd5e1", marginBottom: "16px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                <h4 style={{ margin: "0 0 16px", color: "#0f172a", fontSize: "15px", fontWeight: "800", borderBottom: "2px solid #e2e8f0", paddingBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  📊 Línea de Tiempo Vertical del Trámite (EXP-{String(solicitudVerDetalle.id).replace(/^EXP-/, "")})
+                </h4>
+
+                <div style={{ position: "relative", paddingLeft: "32px" }}>
+                  {/* Conector Vertical */}
+                  <div style={{ position: "absolute", left: "13px", top: "10px", bottom: "10px", width: "3px", background: "#cbd5e1", borderRadius: "2px" }} />
+
+                  {/* HITO 1: Registro */}
+                  <div style={{ position: "relative", marginBottom: "18px" }}>
+                    <div style={{ position: "absolute", left: "-32px", top: "0", width: "24px", height: "24px", borderRadius: "50%", background: "#16a34a", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", boxShadow: "0 0 0 3px #dcfce7" }}>
+                      ✓
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: "13.5px", color: "#0f172a", display: "block" }}>1. Registro de Solicitud Municipal</strong>
+                      <small style={{ color: "#64748b", display: "block" }}>
+                        📅 {solicitudVerDetalle.fecha || "Registrado"} | Solicitante: {obtenerNombreCiudadanoValido(solicitudVerDetalle)}
+                      </small>
+                      <small style={{ color: "#166534", fontWeight: "600", marginTop: "2px", display: "block" }}>
+                        Establecimiento: {solicitudVerDetalle.nombreNegocio} (RUC: {solicitudVerDetalle.ruc})
+                      </small>
+                    </div>
+                  </div>
+
+                  {/* HITO 2: Pago */}
+                  <div style={{ position: "relative", marginBottom: "18px" }}>
+                    <div style={{ position: "absolute", left: "-32px", top: "0", width: "24px", height: "24px", borderRadius: "50%", background: solicitudVerDetalle.estadoPago === "Confirmado" ? "#16a34a" : "#d97706", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", boxShadow: solicitudVerDetalle.estadoPago === "Confirmado" ? "0 0 0 3px #dcfce7" : "0 0 0 3px #fef3c7" }}>
+                      {solicitudVerDetalle.estadoPago === "Confirmado" ? "✓" : "💳"}
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: "13.5px", color: "#0f172a", display: "block" }}>2. Pago de Tasa de Licencia (S/ {MONTO_TRAMITE.toFixed(2)})</strong>
+                      <small style={{ color: "#64748b", display: "block" }}>
+                        {solicitudVerDetalle.estadoPago === "Confirmado" ? `📅 ${solicitudVerDetalle.fechaPago || "Pago Confirmado"} | Comprobante: ${solicitudVerDetalle.comprobantePago || "Boleta Emitida"}` : "Pendiente de cobro en caja municipal"}
+                      </small>
+                    </div>
+                  </div>
+
+                  {/* HITO 3: Inspección Técnica (1er Intento) */}
+                  <div style={{ position: "relative", marginBottom: "18px" }}>
+                    {(() => {
+                      const est = (solicitudVerDetalle.estado || solicitudVerDetalle.estadoNormalizado || "").toLowerCase();
+                      const esObs = est.includes("observad");
+                      const esAprob = est.includes("aprobado");
+                      const esRech = est.includes("rechazado definitivamente");
+
+                      let bg = "#2563eb";
+                      let icon = "🕒";
+                      let titulo = "3. Primera Inspección Técnica Edil";
+                      let desc = `Inspector: ${solicitudVerDetalle.inspectorNombre || "Asignado"} | Fecha: ${solicitudVerDetalle.fechaVisitaInspector || "Programada"}`;
+
+                      if (esObs) {
+                        bg = "#d97706";
+                        icon = "⚠️";
+                        titulo = "3. Primera Inspección Técnica — Observada (1er Intento)";
+                        desc = `Inspector: ${solicitudVerDetalle.inspectorNombre || "Inspector Municipal"}`;
+                      } else if (esAprob) {
+                        bg = "#16a34a";
+                        icon = "✓";
+                        titulo = "3. Inspección Técnica Aprobada";
+                        desc = `Dictamen Conforme por ${solicitudVerDetalle.inspectorNombre || "Inspector Municipal"}`;
+                      } else if (esRech) {
+                        bg = "#dc2626";
+                        icon = "✕";
+                        titulo = "3. Inspección Técnica Desaprobada Definitivamente";
+                        desc = `Dictamen Improcedente por ${solicitudVerDetalle.inspectorNombre || "Inspector Municipal"}`;
+                      }
+
+                      return (
+                        <>
+                          <div style={{ position: "absolute", left: "-32px", top: "0", width: "24px", height: "24px", borderRadius: "50%", background: bg, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "bold", boxShadow: `0 0 0 3px ${bg}33` }}>
+                            {icon}
+                          </div>
+                          <div>
+                            <strong style={{ fontSize: "13.5px", color: "#0f172a", display: "block" }}>{titulo}</strong>
+                            <small style={{ color: "#64748b", display: "block" }}>{desc}</small>
+
+                            {solicitudVerDetalle.observacionesInspector && (
+                              <div style={{ margin: "6px 0 0", padding: "8px 12px", background: "#fffbe6", border: "1px solid #ffe58f", borderRadius: "6px", fontSize: "12.5px", color: "#873800" }}>
+                                <strong>Observaciones del Inspector:</strong> {solicitudVerDetalle.observacionesInspector}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* HITO 4: Reprogramación a 30 días (si fue observada) */}
+                  {((solicitudVerDetalle.estado || "").toLowerCase().includes("observad") || solicitudVerDetalle.intentosInspeccion === 2) && (
+                    <div style={{ position: "relative", marginBottom: "18px" }}>
+                      <div style={{ position: "absolute", left: "-32px", top: "0", width: "24px", height: "24px", borderRadius: "50%", background: "#7c3aed", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "bold", boxShadow: "0 0 0 3px #ede9fe" }}>
+                        📌
+                      </div>
+                      <div style={{ background: "#f3e8ff", border: "1.5px solid #d8b4fe", padding: "10px 14px", borderRadius: "8px" }}>
+                        <strong style={{ fontSize: "13.5px", color: "#6b21a8", display: "block" }}>
+                          4. 📌 Inspección Observada (1er Intento) — Reprogramada a 30 días
+                        </strong>
+                        <small style={{ color: "#5b21b6", display: "block", fontWeight: "700", marginTop: "2px" }}>
+                          📅 Nueva Fecha Agendada: {solicitudVerDetalle.fechaVisitaInspector || "En 30 días hábiles"} | 🕒 Horario: {solicitudVerDetalle.horaVisitaLabel || solicitudVerDetalle.horaVisitaInspector || "08:00 a. m."}
+                        </small>
+                        <small style={{ color: "#64748b", display: "block", marginTop: "2px" }}>
+                          Inspector Asignado: {solicitudVerDetalle.inspectorNombre || "Inspector Municipal"}
+                        </small>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* HITO 5: Emisión de Licencia */}
+                  <div style={{ position: "relative" }}>
+                    {(() => {
+                      const est = (solicitudVerDetalle.estado || "").toLowerCase();
+                      const esLicenciaAprobada = est.includes("aprobado") || est.includes("licencia emitida");
+
+                      return (
+                        <>
+                          <div style={{ position: "absolute", left: "-32px", top: "0", width: "24px", height: "24px", borderRadius: "50%", background: esLicenciaAprobada ? "#16a34a" : "#94a3b8", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "bold", boxShadow: esLicenciaAprobada ? "0 0 0 3px #dcfce7" : "0 0 0 3px #f1f5f9" }}>
+                            {esLicenciaAprobada ? "📜" : "⏳"}
+                          </div>
+                          <div>
+                            <strong style={{ fontSize: "13.5px", color: esLicenciaAprobada ? "#166534" : "#475569", display: "block" }}>
+                              {esLicenciaAprobada ? "5. Licencia Municipal Emitida" : "5. Emisión de Licencia de Funcionamiento"}
+                            </strong>
+                            <small style={{ color: "#64748b", display: "block" }}>
+                              {esLicenciaAprobada ? `Licencia N° ${solicitudVerDetalle.numeroLicencia || `LIC-2026-${solicitudVerDetalle.id}`}` : "Pendiente de dictamen final tras 2da inspección técnica"}
+                            </small>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
               <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "16px" }}>
                 <h4 style={{ margin: "0 0 8px", color: "#1e293b", fontSize: "14px" }}>📄 Documentación Adjuntada por el Ciudadano</h4>
                 {(solicitudVerDetalle.archivosPdf || []).length === 0 ? (
@@ -2512,6 +2883,53 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* MODIFICACIÓN DE FECHA EXPIRACIÓN DE LICENCIA (ADMINISTRATIVO / PRUEBAS) */}
+              <div style={{ background: "#f0f9ff", border: "1.5px solid #0284c7", padding: "16px", borderRadius: "10px", marginBottom: "16px" }}>
+                <h4 style={{ margin: "0 0 6px", color: "#0369a1", fontSize: "14px", fontWeight: "800", display: "flex", alignItems: "center", gap: "6px" }}>
+                  ⚙️ Modificar fechaExpiracionLicencia en Firebase
+                </h4>
+                <p style={{ margin: "0 0 10px", fontSize: "12.5px", color: "#334155" }}>
+                  Ajusta manualmente la fecha para probar las reglas de renovación (ej. colocar fecha con 11 meses de antigüedad).
+                </p>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    type="date"
+                    defaultValue={
+                      (solicitudVerDetalle.fechaExpiracionLicencia ||
+                       solicitudVerDetalle.fechaEvaluacionInspector ||
+                       solicitudVerDetalle.fechaSolicitud || "").split(",")[0].split("/").reverse().join("-") || "2026-07-22"
+                    }
+                    id={`input-fecha-exp-${solicitudVerDetalle.id}`}
+                    style={{ padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", background: "#ffffff" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const inputElem = document.getElementById(`input-fecha-exp-${solicitudVerDetalle.id}`);
+                      if (!inputElem || !inputElem.value) {
+                        alert("⚠️ Seleccione una fecha válida.");
+                        return;
+                      }
+                      const nuevaFechaStr = inputElem.value;
+                      setProcesando(true);
+                      try {
+                        await actualizarFechaLicenciamiento(solicitudVerDetalle.id, nuevaFechaStr);
+                        alert(`✅ Campo 'fechaExpiracionLicencia' actualizado a "${nuevaFechaStr}" en la Base de Datos para el expediente EXP-${solicitudVerDetalle.id}.`);
+                        await cargarSolicitudes();
+                        setSolicitudVerDetalle(null);
+                      } catch (errExp) {
+                        alert(`❌ Error al actualizar fechaExpiracionLicencia: ${errExp.message}`);
+                      } finally {
+                        setProcesando(false);
+                      }
+                    }}
+                    style={{ padding: "9px 18px", background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: "800", fontSize: "13px", cursor: "pointer", boxShadow: "0 2px 6px rgba(2,132,199,0.3)" }}
+                  >
+                    💾 Guardar fechaExpiracionLicencia
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -3223,7 +3641,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}
                   >
                     {TIME_SLOTS.map((slot) => {
-                      const ocupado = inspectorElegido && esHorarioOcupado(inspectorElegido.uid, fechaInspeccion, slot.value);
+                      const ocupado = inspectorElegido && esHorarioOcupado(inspectorElegido.uid || inspectorElegido.nombre, fechaInspeccion, slot.value);
                       return (
                         <option key={slot.value} value={slot.value} disabled={ocupado}>
                           {slot.label} {ocupado ? " (Ocupado para este inspector)" : ""}

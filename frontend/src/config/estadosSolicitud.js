@@ -116,3 +116,46 @@ export const mapLegacyEstado = (legacyEstado) => {
   };
   return mapa[legacyEstado] || legacyEstado;
 };
+
+export const DISTRITOS_TRUJILLO = [
+  "Trujillo",
+  "Alto Trujillo",
+  "El Porvenir",
+  "Florencia de Mora",
+  "Huanchaco",
+  "La Esperanza",
+  "Laredo",
+  "Moche",
+  "Poroto",
+  "Salaverry",
+  "Simbal",
+  "Víctor Larco Herrera",
+];
+
+export const normalizarDistrito = (txt) => {
+  return String(txt || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^distrito\s+(de\s+)?/i, "")
+    .trim();
+};
+
+export const coincideDistrito = (distritoSolicitud, distritoFiltro) => {
+  if (!distritoFiltro || distritoFiltro === "todos") return true;
+  const dSol = normalizarDistrito(distritoSolicitud || "Trujillo");
+  const dFil = normalizarDistrito(distritoFiltro);
+
+  if (dSol === dFil) return true;
+
+  if (
+    (dFil.includes("victor larco") && dSol.includes("victor larco")) ||
+    (dFil.includes("florencia") && dSol.includes("florencia"))
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+

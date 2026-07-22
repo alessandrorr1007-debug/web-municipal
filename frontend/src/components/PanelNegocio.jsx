@@ -488,8 +488,8 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
         }
         localStorage.removeItem("flow_pago_pendiente");
         localStorage.removeItem("flow_pago_estado");
-        alert("⚠️ El pago en línea con Flow no fue completado. La solicitud no ha sido registrada.");
-        await cargarMisSolicitudes().catch(() => {});
+        alert("⚠️ El pago en línea con Flow no se completó o fue cancelado.\n\nLa solicitud NO ha sido enviada a la Municipalidad. Has regresado al Paso 4 de pago para reintentar o elegir Pago Presencial en Caja.");
+        setPaso("pago");
       }
     } catch (error) {
       console.error("Error verificando pago Flow:", error);
@@ -503,8 +503,8 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
         } catch (e) {}
       }
       localStorage.removeItem("flow_pago_pendiente");
-      alert("⚠️ No se pudo verificar el pago con Flow. La solicitud no ha sido registrada.");
-      await cargarMisSolicitudes().catch(() => {});
+      alert("⚠️ No se pudo completar el pago con Flow. Has regresado al Paso 4 de pago.");
+      setPaso("pago");
     } finally {
       setProcesandoPago(false);
     }
@@ -919,6 +919,10 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
         guardarSolicitud({
           uidUsuario: usuario?.uid || "",
           correoUsuario: emailUsuario,
+          telefono: form.telefono || usuario?.telefono || "",
+          telefonoSolicitante: form.telefono || usuario?.telefono || "",
+          telefonoContacto: form.telefono || usuario?.telefono || "",
+          celular: form.telefono || usuario?.telefono || "",
           tipoTramite: form.tipoTramite,
           dniSolicitante, nombresSolicitante, apellidosSolicitante,
           ruc: form.ruc, nombreNegocio: form.nombreNegocio,
@@ -981,13 +985,6 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
           </div>
         </div>
       `;
-
-      await crearNotificacion(usuario?.uid, {
-        titulo: `Solicitud Registrada — EXP-${nueva.id}`,
-        descripcion: `Su solicitud EXP-${nueva.id} de Licencia de Funcionamiento se ha registrado correctamente.`,
-        icono: "📝",
-        html: htmlCorreoNuevaSolicitud,
-      }, emailUsuario);
 
       const nombreCompleto = [usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ") || "Ciudadano";
 
@@ -1091,6 +1088,10 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
         guardarSolicitud({
           uidUsuario: usuario?.uid || "",
           correoUsuario: emailUsuario,
+          telefono: form.telefono || usuario?.telefono || "",
+          telefonoSolicitante: form.telefono || usuario?.telefono || "",
+          telefonoContacto: form.telefono || usuario?.telefono || "",
+          celular: form.telefono || usuario?.telefono || "",
           tipoTramite: form.tipoTramite,
           dniSolicitante, nombresSolicitante, apellidosSolicitante,
           ruc: form.ruc, nombreNegocio: form.nombreNegocio,
@@ -1205,6 +1206,10 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
         guardarSolicitud({
           uidUsuario: usuario?.uid || "",
           correoUsuario: usuario?.correo || "",
+          telefono: form.telefono || usuario?.telefono || "",
+          telefonoSolicitante: form.telefono || usuario?.telefono || "",
+          telefonoContacto: form.telefono || usuario?.telefono || "",
+          celular: form.telefono || usuario?.telefono || "",
           tipoTramite: form.tipoTramite,
           dniSolicitante, nombresSolicitante, apellidosSolicitante,
           ruc: form.ruc, nombreNegocio: form.nombreNegocio,

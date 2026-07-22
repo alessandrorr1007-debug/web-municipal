@@ -106,6 +106,36 @@ export const obtenerNombreCiudadanoValido = (obj) => {
   return "Solicitante Registrado";
 };
 
+export const obtenerTelefonoValido = (obj) => {
+  if (!obj) return "---";
+
+  const candidatos = [
+    obj.telefono,
+    obj.telefonoSolicitante,
+    obj.telefonoContacto,
+    obj.celular,
+    obj.telefonoUsuario,
+    obj.usuarioTelefono,
+    obj.phone,
+    obj.celularSolicitante,
+  ];
+
+  for (const val of candidatos) {
+    if (val !== undefined && val !== null) {
+      const valStr = String(val).trim();
+      const limpio = valStr.replace(/\D/g, "");
+      if (limpio.length >= 7) {
+        return limpio;
+      }
+      if (valStr.length >= 6) {
+        return valStr;
+      }
+    }
+  }
+
+  return "---";
+};
+
 const generarSerie = (tipo) => {
   return tipo === "boleta" ? "B001" : "F001";
 };

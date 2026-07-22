@@ -20,10 +20,15 @@ import {
   esEstadoCerrado,
   esPuedeAprobar,
   mapLegacyEstado,
+  DISTRITOS_TRUJILLO,
+  coincideDistrito,
 } from "../config/estadosSolicitud";
 import {
   INSPECTORES_DEFAULT,
   formatearFechaLocal,
+  TIME_SLOTS,
+  obtenerConteoInspectorEnFecha,
+  esSlotOcupadoParaInspector,
 } from "../config/inspeccionConfig";
 import { obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
 
@@ -1092,6 +1097,7 @@ function PanelFuncionario({ seccion }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [filtroDistrito, setFiltroDistrito] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [solicitudDetalle, setSolicitudDetalle] = useState(null);
   const [documentoPdfVisor, setDocumentoPdfVisor] = useState(null);
@@ -1226,6 +1232,9 @@ function PanelFuncionario({ seccion }) {
 
   const solicitudesFiltradas = useMemo(() => {
     let resultado = solicitudes;
+    if (filtroDistrito && filtroDistrito !== "todos") {
+      resultado = resultado.filter((s) => coincideDistrito(s.distrito || s.distritoEstablecimiento, filtroDistrito));
+    }
     if (filtroEstado !== "todos") {
       resultado = resultado.filter(
         (s) => normalizarEstado(s) === filtroEstado || s.estado === filtroEstado
@@ -1238,11 +1247,12 @@ function PanelFuncionario({ seccion }) {
           (s.id || "").toLowerCase().includes(q) ||
           (s.nombreNegocio || "").toLowerCase().includes(q) ||
           (s.ruc || "").includes(q) ||
-          (s.direccion || "").toLowerCase().includes(q)
+          (s.direccion || "").toLowerCase().includes(q) ||
+          (s.distrito || "").toLowerCase().includes(q)
       );
     }
     return resultado;
-  }, [solicitudes, filtroEstado, busqueda]);
+  }, [solicitudes, filtroEstado, filtroDistrito, busqueda]);
 
   const aprobarDocumentos = async (solicitud) => {
     setProcesando(true);
@@ -1695,6 +1705,16 @@ function PanelFuncionario({ seccion }) {
               style={{ flex: 1, minWidth: "220px", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
             />
             <select
+              value={filtroDistrito}
+              onChange={(e) => setFiltroDistrito(e.target.value)}
+              style={{ padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", minWidth: "200px" }}
+            >
+              <option value="todos">🏛️ Todos los distritos (12 Trujillo)</option>
+              {DISTRITOS_TRUJILLO.map((dist) => (
+                <option key={dist} value={dist}>📍 {dist}</option>
+              ))}
+            </select>
+            <select
               value={filtroEstado}
               onChange={(e) => setFiltroEstado(e.target.value)}
               style={{ padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px", minWidth: "180px" }}
@@ -1892,13 +1912,7 @@ function PanelFuncionario({ seccion }) {
             {/* GRID DE CARGA DE INSPECTORES */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
               {INSPECTORES_DEFAULT.map((insp) => {
-                const asignaciones = solicitudes.filter((s) => {
-                  const u = (s.inspectorUid || s.inspectorAsignadoUid || s.inspectorNombre || "");
-                  const esInspector = u === insp.uid || u.includes(insp.uid);
-                  const esMismaFecha = s.fechaVisitaInspector === fechaAgendaConsulta;
-                  const noCerrado = !["Aprobado", "Rechazado", "Licencia aprobada", "Licencia rechazada"].includes(s.estado);
-                  return esInspector && esMismaFecha && noCerrado;
-                }).length;
+                const asignaciones = obtenerConteoInspectorEnFecha(solicitudes, insp.uid || insp.nombre, fechaAgendaConsulta);
                 const porcentaje = Math.min((asignaciones / 4) * 100, 100);
                 const estaLleno = asignaciones >= 4;
 

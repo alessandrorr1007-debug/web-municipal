@@ -39,6 +39,22 @@ class EmailProvider {
     console.log(`Asunto: ${subject}`);
     console.log(`======================`);
 
+    const plantilaGenericaHTML = (contenidoTexto) => `
+      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 2px solid #0f172a; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 18px rgba(0,0,0,0.08);">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); padding: 24px 20px; text-align: center; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 900; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+          <span style="font-size: 12px; color: #38bdf8; font-weight: bold; text-transform: uppercase; display: block; margin-top: 4px;">Gerencia de Desarrollo Económico Local — Subgerencia de Licencias</span>
+        </div>
+        <div style="padding: 26px 24px; color: #334155; font-size: 14.5px; line-height: 1.6;">
+          <p style="margin: 0 0 16px; font-size: 15px; color: #0f172a;">${contenidoTexto}</p>
+        </div>
+        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px; text-align: center; color: #64748b; font-size: 12px;">
+          <strong style="color: #0f172a; display: block; margin-bottom: 2px;">Municipalidad Provincial de Trujillo</strong>
+          <span>Plataforma Digital de Licencias de Funcionamiento</span>
+        </div>
+      </div>
+    `;
+
     switch (this.providerName) {
       case "NODEMAILER":
       default:
@@ -50,15 +66,11 @@ class EmailProvider {
         
         try {
           const mailOptions = {
-            from: `"WEB-MUNICIPAL" <${process.env.SMTP_EMAIL}>`,
+            from: `"Municipalidad Provincial de Trujillo — Subgerencia de Licencias" <${process.env.SMTP_EMAIL}>`,
             to,
             subject,
             text,
-            html: html || `<div style="font-family: Arial, sans-serif; padding: 20px; color: #1e3a8a; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 500px; margin: 0 auto;">
-              <h2 style="color: #1e3a8a; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin-top: 0;">Notificación de WEB-MUNICIPAL</h2>
-              <p style="font-size: 15px; color: #334155; line-height: 1.5;">${text}</p>
-              <p style="font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 12px; margin-bottom: 0; text-align: center;">Plataforma Digital WEB-MUNICIPAL</p>
-            </div>`
+            html: html || plantilaGenericaHTML(text),
           };
           
           await this.transporter.sendMail(mailOptions);
@@ -74,3 +86,4 @@ class EmailProvider {
 }
 
 export const emailProvider = new EmailProvider();
+

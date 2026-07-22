@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { obtenerSolicitudes } from "../services/solicitudService";
 import { obtenerUsuariosInternos } from "../services/adminService";
-import { ESTADO_LABELS, mapLegacyEstado } from "../config/estadosSolicitud";
+import { ESTADO_LABELS, mapLegacyEstado, DISTRITOS_TRUJILLO, coincideDistrito } from "../config/estadosSolicitud";
 
 function Reportes() {
   const [solicitudes, setSolicitudes] = useState([]);
@@ -10,6 +10,7 @@ function Reportes() {
 
   const [filtroTipo, setFiltroTipo] = useState("general");
   const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [filtroDistrito, setFiltroDistrito] = useState("todos");
   const [filtroCanal, setFiltroCanal] = useState("todos");
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
@@ -38,6 +39,12 @@ function Reportes() {
     return solicitudes.filter((s) => {
       const estadoNorm = mapLegacyEstado(s.estado) || s.estado;
 
+      if (filtroDistrito !== "todos") {
+        if (!coincideDistrito(s.distrito || s.distritoEstablecimiento, filtroDistrito)) {
+          return false;
+        }
+      }
+
       if (filtroEstado !== "todos" && estadoNorm !== filtroEstado && s.estado !== filtroEstado) {
         return false;
       }
@@ -60,7 +67,7 @@ function Reportes() {
 
       return true;
     });
-  }, [solicitudes, filtroEstado, filtroCanal, filtroTipo]);
+  }, [solicitudes, filtroEstado, filtroDistrito, filtroCanal, filtroTipo]);
 
   const resumenMetricas = useMemo(() => {
     const total = solicitudesFiltradas.length;
@@ -140,6 +147,16 @@ function Reportes() {
             <option value="todos">Todos los estados</option>
             {Object.entries(ESTADO_LABELS).map(([k, label]) => (
               <option key={k} value={k}>{label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "4px" }}>Distrito (Prov. Trujillo)</label>
+          <select value={filtroDistrito} onChange={(e) => setFiltroDistrito(e.target.value)} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px" }}>
+            <option value="todos">🏛️ Todos los distritos (12 Trujillo)</option>
+            {DISTRITOS_TRUJILLO.map((dist) => (
+              <option key={dist} value={dist}>📍 {dist}</option>
             ))}
           </select>
         </div>

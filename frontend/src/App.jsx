@@ -94,7 +94,12 @@ function App() {
     setSeccion("inicio");
   };
 
-  if (window.location.pathname.replace(/\/$/, "") === "/pago-exitoso" || window.location.pathname.startsWith("/pago-exitoso")) {
+  const esRutaPagoExitoso =
+    window.location.pathname.replace(/\/$/, "") === "/pago-exitoso" ||
+    window.location.pathname.startsWith("/pago-exitoso") ||
+    Boolean(new URLSearchParams(window.location.search).get("token"));
+
+  if (esRutaPagoExitoso) {
     return (
       <ErrorBoundary>
         <PagoExitoso onRedirect={(s) => {
@@ -125,7 +130,7 @@ function App() {
 
   const seccionesPorRol = {
     cajero: ["nueva-solicitud", "consulta-expedientes"],
-    inspector: ["inspecciones", "historial-inspecciones"],
+    inspector: ["inspecciones"],
     administrador: ["gestion-usuarios"],
   };
 
@@ -153,11 +158,7 @@ function App() {
       }
     }
     if (rolNorm === "inspector") {
-      switch (seccionActiva) {
-        case "inspecciones": return <PanelInspector seccion="inspecciones" />;
-        case "historial-inspecciones": return <PanelInspector seccion="historial-inspecciones" />;
-        default: return <PanelInspector seccion="inspecciones" />;
-      }
+      return <PanelInspector seccion="inspecciones" />;
     }
     if (rolNorm === "administrador") {
       return <PanelAdmin seccion={seccionActiva} cambiarSeccion={cambiarSeccion} />;

@@ -277,7 +277,118 @@ app.post("/api/solicitudes", verificarToken, async (req, res) => {
       }
     }
 
-    const id = generarIdExpediente();
+    // Validación y Asignación Automática de Horario Libre en Backend (Agenda Exclusiva)
+    const inspUidTarget = (solicitud.inspectorUid || solicitud.inspectorAsignadoUid || solicitud.uidInspector || solicitud.inspectorNombre || "").trim();
+    const fechaVisitaTarget = (solicitud.fechaVisitaInspector || solicitud.fechaInspeccion || solicitud.fechaVisita || "").trim();
+
+    if (inspUidTarget && fechaVisitaTarget) {
+      try {
+        const snapAll = await getDocs(collection(db, "solicitudes"));
+        const idTargetClean = String(solicitud.id || "").replace(/^EXP-/, "").trim();
+
+        const normalizarFechaBackend = (fStr) => {
+          if (!fStr) return "";
+          const str = String(fStr).trim();
+          if (str.includes("-")) {
+            const p = str.split("-");
+            if (p.length === 3) {
+              const y = p[0].length === 4 ? p[0] : p[2];
+              const m = p[1].padStart(2, "0");
+              const d = (p[0].length === 4 ? p[2] : p[0]).padStart(2, "0");
+              return `${d}/${m}/${y}`;
+            }
+          }
+          if (str.includes("/")) {
+            const p = str.split("/");
+            if (p.length === 3) {
+              const d = p[0].padStart(2, "0");
+              const m = p[1].padStart(2, "0");
+              const y = p[2].length === 4 ? p[2] : p[2].padStart(4, "20");
+              return `${d}/${m}/${y}`;
+            }
+          }
+          return str;
+        };
+
+        const normalizarSlotBackend = (sStr) => {
+          if (!sStr) return "";
+          const s = String(sStr).toLowerCase().trim();
+          if (s.includes("08:00") || s.includes("8:00") || s.includes("08:00 a") || s.includes("8:00 a")) return "08:00";
+          if (s.includes("10:00") || s.includes("10:00 a")) return "10:00";
+          if (s.includes("14:00") || s.includes("02:00") || s.includes("2:00") || s.includes("02:00 p") || s.includes("2:00 p")) return "14:00";
+          if (s.includes("16:00") || s.includes("04:00") || s.includes("4:00") || s.includes("04:00 p") || s.includes("4:00 p")) return "16:00";
+          return s;
+        };
+
+        const obtenerLabelSlotBackend = (slotVal) => {
+          if (slotVal === "08:00") return "08:00 a. m.";
+          if (slotVal === "10:00") return "10:00 a. m.";
+          if (slotVal === "14:00") return "02:00 p. m.";
+          if (slotVal === "16:00") return "04:00 p. m.";
+          return slotVal;
+        };
+
+        const fNormTarget = normalizarFechaBackend(fechaVisitaTarget);
+
+        const solicitudesActivas = snapAll.docs.map(d => d.data()).filter((s) => {
+          if (!s) return false;
+          const sIdClean = String(s.id || "").replace(/^EXP-/, "").trim();
+          if (idTargetClean && sIdClean === idTargetClean) return false;
+
+          const est = String(s.estado || s.estadoNormalizado || "").toLowerCase();
+          if (est.includes("cancelad") || est.includes("anulad")) return false;
+
+          const sInspUid = String(s.inspectorUid || s.inspectorAsignadoUid || s.uidInspector || "").toLowerCase().trim();
+          const sInspNom = String(s.inspectorNombre || s.inspectorAsignado || s.inspectorElegido || s.inspector || "").toLowerCase().trim();
+          const targetLow = inspUidTarget.toLowerCase().trim();
+
+          let coincideInsp = false;
+          if (sInspUid && targetLow && sInspUid === targetLow) coincideInsp = true;
+          else if (sInspNom && targetLow && sInspNom === targetLow) coincideInsp = true;
+          else if (sInspUid && targetLow && targetLow.length >= 3 && (sInspUid.includes(targetLow) || targetLow.includes(sInspUid))) coincideInsp = true;
+          else if (sInspNom && targetLow && targetLow.length >= 3 && (sInspNom.includes(targetLow) || targetLow.includes(sInspNom))) coincideInsp = true;
+
+          if (!coincideInsp) return false;
+
+          const fSol = normalizarFechaBackend(s.fechaVisitaInspector || s.fechaVisita || s.fechaInspeccion || "");
+          return fSol === fNormTarget;
+        });
+
+        const slotsOrden = ["08:00", "10:00", "14:00", "16:00"];
+        let slotLibreAsignado = null;
+
+        const slotSugerido = normalizarSlotBackend(solicitud.slotInspeccion || solicitud.horaVisitaInspector || solicitud.horaVisitaLabel || solicitud.horaVisita || "");
+        if (slotSugerido && !solicitudesActivas.some(s => normalizarSlotBackend(s.slotInspeccion || s.horaVisitaInspector || s.horaVisitaLabel || s.horaVisita) === slotSugerido)) {
+          slotLibreAsignado = slotSugerido;
+        } else {
+          for (const sVal of slotsOrden) {
+            const estaOcupado = solicitudesActivas.some(s => normalizarSlotBackend(s.slotInspeccion || s.horaVisitaInspector || s.horaVisitaLabel || s.horaVisita) === sVal);
+            if (!estaOcupado) {
+              slotLibreAsignado = sVal;
+              break;
+            }
+          }
+        }
+
+        if (!slotLibreAsignado) {
+          return res.status(400).json({
+            error: "Sin Horarios Disponibles",
+            detalle: `No existen horarios disponibles para este inspector en la fecha seleccionada (${fechaVisitaTarget}).`,
+          });
+        }
+
+        solicitud.slotInspeccion = slotLibreAsignado;
+        solicitud.horaVisitaInspector = slotLibreAsignado;
+        solicitud.horaVisitaLabel = obtenerLabelSlotBackend(slotLibreAsignado);
+        solicitud.horaVisita = slotLibreAsignado;
+      } catch (slotErr) {
+        console.warn("[API SOLICITUDES] Aviso validación agenda inspector:", slotErr.message);
+      }
+    }
+
+    const rawId = solicitud.id || solicitud.numeroExpediente || "";
+    const idLimpia = String(rawId).replace(/^EXP-/, "").trim();
+    const id = idLimpia ? idLimpia : generarIdExpediente();
     const archivosPdfRaw = solicitud.archivosPdf || [];
     const archivosPdf = archivosPdfRaw.map((pdf, idx) => ({
       ...pdf,
@@ -331,7 +442,12 @@ app.post("/api/solicitudes", verificarToken, async (req, res) => {
 
       estado: solicitud.estado || "PENDIENTE_PAGO",
 
-      fechaVisitaInspector: solicitud.fechaVisitaInspector || "",
+      fechaVisitaInspector: solicitud.fechaVisitaInspector || solicitud.fechaVisita || "",
+      slotInspeccion: solicitud.slotInspeccion || solicitud.horaVisitaInspector || "08:00",
+      horaVisitaLabel: solicitud.horaVisitaLabel || (solicitud.slotInspeccion ? `${solicitud.slotInspeccion} a. m.` : "08:00 a. m."),
+      inspectorUid: solicitud.inspectorUid || solicitud.inspectorAsignadoUid || solicitud.uidInspector || "INSP-001",
+      inspectorNombre: solicitud.inspectorNombre || solicitud.inspectorAsignado || solicitud.inspectorElegido || "Inspector Carlos Ramírez",
+
       programadoPor: solicitud.programadoPor || "",
       nombreProgramador: solicitud.nombreProgramador || "",
 
@@ -900,12 +1016,36 @@ app.post("/api/pagos/flow/callback", express.urlencoded({ extended: false }), as
           });
 
           if (correoUsuario) {
-            emailProvider.sendEmail(correoUsuario, "Pago confirmado - Solicitud municipal", "Tu pago ha sido procesado exitosamente a través de Flow.", `<div style="font-family:Arial,sans-serif;padding:20px;color:#1e293b;">
-                <h2 style="color:#0f766e;">Pago confirmado</h2>
-                <p>Tu pago de <strong>S/${MONTO_TRAMITE.toFixed(2)}</strong> para la solicitud <strong>EXP-${paymentData.commerceOrder}</strong> ha sido procesado exitosamente a través de Flow.</p>
-                <p>Puedes continuar con tu trámite desde tu panel de usuario.</p>
-                <p style="color:#64748b;font-size:12px;margin-top:20px;">${MUNICIPALIDAD_CONFIG.nombre}</p>
-              </div>`).catch((e) => console.error("[FLOW] Error enviando correo:", e.message));
+            const htmlPagoFlow = `
+              <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 2px solid #0f172a; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 18px rgba(0,0,0,0.08);">
+                <div style="background: linear-gradient(135deg, #0f172a 0%, #059669 100%); padding: 24px 20px; text-align: center; color: #ffffff;">
+                  <h2 style="margin: 0; font-size: 20px; font-weight: 900; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+                  <span style="font-size: 12px; color: #a7f3d0; font-weight: bold; text-transform: uppercase; display: block; margin-top: 4px;">Confirmación de Pago Digital — Pasarela Flow</span>
+                </div>
+                <div style="padding: 26px 24px; color: #334155; font-size: 14.5px; line-height: 1.6;">
+                  <p style="margin: 0 0 16px; font-size: 15px; color: #0f172a;">Estimado(a) ciudadano(a),</p>
+                  <p style="margin: 0 0 18px; text-align: justify;">
+                    Su pago por la suma de <strong>S/ ${MONTO_TRAMITE.toFixed(2)}</strong> correspondiente a la solicitud de Licencia Municipal <strong>EXP-${paymentData.commerceOrder}</strong> ha sido confirmado exitosamente a través de la pasarela de pago Flow.
+                  </p>
+
+                  <div style="background: #f0fdf4; border: 1.5px solid #059669; border-radius: 10px; padding: 16px; margin-bottom: 20px;">
+                    <div style="font-size: 12px; color: #047857; font-weight: bold; text-transform: uppercase; margin-bottom: 6px;">Detalle del Pago Confirmado</div>
+                    <div style="font-size: 14px; color: #064e3b; margin-bottom: 4px;">• <strong>Expediente:</strong> EXP-${paymentData.commerceOrder}</div>
+                    <div style="font-size: 14px; color: #064e3b; margin-bottom: 4px;">• <strong>Monto Procesado:</strong> S/ ${MONTO_TRAMITE.toFixed(2)}</div>
+                    <div style="font-size: 14px; color: #064e3b;">• <strong>Medio de Pago:</strong> Tarjeta / Billetera Digital (Flow)</div>
+                  </div>
+
+                  <p style="margin: 0 0 16px; color: #475569;">
+                    Su expediente ha pasado a estado <strong>Inspección programada</strong>. Puede consultar el estado en tiempo real ingresando a la plataforma.
+                  </p>
+                </div>
+                <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px; text-align: center; color: #64748b; font-size: 12px;">
+                  <strong style="color: #0f172a; display: block; margin-bottom: 2px;">Municipalidad Provincial de Trujillo</strong>
+                  <span>Subgerencia de Licencias y Comercialización</span>
+                </div>
+              </div>
+            `;
+            emailProvider.sendEmail(correoUsuario, `💳 Pago Confirmado — Expediente EXP-${paymentData.commerceOrder}`, `Su pago de S/ ${MONTO_TRAMITE.toFixed(2)} para la solicitud EXP-${paymentData.commerceOrder} ha sido procesado exitosamente.`, htmlPagoFlow).catch((e) => console.error("[FLOW] Error enviando correo:", e.message));
           }
         }
       }
@@ -1125,20 +1265,28 @@ app.post("/api/enviar-codigo", async (req, res) => {
     const nombreUsuario = nombre || "Ciudadano";
 
     const htmlBody = `
-        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-          <p style="font-size: 16px; margin-bottom: 16px; color: #0f172a;">Hola <strong>${nombreUsuario}</strong>,</p>
-          <p style="font-size: 16px; margin-bottom: 16px; color: #334155;">Tu código de verificación es:</p>
-          <div style="font-size: 32px; font-weight: bold; color: #1e3a8a; letter-spacing: 4px; margin: 24px 0; background: #f1f5f9; padding: 16px; text-align: center; border-radius: 8px; border: 1px solid #cbd5e1;">
+      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 2px solid #0f172a; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 18px rgba(0,0,0,0.08);">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); padding: 22px 20px; text-align: center; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 19px; font-weight: 900; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+          <span style="font-size: 11.5px; color: #38bdf8; font-weight: bold; text-transform: uppercase; display: block; margin-top: 4px;">Código de Verificación de Seguridad</span>
+        </div>
+        <div style="padding: 24px 22px; color: #334155; font-size: 14.5px; line-height: 1.6;">
+          <p style="font-size: 15px; margin-bottom: 14px; color: #0f172a;">Estimado(a) <strong>${nombreUsuario}</strong>,</p>
+          <p style="font-size: 14px; margin-bottom: 16px; color: #334155;">Para continuar con el registro de su cuenta en la Plataforma Digital Municipal, ingrese el siguiente código de verificación:</p>
+
+          <div style="font-size: 32px; font-weight: 900; color: #1e3a8a; letter-spacing: 6px; margin: 20px 0; background: #f8fafc; padding: 18px; text-align: center; border-radius: 10px; border: 2px dashed #1e3a8a;">
             ${codigo}
           </div>
-          <p style="font-size: 14px; color: #64748b; margin-bottom: 6px;">Este código tiene una duración limitada.</p>
-          <p style="font-size: 14px; color: #64748b; margin-bottom: 24px;">No compartas este código con nadie.</p>
-          <p style="font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-bottom: 8px;">
-            Si no solicitaste este código, puedes ignorar este mensaje.
-          </p>
-          <p style="font-size: 14px; font-weight: bold; color: #1e3a8a; margin: 0;">Web Municipal.</p>
+
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 4px;">• Este código tiene una validez temporal de 5 minutos.</p>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">• Por su seguridad, no comparta este código con nadie.</p>
         </div>
-      `;
+        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 14px; text-align: center; color: #64748b; font-size: 11.5px;">
+          <strong style="color: #0f172a; display: block; margin-bottom: 2px;">Municipalidad Provincial de Trujillo</strong>
+          <span>Ventanilla Única Digital</span>
+        </div>
+      </div>
+    `;
 
     await emailProvider.sendEmail(correo, "Código de verificación para crear tu cuenta", `Hola ${nombreUsuario}, tu código de verificación es: ${codigo}`, htmlBody);
     res.json({ mensaje: "Correo enviado correctamente" });
@@ -1155,49 +1303,57 @@ app.post("/api/comprobantes/enviar-correo", verificarToken, async (req, res) => 
       return res.status(400).json({ error: "Faltan parámetros obligatorios." });
     }
 
-    const tipoLabel = tipo_comprobante === "boleta" ? "Boleta de Venta Electrónica" : "Factura Electrónica";
+    const tipoLabel = tipo_comprobante === "boleta" ? "BOLETA DE VENTA ELECTRÓNICA" : "FACTURA ELECTRÓNICA";
     const nombrePdf = `${tipo_comprobante === "boleta" ? "BOLETA" : "FACTURA"}_${serie || codigo_unico.split("-")[0]}_${numero || codigo_unico.split("-")[1]}.pdf`;
 
     const htmlBody = `
-        <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; color: #334155; line-height: 1.6; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-          <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: #1f3b57; border-radius: 10px;">
-            <h1 style="color: white; font-size: 18px; margin: 0;">${MUNICIPALIDAD_CONFIG.nombre}</h1>
-            <p style="color: #93c5fd; font-size: 12px; margin: 4px 0 0;">Sistema de Licencias Municipales</p>
+      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 2px solid #0f172a; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 18px rgba(0,0,0,0.08);">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); padding: 24px 20px; text-align: center; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 900; letter-spacing: 0.5px;">MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+          <span style="font-size: 12px; color: #38bdf8; font-weight: bold; text-transform: uppercase; display: block; margin-top: 4px;">Comprobante de Pago Electrónico — SUNAT</span>
+        </div>
+        <div style="padding: 26px 24px; color: #334155; font-size: 14.5px; line-height: 1.6;">
+          <div style="background: #f0fdf4; border: 1.5px solid #059669; border-radius: 10px; padding: 14px; margin-bottom: 20px; text-align: center;">
+            <p style="margin: 0; color: #047857; font-size: 15px; font-weight: 800;">✓ PAGO REGISTRADO EXITOSAMENTE</p>
+            <p style="margin: 4px 0 0; color: #065f46; font-size: 13px;">Se ha emitido su ${tipoLabel} oficial.</p>
           </div>
 
-          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-bottom: 16px; text-align: center;">
-            <p style="margin: 0; color: #166534; font-size: 15px; font-weight: 700;">&#10003; Pago registrado exitosamente</p>
-            <p style="margin: 4px 0 0; color: #166534; font-size: 13px;">Tu comprobante de pago ha sido generado.</p>
-          </div>
+          <h3 style="color: #0f172a; font-size: 16px; margin: 0 0 12px; border-bottom: 2px solid #1e3a8a; padding-bottom: 6px;">${tipoLabel}</h3>
 
-          <h2 style="color: #0f172a; font-size: 16px; margin: 0 0 10px;">${tipoLabel}</h2>
-
-          <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+          <table style="width: 100%; font-size: 13.5px; border-collapse: collapse; margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
             <tr>
-              <td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #f1f5f9;">Tipo de comprobante</td>
-              <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${tipoLabel}</td>
+              <td style="padding: 10px 14px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-weight: 600;">Comprobante:</td>
+              <td style="padding: 10px 14px; color: #0f172a; font-weight: bold; border-bottom: 1px solid #e2e8f0; text-align: right;">${codigo_unico}</td>
             </tr>
             <tr>
-              <td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #f1f5f9;">Serie - Número</td>
-              <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${codigo_unico}</td>
+              <td style="padding: 10px 14px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-weight: 600;">Expediente Asociado:</td>
+              <td style="padding: 10px 14px; color: #1e3a8a; font-weight: bold; border-bottom: 1px solid #e2e8f0; text-align: right;">${id_solicitud || "N/A"}</td>
             </tr>
             <tr>
-              <td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #f1f5f9;">Expediente</td>
-              <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${id_solicitud || "N/A"}</td>
+              <td style="padding: 10px 14px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-weight: 600;">Fecha de Emisión:</td>
+              <td style="padding: 10px 14px; color: #0f172a; font-weight: 600; border-bottom: 1px solid #e2e8f0; text-align: right;">${fecha_emision || "N/A"}</td>
             </tr>
             <tr>
-              <td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #f1f5f9;">Fecha de emisión</td>
-              <td style="padding: 8px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${fecha_emision || "N/A"}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 0; color: #64748b; font-size: 16px;">Monto pagado</td>
-              <td style="padding: 10px 0; color: #166534; font-weight: 700; font-size: 20px; text-align: right;">S/${Number(monto_total || 0).toFixed(2)}</td>
+              <td style="padding: 12px 14px; color: #0f172a; font-size: 15px; font-weight: bold;">Importe Total Pagado:</td>
+              <td style="padding: 12px 14px; color: #059669; font-weight: 900; font-size: 19px; text-align: right;">S/ ${Number(monto_total || 0).toFixed(2)}</td>
             </tr>
           </table>
 
           ${url_pdf ? `
-          <div style="text-align: center; margin: 20px 0;">
-            <a href="${url_pdf}" target="_blank" style="display: inline-block; padding: 14px 32px; background: #1e3a8a; color: #ffffff; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 15px;">
+          <div style="text-align: center; margin: 24px 0 10px;">
+            <a href="${url_pdf}" target="_blank" style="display: inline-block; padding: 14px 28px; background: #1e3a8a; color: #ffffff; border-radius: 10px; text-decoration: none; font-weight: 800; font-size: 14.5px; box-shadow: 0 4px 12px rgba(30,58,138,0.25);">
+              📄 Descargar Comprobante PDF
+            </a>
+            <p style="margin: 8px 0 0; font-size: 12px; color: #94a3b8;">${nombrePdf}</p>
+          </div>
+          ` : ""}
+        </div>
+        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px; text-align: center; color: #64748b; font-size: 12px;">
+          <strong style="color: #0f172a; display: block; margin-bottom: 2px;">Municipalidad Provincial de Trujillo</strong>
+          <span>Subgerencia de Recaudación y Licencias</span>
+        </div>
+      </div>
+    `;
               &#128196; Descargar comprobante PDF
             </a>
             <p style="margin: 8px 0 0; font-size: 12px; color: #94a3b8;">${nombrePdf}</p>
