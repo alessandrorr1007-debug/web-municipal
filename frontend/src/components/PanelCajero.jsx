@@ -2366,21 +2366,17 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                               defaultValue=""
                               onChange={(e) => {
                                 const val = e.target.value;
-                                if (val === "NUEVA") {
-                                  setNombreSucursalForm("Nueva Sucursal");
-                                  setDireccionForm(direccionOriginalSunat || "");
-                                } else if (val !== "") {
+                                if (val !== "") {
                                   const item = sucursalesExistentesDelRuc[parseInt(val, 10)];
                                   if (item) {
-                                    setNombreSucursalForm(item.nombreSucursal || item.sucursal || "Sucursal Anexa");
+                                    setNombreSucursalForm(item.nombreSucursal || item.sucursal || "Sede Principal");
                                     if (item.direccion) setDireccionForm(item.direccion);
                                   }
                                 }
                               }}
                               style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #2563eb", fontSize: "13.5px", fontWeight: "bold", background: "white", color: "#0f172a" }}
                             >
-                              <option value="">-- Seleccionar local registrado o agregar nueva sucursal --</option>
-                              <option value="NUEVA">➕ Registrar Nueva Sucursal / Nuevo Local Comercial</option>
+                              <option value="">-- Seleccionar Local / Sucursal Registrada * --</option>
                               {sucursalesExistentesDelRuc.map((item, idx) => (
                                 <option key={item.id || idx} value={idx}>
                                   📍 [{item.numeroExpediente || `EXP-${item.id}`}] {item.nombreSucursal || "Sucursal"} — {item.direccion} ({item.estado || "En trámite"})
@@ -2388,7 +2384,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                               ))}
                             </select>
                             <small style={{ color: "#1e3a8a", fontSize: "12px", marginTop: "6px", display: "block" }}>
-                              ℹ️ Seleccione una sucursal previa para consultar sus datos o elija "Registrar Nueva Sucursal" para ingresar un nuevo local comercial con este RUC.
+                              ℹ️ Seleccione la sucursal o local comercial registrado previamente para este RUC para autocompletar sus datos oficiales.
                             </small>
                           </div>
                         )}
