@@ -966,9 +966,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const idExp = String(s.id || "").toLowerCase();
       const codExp = `exp-${idExp}`;
       const negocio = String(s.nombreNegocio || s.razonSocial || "").toLowerCase();
+      const dni = String(s.dni || s.dniSolicitante || "").toLowerCase();
       const distritoStr = String(s.distrito || "").toLowerCase();
 
-      return ruc.includes(q) || idExp.includes(q) || codExp.includes(q) || negocio.includes(q) || distritoStr.includes(q);
+      return ruc.includes(q) || idExp.includes(q) || codExp.includes(q) || negocio.includes(q) || dni.includes(q) || distritoStr.includes(q);
     });
   }, [solicitudes, busqueda, filtroDistrito, fechaDesde, fechaHasta, parseFechaGenerica]);
 
