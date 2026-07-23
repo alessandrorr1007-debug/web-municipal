@@ -2496,9 +2496,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                               onFocus={(e) => e.target.blur()}
                               style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: "#e2e8f0", color: "#1e293b", cursor: "not-allowed", pointerEvents: "none", userSelect: "none" }}
                             />
-                            <small style={{ color: "#64748b", fontSize: "12px", marginTop: "4px", display: "block" }}>
-                              🔒 Dirección oficial provista por la consulta SUNAT. No es posible modificarla manualmente.
-                            </small>
                           </div>
                         </div>
                       </div>
