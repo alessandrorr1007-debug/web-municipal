@@ -397,6 +397,89 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [actividadEconomicaSunat, setActividadEconomicaSunat] = useState("");
   const [esJurisdiccionTrujillo, setEsJurisdiccionTrujillo] = useState(true);
 
+  // ESTADOS Y GESTIÓN DE APERTURA, ARQUEO Y CIERRE DE CAJA MUNICIPAL
+  const [cajaAbierta, setCajaAbierta] = useState(() => {
+    try {
+      const saved = localStorage.getItem("caja_municipal_estado");
+      return saved ? JSON.parse(saved) : { abierta: false, montoInicial: 0, ventanilla: "Ventanilla N° 01", turno: "Turno Mañana (08:00 - 16:00)", fechaApertura: null };
+    } catch {
+      return { abierta: false, montoInicial: 0, ventanilla: "Ventanilla N° 01", turno: "Turno Mañana (08:00 - 16:00)", fechaApertura: null };
+    }
+  });
+
+  const [mostrarModalAperturaCaja, setMostrarModalAperturaCaja] = useState(false);
+  const [mostrarModalArqueoCaja, setMostrarModalArqueoCaja] = useState(false);
+
+  const [formAperturaMonto, setFormAperturaMonto] = useState("100.00");
+  const [formAperturaVentanilla, setFormAperturaVentanilla] = useState("Ventanilla N° 01 — Principal");
+  const [formAperturaTurno, setFormAperturaTurno] = useState("Turno Mañana (08:00 - 16:00)");
+
+  const ejecutarAperturaCaja = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const monto = parseFloat(formAperturaMonto) || 0;
+    if (monto < 0) {
+      alert("⚠️ Ingrese un monto inicial en efectivo válido (S/ 0.00 o mayor).");
+      return;
+    }
+
+    const fechaAct = new Date().toLocaleString("es-PE", { dateStyle: "short", timeStyle: "medium" });
+    const nuevaApertura = {
+      abierta: true,
+      montoInicial: monto,
+      ventanilla: formAperturaVentanilla || "Ventanilla N° 01",
+      turno: formAperturaTurno || "Turno Mañana",
+      fechaApertura: fechaAct,
+      cajeraNombre: usuario?.nombre || usuario?.email || "Cajera Responsable",
+      uidCajera: usuario?.uid || "CAJERA-001"
+    };
+
+    setCajaAbierta(nuevaApertura);
+    localStorage.setItem("caja_municipal_estado", JSON.stringify(nuevaApertura));
+    setMostrarModalAperturaCaja(false);
+    alert(`✅ Caja Municipal Aperturada Exitosamente.\n\nFondo Inicial: S/ ${monto.toFixed(2)}\nVentanilla: ${nuevaApertura.ventanilla}\nFecha/Hora: ${nuevaApertura.fechaApertura}`);
+  };
+
+  const ejecutarCierreCaja = () => {
+    if (!window.confirm("¿Está seguro de efectuar el CIERRE DE CAJA Y ARQUEO DE TURNO? No se podrán procesar cobros presenciales hasta aperturar un nuevo turno.")) {
+      return;
+    }
+
+    const estadoCerrada = { abierta: false, montoInicial: 0, ventanilla: "", turno: "", fechaApertura: null };
+    setCajaAbierta(estadoCerrada);
+    localStorage.setItem("caja_municipal_estado", JSON.stringify(estadoCerrada));
+    setMostrarModalArqueoCaja(false);
+    alert("🔒 Cierre de Caja Municipal y Arqueo de Turno Concluso Exitosamente.");
+  };
+
+  const resumenArqueoCaja = useMemo(() => {
+    const lista = Array.isArray(solicitudes) ? solicitudes : [];
+    const cobrosHoy = lista.filter((s) => {
+      if (!s) return false;
+      const estadoP = String(s.estadoPago || s.pago || "").toLowerCase();
+      return estadoP.includes("confirmado") || estadoP.includes("pagado");
+    });
+
+    const totalEfectivo = cobrosHoy
+      .filter((s) => String(s.metodoPago || "").toLowerCase().includes("efectivo"))
+      .reduce((sum, s) => sum + (parseFloat(s.montoPagado) || MONTO_TRAMITE), 0);
+
+    const totalDigital = cobrosHoy
+      .filter((s) => !String(s.metodoPago || "").toLowerCase().includes("efectivo"))
+      .reduce((sum, s) => sum + (parseFloat(s.montoPagado) || MONTO_TRAMITE), 0);
+
+    const fondoInicial = parseFloat(cajaAbierta.montoInicial) || 0;
+    const saldoTotalEnCaja = fondoInicial + totalEfectivo;
+
+    return {
+      totalOperaciones: cobrosHoy.length,
+      totalEfectivo,
+      totalDigital,
+      fondoInicial,
+      saldoTotalEnCaja,
+      totalRecaudadoGeneral: totalEfectivo + totalDigital,
+    };
+  }, [solicitudes, cajaAbierta]);
+
   // CONSULTAR RENIEC (DNI) EN PRESENCIAL
   const manejarConsultarDniPresencial = async () => {
     if (!dniForm || dniForm.length !== 8) {
@@ -1798,15 +1881,78 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         </div>
 
         <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+          {/* BADGE ESTADO DE CAJA MUNICIPAL */}
+          {cajaAbierta.abierta ? (
+            <div style={{ background: "#f0fdf4", color: "#166534", padding: "6px 14px", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", border: "1.5px solid #86efac", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+              <span>🟢 <strong>CAJA ABIERTA</strong></span>
+              <span style={{ color: "#15803d", fontSize: "12px" }}>• {cajaAbierta.ventanilla} (Fondo: S/ {cajaAbierta.montoInicial.toFixed(2)})</span>
+            </div>
+          ) : (
+            <div style={{ background: "#fef2f2", color: "#991b1b", padding: "6px 14px", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", border: "1.5px solid #fca5a5", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span>🔴 <strong>CAJA CERRADA</strong></span>
+              <span style={{ color: "#b91c1c", fontSize: "12px" }}>• Requiere Apertura de Turno</span>
+            </div>
+          )}
+
+          {/* BOTÓN APERTURA O ARQUEO SEGÚN ESTADO DE CAJA */}
+          {!cajaAbierta.abierta ? (
+            <button
+              type="button"
+              onClick={() => setMostrarModalAperturaCaja(true)}
+              style={{
+                background: "#2563eb",
+                color: "white",
+                border: "none",
+                padding: "10px 16px",
+                borderRadius: "8px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                fontSize: "13.5px",
+                boxShadow: "0 2px 6px rgba(37,99,235,0.3)",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              🔓 Aperturar Caja Municipal
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setMostrarModalArqueoCaja(true)}
+              style={{
+                background: "#0f766e",
+                color: "white",
+                border: "none",
+                padding: "10px 16px",
+                borderRadius: "8px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                fontSize: "13.5px",
+                boxShadow: "0 2px 6px rgba(15,118,110,0.3)",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              📊 Arqueo y Cierre de Caja
+            </button>
+          )}
+
           {seccion !== "nueva-solicitud" && (
             <button
               type="button"
               onClick={() => {
+                if (!cajaAbierta.abierta) {
+                  alert("🔒 La Caja Municipal se encuentra CERRADA. Debe realizar la apertura de turno con el fondo inicial antes de registrar trámites y cobros.");
+                  setMostrarModalAperturaCaja(true);
+                  return;
+                }
                 if (cambiarSeccion) cambiarSeccion("nueva-solicitud");
                 else setMostrarModalNuevaSolicitud(true);
               }}
               style={{
-                background: "#16a34a",
+                background: cajaAbierta.abierta ? "#16a34a" : "#94a3b8",
                 color: "white",
                 border: "none",
                 padding: "10px 16px",
@@ -3887,6 +4033,192 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 >
                   {procesando ? "Procesando Renovación..." : "💰 Confirmar Pago (S/ 3.00) y Renovar Licencia"}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: APERTURA DE CAJA MUNICIPAL */}
+      {mostrarModalAperturaCaja && (
+        <div className="admin-form-modal" style={{ zIndex: 1100 }}>
+          <div className="admin-form-card" style={{ maxWidth: "520px", borderRadius: "16px", overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)" }}>
+            <div className="admin-form-header" style={{ background: "linear-gradient(135deg, #1e3a8a, #2563eb)", color: "white", padding: "20px 24px" }}>
+              <div>
+                <h3 style={{ color: "white", margin: 0, fontSize: "19px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}>
+                  🔓 Apertura de Caja Municipal
+                </h3>
+                <small style={{ color: "#bfdbfe", fontSize: "12.5px" }}>Gestión de Turnos y Registro de Fondo Inicial para Cobros Presenciales</small>
+              </div>
+              <button type="button" onClick={() => setMostrarModalAperturaCaja(false)} style={{ color: "white", background: "none", border: "none", fontSize: "20px", cursor: "pointer", fontWeight: "bold" }}>✕</button>
+            </div>
+
+            <form onSubmit={ejecutarAperturaCaja} style={{ padding: "24px" }}>
+              <div style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: "14px 16px", borderRadius: "12px", marginBottom: "20px" }}>
+                <p style={{ margin: 0, fontSize: "13px", color: "#1e40af", lineHeight: "1.5" }}>
+                  <strong>👤 Cajera Responsable:</strong> {usuario?.nombre || usuario?.email || "Cajera de Ventanilla"}<br />
+                  <strong>📅 Fecha y Hora:</strong> {new Date().toLocaleString("es-PE")}
+                </p>
+              </div>
+
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "6px" }}>
+                  💰 Fondo Inicial en Efectivo (S/) *
+                </label>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", fontWeight: "bold", color: "#64748b", fontSize: "16px" }}>S/</span>
+                  <input
+                    type="number"
+                    step="0.10"
+                    min="0"
+                    placeholder="100.00"
+                    value={formAperturaMonto}
+                    onChange={(e) => setFormAperturaMonto(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "12px 14px 12px 42px", borderRadius: "10px", border: "1.5px solid #2563eb", fontSize: "18px", fontWeight: "800", color: "#1e293b", background: "#f8fafc" }}
+                  />
+                </div>
+                <small style={{ color: "#64748b", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                  Monto en soles asignado a caja física para dar vuelto a los contribuyentes.
+                </small>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "24px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    🏢 Ventanilla de Atención *
+                  </label>
+                  <select
+                    value={formAperturaVentanilla}
+                    onChange={(e) => setFormAperturaVentanilla(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
+                  >
+                    <option value="Ventanilla N° 01 — Principal">Ventanilla N° 01 (Principal)</option>
+                    <option value="Ventanilla N° 02 — Licencias">Ventanilla N° 02 (Licencias)</option>
+                    <option value="Ventanilla N° 03 — Preferencial">Ventanilla N° 03 (Preferencial)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    🕒 Turno de Atención *
+                  </label>
+                  <select
+                    value={formAperturaTurno}
+                    onChange={(e) => setFormAperturaTurno(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
+                  >
+                    <option value="Turno Mañana (08:00 - 16:00)">Turno Mañana (08:00 - 16:00)</option>
+                    <option value="Turno Tarde (16:00 - 20:00)">Turno Tarde (16:00 - 20:00)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalAperturaCaja(false)}
+                  style={{ padding: "12px 20px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: "12px 24px", background: "#16a34a", color: "white", border: "none", borderRadius: "10px", fontWeight: "800", fontSize: "14.5px", cursor: "pointer", boxShadow: "0 4px 12px rgba(22,163,74,0.25)" }}
+                >
+                  🔓 Aperturar Caja Municipal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: ARQUEO Y CIERRE DE CAJA MUNICIPAL */}
+      {mostrarModalArqueoCaja && (
+        <div className="admin-form-modal" style={{ zIndex: 1100 }}>
+          <div className="admin-form-card" style={{ maxWidth: "620px", borderRadius: "16px", overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)" }}>
+            <div className="admin-form-header" style={{ background: "linear-gradient(135deg, #0f766e, #0d9488)", color: "white", padding: "20px 24px" }}>
+              <div>
+                <h3 style={{ color: "white", margin: 0, fontSize: "19px", fontWeight: "800", display: "flex", alignItems: "center", gap: "8px" }}>
+                  📊 Arqueo y Cierre de Caja Municipal
+                </h3>
+                <small style={{ color: "#ccfbf1", fontSize: "12.5px" }}>Resumen de Recaudación Diaria, Balance Físico y Cierre de Turno</small>
+              </div>
+              <button type="button" onClick={() => setMostrarModalArqueoCaja(false)} style={{ color: "white", background: "none", border: "none", fontSize: "20px", cursor: "pointer", fontWeight: "bold" }}>✕</button>
+            </div>
+
+            <div style={{ padding: "24px" }}>
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "16px", borderRadius: "12px", marginBottom: "20px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "13px", color: "#334155" }}>
+                  <p style={{ margin: 0 }}><strong>👤 Responsable:</strong> {cajaAbierta.cajeraNombre}</p>
+                  <p style={{ margin: 0 }}><strong>🏢 Ventanilla:</strong> {cajaAbierta.ventanilla}</p>
+                  <p style={{ margin: 0 }}><strong>🕒 Turno:</strong> {cajaAbierta.turno}</p>
+                  <p style={{ margin: 0 }}><strong>📅 Fecha Apertura:</strong> {cajaAbierta.fechaApertura || "Hoy"}</p>
+                </div>
+              </div>
+
+              {/* TARJETAS RESUMEN DE ARQUEO EN TIEMPO REAL */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+                <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "14px", borderRadius: "10px", textAlign: "center" }}>
+                  <span style={{ fontSize: "11px", fontWeight: "bold", color: "#1e40af", display: "block", textTransform: "uppercase" }}>Fondo Inicial</span>
+                  <strong style={{ fontSize: "20px", color: "#1e3a8a" }}>S/ {resumenArqueoCaja.fondoInicial.toFixed(2)}</strong>
+                </div>
+
+                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "14px", borderRadius: "10px", textAlign: "center" }}>
+                  <span style={{ fontSize: "11px", fontWeight: "bold", color: "#166534", display: "block", textTransform: "uppercase" }}>Efectivo Recaudado</span>
+                  <strong style={{ fontSize: "20px", color: "#15803d" }}>S/ {resumenArqueoCaja.totalEfectivo.toFixed(2)}</strong>
+                </div>
+
+                <div style={{ background: "#faf5ff", border: "1px solid #e9d5ff", padding: "14px", borderRadius: "10px", textAlign: "center" }}>
+                  <span style={{ fontSize: "11px", fontWeight: "bold", color: "#6b21a8", display: "block", textTransform: "uppercase" }}>Digital / Flow</span>
+                  <strong style={{ fontSize: "20px", color: "#7e22ce" }}>S/ {resumenArqueoCaja.totalDigital.toFixed(2)}</strong>
+                </div>
+              </div>
+
+              {/* RESUMEN TOTAL BALANCES */}
+              <div style={{ background: "#0f172a", color: "white", padding: "20px", borderRadius: "14px", marginBottom: "24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", borderBottom: "1px solid #334155", paddingBottom: "10px" }}>
+                  <span style={{ fontSize: "13.5px", color: "#94a3b8" }}>Total Operaciones Atendidas:</span>
+                  <strong style={{ fontSize: "16px", color: "#38bdf8" }}>{resumenArqueoCaja.totalOperaciones} Operación(es)</strong>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                  <span style={{ fontSize: "13.5px", color: "#94a3b8" }}>Total Recaudado Bruto (Efectivo + Flow):</span>
+                  <strong style={{ fontSize: "16px", color: "#4ade80" }}>S/ {resumenArqueoCaja.totalRecaudadoGeneral.toFixed(2)}</strong>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "10px", borderTop: "2px solid #334155" }}>
+                  <span style={{ fontSize: "15px", fontWeight: "bold", color: "#f8fafc" }}>🧮 ARQUEO FÍSICO EN CAJA (Fondo Inicial + Efectivo):</span>
+                  <strong style={{ fontSize: "24px", fontWeight: "900", color: "#facc15" }}>S/ {resumenArqueoCaja.saldoTotalEnCaja.toFixed(2)}</strong>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{ padding: "12px 18px", background: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  🖨️ Imprimir Ticket Arqueo
+                </button>
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarModalArqueoCaja(false)}
+                    style={{ padding: "12px 18px", background: "#ffffff", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}
+                  >
+                    Cerrar Ventana
+                  </button>
+                  <button
+                    type="button"
+                    onClick={ejecutarCierreCaja}
+                    style={{ padding: "12px 22px", background: "#dc2626", color: "white", border: "none", borderRadius: "10px", fontWeight: "800", fontSize: "14px", cursor: "pointer", boxShadow: "0 4px 12px rgba(220,38,38,0.25)" }}
+                  >
+                    🔒 Efectuar Cierre de Caja
+                  </button>
+                </div>
               </div>
             </div>
           </div>
