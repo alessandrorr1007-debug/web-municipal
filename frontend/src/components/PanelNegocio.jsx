@@ -2129,8 +2129,8 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                               <input type="text" value={form.giro} readOnly disabled style={{ background: "#f1f5f9" }} />
                             </div>
                             <div>
-                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Dirección fiscal</label>
-                              <input type="text" value={form.direccion} readOnly disabled style={{ background: "#f1f5f9" }} />
+                              <label style={{ fontSize: "12px", fontWeight: "700", color: "#1e293b", display: "block", marginBottom: "4px" }}>📍 Dirección fiscal / Local (Editable)</label>
+                              <input type="text" name="direccion" value={form.direccion} onChange={manejarCambio} placeholder="Ingrese o edite la dirección" style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #3b82f6", fontSize: "13.5px", background: "#ffffff", fontWeight: "600", color: "#0f172a" }} />
                             </div>
                           </div>
 

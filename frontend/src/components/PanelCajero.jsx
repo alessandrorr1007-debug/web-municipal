@@ -2490,11 +2490,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             <input
                               type="text"
                               value={direccionForm}
-                              readOnly
-                              disabled
-                              onKeyDown={(e) => e.preventDefault()}
-                              onFocus={(e) => e.target.blur()}
-                              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: "#e2e8f0", color: "#1e293b", cursor: "not-allowed", pointerEvents: "none", userSelect: "none" }}
+                              onChange={(e) => setDireccionForm(e.target.value)}
+                              placeholder="Ingrese o edite la dirección del local comercial"
+                              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: "#ffffff", color: "#1e293b" }}
                             />
                           </div>
                         </div>
@@ -3993,13 +3991,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>📍 Dirección del Local Comercial *</label>
                   <input
                     type="text"
-                    placeholder="🔒 Se autocompleta consultando SUNAT"
+                    placeholder="Ingrese o edite la dirección del local"
                     value={direccionForm}
-                    readOnly
-                    disabled
-                    onKeyDown={(e) => e.preventDefault()}
-                    onFocus={(e) => e.target.blur()}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#e2e8f0", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b", pointerEvents: "none", userSelect: "none" }}
+                    onChange={(e) => setDireccionForm(e.target.value)}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#ffffff", fontWeight: "bold", color: "#1e293b" }}
                   />
                 </div>
 
