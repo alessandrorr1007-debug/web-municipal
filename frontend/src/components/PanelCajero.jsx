@@ -379,6 +379,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [nombreNegocioForm, setNombreNegocioForm] = useState("");
   const [razonSocialForm, setRazonSocialForm] = useState("");
   const [direccionForm, setDireccionForm] = useState("");
+  const [nombreSucursalForm, setNombreSucursalForm] = useState("Sede Principal");
   const [giroForm, setGiroForm] = useState("general");
   const [consultandoDni, setConsultandoDni] = useState(false);
   const [consultandoRuc, setConsultandoRuc] = useState(false);
@@ -982,10 +983,24 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       alert("⚠️ Debe consultar y validar el RUC del establecimiento mediante SUNAT antes de continuar.");
       return;
     }
-    const rucDuplicado = solicitudes.find((s) => s.ruc === rucForm.trim() && !["Rechazado", "Licencia rechazada"].includes(s.estado));
-    if (rucDuplicado) {
-      const expLimpio = String(rucDuplicado.id).replace(/^EXP-/, "");
-      alert(`🚫 No es posible registrar la solicitud.\n\nEl RUC ${rucForm} (${nombreNegocioForm}) ya tiene un expediente activo registrado en el sistema (EXP-${expLimpio}).\n\nSolo se permite una solicitud por RUC.`);
+    const dirNorm = (direccionForm || "").toLowerCase().trim();
+    const sucursalNorm = (nombreSucursalForm || "").toLowerCase().trim();
+
+    const rucDuplicadoMismaSucursal = solicitudes.find((s) => {
+      if (!s || String(s.ruc).trim() !== String(rucForm).trim()) return false;
+      if (["Rechazado", "Licencia rechazada", "Anulado"].includes(s.estado)) return false;
+      const sDirNorm = (s.direccion || "").toLowerCase().trim();
+      const sSucursalNorm = (s.nombreSucursal || "").toLowerCase().trim();
+
+      const mismaDireccion = dirNorm && sDirNorm && sDirNorm === dirNorm;
+      const mismaSucursal = sucursalNorm && sSucursalNorm && sucursalNorm.length > 2 && sucursalNorm === sSucursalNorm;
+
+      return mismaDireccion || mismaSucursal;
+    });
+
+    if (rucDuplicadoMismaSucursal) {
+      const expLimpio = String(rucDuplicadoMismaSucursal.id).replace(/^EXP-/, "");
+      alert(`🚫 No es posible registrar la solicitud.\n\nEl RUC ${rucForm} (${nombreNegocioForm}) ya tiene un expediente activo (EXP-${expLimpio}) registrado en este mismo local/sucursal ("${direccionForm}").\n\nPara registrar una nueva sucursal con el mismo RUC, ingrese una dirección de local diferente o un nombre de sucursal distinto.`);
       return;
     }
     if (!esJurisdiccionTrujillo) {
@@ -1094,6 +1109,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         ruc: rucForm || "",
         nombreNegocio: nombreNegocioForm || "",
         razonSocial: razonSocialForm || nombreNegocioForm || "",
+        nombreSucursal: nombreSucursalForm || "Sede Principal",
+        sucursal: nombreSucursalForm || "Sede Principal",
         direccion: direccionForm || "",
         giro: giroForm || "",
         tipoTramite: tipoTramiteSeleccionado || "Nueva Licencia de Funcionamiento",
@@ -2101,7 +2118,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           </h5>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                             <p style={{ margin: 0, fontSize: "13px", color: "#334155", gridColumn: "span 2" }}>
-                              <strong>📍 Dirección Fiscal:</strong> {direccionForm}
+                              <strong>📍 Dirección Fiscal / Local:</strong> {direccionForm}
                             </p>
                             <p style={{ margin: 0, fontSize: "13px", color: "#334155" }}>
                               <strong>📍 Distrito:</strong> {distritoSunat}
@@ -2112,6 +2129,22 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             <p style={{ margin: 0, fontSize: "13px", color: "#334155" }}>
                               <strong>📍 Departamento:</strong> {departamentoSunat}
                             </p>
+                          </div>
+
+                          <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid #e2e8f0" }}>
+                            <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
+                              🏢 Identificador / Nombre de Sucursal *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Ej: Sede Principal, Sucursal Av. Larco 450, Local N° 2"
+                              value={nombreSucursalForm}
+                              onChange={(e) => setNombreSucursalForm(e.target.value)}
+                              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #3b82f6", fontSize: "13.5px", fontWeight: "bold" }}
+                            />
+                            <small style={{ color: "#64748b", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                              Permite registrar múltiples licencias e inspecciones para distintas sucursales de un mismo RUC.
+                            </small>
                           </div>
                         </div>
                       </div>

@@ -732,13 +732,26 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
     try {
       setBuscando(true);
 
-      // 1. Verificar si el RUC ya está registrado en Firebase/Firestore
+      // 1. Verificar si este RUC ya tiene una sucursal registrada en LA MISMA DIRECCIÓN
       const qRuc = query(collection(db, "negocios"), where("ruc", "==", form.ruc.trim()));
       const snapRuc = await getDocs(qRuc);
       if (!snapRuc.empty) {
-        setErrorRuc("Este RUC ya se encuentra registrado.");
-        setRucValidado(false);
-        return;
+        const dirNorm = (form.direccion || "").toLowerCase().trim();
+        const sucursalNorm = (form.nombreSucursal || "").toLowerCase().trim();
+
+        const existeMismaSucursal = snapRuc.docs.some((docSnap) => {
+          const d = docSnap.data();
+          const dDirNorm = (d.direccion || "").toLowerCase().trim();
+          const dSucNorm = (d.nombreSucursal || "").toLowerCase().trim();
+
+          return (dirNorm && dDirNorm === dirNorm) || (sucursalNorm && sucursalNorm.length > 2 && dSucNorm === sucursalNorm);
+        });
+
+        if (existeMismaSucursal) {
+          setErrorRuc("Este RUC ya cuenta con un registro activo para esta misma dirección/sucursal.");
+          setRucValidado(false);
+          return;
+        }
       }
 
       // 2. Consultar RUC en el backend (SUNAT/Decolecta)
@@ -2119,6 +2132,23 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
                               <label style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "4px" }}>Dirección fiscal</label>
                               <input type="text" value={form.direccion} readOnly disabled style={{ background: "#f1f5f9" }} />
                             </div>
+                          </div>
+
+                          <div style={{ marginTop: "12px" }}>
+                            <label style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a8a", display: "block", marginBottom: "4px" }}>
+                              🏢 Identificador / Nombre de Sucursal *
+                            </label>
+                            <input
+                              type="text"
+                              name="nombreSucursal"
+                              placeholder="Ej: Sede Principal, Sucursal Av. Larco 450, Local N° 2"
+                              value={form.nombreSucursal || "Sede Principal"}
+                              onChange={manejarCambio}
+                              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #3b82f6", fontSize: "13.5px", fontWeight: "bold" }}
+                            />
+                            <small style={{ color: "#64748b", fontSize: "11.5px" }}>
+                              Permite registrar distintas sucursales e inspecciones bajo este mismo RUC.
+                            </small>
                           </div>
                           <div className="form-grid" style={{ marginTop: "10px", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
                             <div>
