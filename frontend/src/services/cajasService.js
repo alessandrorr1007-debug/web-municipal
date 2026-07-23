@@ -65,9 +65,18 @@ export const abrirCajaMunicipal = async ({ cajeroId, cajeroNombre, cajeroEmail, 
     throw new Error("No hay una sesión activa de usuario cajero autenticado.");
   }
 
-  const monto = parseFloat(montoInicial);
-  if (isNaN(monto) || monto < 0) {
-    throw new Error("El monto inicial debe ser un valor numérico válido mayor o igual a S/ 0.00.");
+  if (montoInicial === undefined || montoInicial === null || String(montoInicial).trim() === "") {
+    throw new Error("⚠️ El monto inicial de caja es obligatorio.");
+  }
+
+  const strMonto = String(montoInicial).trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(strMonto)) {
+    throw new Error("⚠️ El monto inicial solo debe contener números positivos con hasta 2 decimales.");
+  }
+
+  const monto = parseFloat(strMonto);
+  if (isNaN(monto) || monto < 20.00 || monto > 2000.00) {
+    throw new Error("⚠️ El monto inicial de caja debe estar entre S/ 20.00 y S/ 2,000.00.");
   }
 
   // 1. Validación de buenas prácticas: verificar si el cajero ya tiene una caja abierta activa
@@ -76,7 +85,7 @@ export const abrirCajaMunicipal = async ({ cajeroId, cajeroNombre, cajeroEmail, 
     const fecha = cajaExistente.fechaApertura || "el inicio de turno";
     const montoPrevio = parseFloat(cajaExistente.montoInicial || 0).toFixed(2);
     throw new Error(
-      `⚠️ Ya cuenta con una Caja Municipal Abierta desde ${fecha} con un fondo inicial de S/ ${montoPrevio}. No es posible aperturar más de una caja simultáneamente.`
+      `⚠️ Ya cuenta con una Caja Municipal Abierta desde ${fecha} con un fondo inicial de S/ ${montoPrevio}. No es posible registrar más de una apertura activa simultáneamente.`
     );
   }
 

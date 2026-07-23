@@ -451,9 +451,20 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     const cajeroNombre = usuario?.nombre || usuario?.displayName || usuario?.email || "Cajera Responsable";
     const cajeroEmail = usuario?.email || "";
 
-    const monto = parseFloat(formAperturaMonto);
-    if (isNaN(monto) || monto < 0) {
-      alert("⚠️ Ingrese un monto inicial en efectivo válido (mayor o igual a S/ 0.00).");
+    if (formAperturaMonto === undefined || formAperturaMonto === null || String(formAperturaMonto).trim() === "") {
+      alert("⚠️ El monto inicial de caja es obligatorio.");
+      return;
+    }
+
+    const strMonto = String(formAperturaMonto).trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(strMonto)) {
+      alert("⚠️ El monto inicial solo debe contener números positivos con hasta 2 decimales (ejemplo: 100.00).");
+      return;
+    }
+
+    const monto = parseFloat(strMonto);
+    if (isNaN(monto) || monto < 20.00 || monto > 2000.00) {
+      alert("⚠️ El monto inicial de caja permitido debe estar entre S/ 20.00 y S/ 2,000.00.");
       return;
     }
 
@@ -4150,17 +4161,18 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                   <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", fontWeight: "bold", color: "#64748b", fontSize: "18px" }}>S/</span>
                   <input
                     type="number"
-                    step="0.10"
-                    min="0"
-                    placeholder="100.00"
+                    step="0.01"
+                    min="20"
+                    max="2000"
+                    placeholder="Ej. 100.00"
                     value={formAperturaMonto}
                     onChange={(e) => setFormAperturaMonto(e.target.value)}
                     required
                     style={{ width: "100%", padding: "12px 14px 12px 46px", borderRadius: "10px", border: "2px solid #2563eb", fontSize: "20px", fontWeight: "900", color: "#0f172a", background: "#ffffff" }}
                   />
                 </div>
-                <small style={{ color: "#64748b", fontSize: "12px", marginTop: "6px", display: "block" }}>
-                  Ingrese el fondo de sencillo en soles con el que inicia su turno para dar vuelto a los usuarios.
+                <small style={{ color: "#475569", fontSize: "12px", marginTop: "6px", display: "block" }}>
+                  ⚠️ <strong>Monto permitido:</strong> Mínimo <strong>S/ 20.00</strong> y Máximo <strong>S/ 2,000.00</strong> (solo números positivos con hasta 2 decimales).
                 </small>
               </div>
 
