@@ -1257,19 +1257,21 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
       console.log("[SOLICITUD] Guardada:", nueva.id);
       setExpediente(nueva.id);
 
+      const emailDestino = usuario?.correo || usuario?.email || form.correo || "";
+
       // Crear notificación de registro en la base de datos
       await crearNotificacion(usuario?.uid, {
         titulo: "Solicitud registrada",
         descripcion: `Su solicitud EXP-${nueva.id} de Licencia de Funcionamiento se ha registrado correctamente.`,
         icono: "📝",
-      }, usuario?.correo || "");
+      }, emailDestino);
 
       let comp = null;
       if (estadoPago === "Confirmado") {
         const tipoFinal = tipoComprobante || (form.ruc.startsWith("20") ? "factura" : "boleta");
         comp = await generarComprobante({
           uidUsuario: usuario?.uid || "",
-          correoUsuario: usuario?.correo || "",
+          correoUsuario: emailDestino,
           idSolicitud: nueva.id,
           tipo: tipoFinal,
           dniCliente: dniSolicitante,
@@ -1296,13 +1298,13 @@ function PanelNegocio({ seccion, cambiarSeccion }) {
           titulo: "Pago confirmado",
           descripcion: `Se ha confirmado el pago de S/ ${MONTO_TRAMITE.toFixed(2)} para la solicitud EXP-${nueva.id}.`,
           icono: "💳",
-        }, usuario?.correo || "");
+        }, emailDestino);
 
         await crearNotificacion(usuario?.uid, {
           titulo: "Comprobante generado",
           descripcion: `Se generó con éxito el comprobante ${comp.serie}-${comp.numero} de su pago.`,
           icono: "📄",
-        }, usuario?.correo || "");
+        }, emailDestino);
       }
 
       setGuardando(false);
