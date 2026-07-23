@@ -44,11 +44,15 @@ export const crearNotificacion = async (uidUsuario, notifPayload, correoUsuario 
   if (correoUsuario) {
     try {
       const headers = await authHeaders();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       const res = await fetch(`${API_URL}/api/email/enviar-notificacion`, {
         method: "POST",
         headers,
         body: JSON.stringify({ correoUsuario, titulo, descripcion, html }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos:", res.status);
       else console.log("[NOTIFICACION EMAIL] Enviado correctamente a:", correoUsuario);
     } catch (err) {

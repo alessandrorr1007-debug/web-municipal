@@ -1572,8 +1572,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           </div>
         `;
 
-        // ENVIAR CORREOS DE CONFIRMACIÓN Y COMPROBANTE AL CORREO INGRESADO AL INICIO
-        await crearNotificacion(
+        // ENVIAR CORREOS DE CONFIRMACIÓN Y COMPROBANTE AL CORREO EN SEGUNDO PLANO (NON-BLOCKING)
+        crearNotificacion(
           solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
           {
             titulo: `${tipoTramiteSeleccionado} Registrada — EXP-${expIdLimpio}`,
@@ -1586,7 +1586,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
         if (esEfectivo) {
           // ENVIAR CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO (SOLO SI ES EN EFECTIVO)
-          await crearNotificacion(
+          crearNotificacion(
             solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
             {
               titulo: `${nombreComprobanteTitulo} — N° ${codComprobante}`,
@@ -1599,7 +1599,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         }
       }
 
-      // NOTIFICACIÓN Y CORREO ELECTRÓNICO AL INSPECTOR MUNICIPAL ASIGNADO
+      // NOTIFICACIÓN Y CORREO ELECTRÓNICO AL INSPECTOR MUNICIPAL ASIGNADO (EN SEGUNDO PLANO)
       const correoInspector = inspectorElegido.correo || `${(inspectorElegido.nombre || "inspector").toLowerCase().replace(/[^a-z]/g, "")}@munitrujillo.gob.pe`;
       const htmlInspectorEmail = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background: #ffffff;">
@@ -1642,7 +1642,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         </div>
       `;
 
-      await crearNotificacion(
+      crearNotificacion(
         inspectorElegido.uid || "INSPECTOR",
         {
           titulo: `Nueva Inspección Asignada — EXP-${expIdLimpio}`,
