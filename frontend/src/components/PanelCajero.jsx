@@ -1572,8 +1572,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           </div>
         `;
 
-        // ENVIAR CORREOS EN SEGUNDO PLANO (NON-BLOCKING) PARA EVITAR CONGELAMIENTO
-        crearNotificacion(
+        // ENVIAR CORREOS DE CONFIRMACIÓN Y COMPROBANTE AL CORREO INGRESADO AL INICIO
+        await crearNotificacion(
           solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
           {
             titulo: `${tipoTramiteSeleccionado} Registrada — EXP-${expIdLimpio}`,
@@ -1586,7 +1586,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
         if (esEfectivo) {
           // ENVIAR CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO (SOLO SI ES EN EFECTIVO)
-          crearNotificacion(
+          await crearNotificacion(
             solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
             {
               titulo: `${nombreComprobanteTitulo} — N° ${codComprobante}`,
@@ -1642,7 +1642,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         </div>
       `;
 
-      crearNotificacion(
+      await crearNotificacion(
         inspectorElegido.uid || "INSPECTOR",
         {
           titulo: `Nueva Inspección Asignada — EXP-${expIdLimpio}`,

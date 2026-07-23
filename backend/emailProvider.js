@@ -1,35 +1,51 @@
 import dotenv from "dotenv";
-dotenv.config();
-
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import nodemailer from "nodemailer";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+dotenv.config({ path: join(__dirname, ".env") });
+dotenv.config();
 
 class EmailProvider {
   constructor() {
     this.providerName = process.env.EMAIL_PROVIDER || "NODEMAILER";
-    
-    // Config default Nodemailer transporter
-    const SMTP_EMAIL = process.env.SMTP_EMAIL;
-    const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
-    
-    this.transporter = SMTP_EMAIL && SMTP_PASSWORD
-      ? nodemailer.createTransport({
-          host: "smtp.gmail.com",
-          port: 587,
-          secure: false,
-          auth: {
-            user: SMTP_EMAIL,
-            pass: SMTP_PASSWORD,
-          },
-        })
-      : null;
-      
-    if (this.transporter) {
-      this.transporter.verify().then(() => {
-        console.log("EmailProvider: SMTP Connection verified successfully");
-      }).catch((err) => {
-        console.error("EmailProvider: SMTP Connection error:", err.message);
+    this.transporter = null;
+    this.initTransporter();
+  }
+
+  initTransporter() {
+    const SMTP_EMAIL = process.env.SMTP_EMAIL || "webmunicipal01@gmail.com";
+    const SMTP_PASSWORD = process.env.SMTP_PASSWORD || "qtsifvcupewgxpyn";
+
+    if (SMTP_EMAIL && SMTP_PASSWORD) {
+      this.transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false,
+        auth: {
+          user: SMTP_EMAIL,
+          pass: SMTP_PASSWORD,
+        },
       });
+
+      this.transporter.verify().then(() => {
+        console.log("[EmailProvider] SMTP Gmail connection verified successfully for:", SMTP_EMAIL);
+      }).catch((err) => {
+        console.error("[EmailProvider] SMTP Connection error:", err.message);
+      });
+    } else {
+      console.warn("[EmailProvider] SMTP credentials not found.");
     }
+  }
+
+  getTransporter() {
+    if (!this.transporter) {
+      this.initTransporter();
+    }
+    return this.transporter;
   }
 
   async sendEmail(to, subject, text, html) {
@@ -55,33 +71,31 @@ class EmailProvider {
       </div>
     `;
 
-    switch (this.providerName) {
-      case "NODEMAILER":
-      default:
-        if (!this.transporter) {
-          console.warn("[EmailProvider] SMTP credentials not configured. Simulating email send in console.");
-          console.log(`[MOCK EMAIL] To: ${to}\nSubject: ${subject}\nBody: ${text}`);
-          return { success: true, provider: "MOCK" };
-        }
-        
-        try {
-          const mailOptions = {
-            from: `"Municipalidad Provincial de Trujillo — Subgerencia de Licencias" <${process.env.SMTP_EMAIL}>`,
-            to,
-            subject,
-            text,
-            html: html || plantilaGenericaHTML(text),
-          };
-          
-          await this.transporter.sendMail(mailOptions);
-          console.log(`[NODEMAILER EMAIL] successfully sent to ${to}.`);
-        } catch (err) {
-          console.error("[NODEMAILER EMAIL] Error sending email:", err.message);
-          throw err;
-        }
-        break;
+    const transporter = this.getTransporter();
+    const smtpEmail = process.env.SMTP_EMAIL || "webmunicipal01@gmail.com";
+
+    if (!transporter) {
+      console.warn("[EmailProvider] SMTP transporter null. Simulating email send in console.");
+      console.log(`[MOCK EMAIL] To: ${to}\nSubject: ${subject}\nBody: ${text}`);
+      return { success: true, provider: "MOCK" };
     }
-    return { success: true, provider: this.providerName };
+
+    try {
+      const mailOptions = {
+        from: `"Municipalidad Provincial de Trujillo" <${smtpEmail}>`,
+        to,
+        subject,
+        text,
+        html: html || plantilaGenericaHTML(text),
+      };
+
+      const result = await transporter.sendMail(mailOptions);
+      console.log(`[NODEMAILER EMAIL] Successfully sent to ${to}. MessageId: ${result.messageId}`);
+      return { success: true, provider: "NODEMAILER", messageId: result.messageId };
+    } catch (err) {
+      console.error("[NODEMAILER EMAIL] Error sending email:", err.message);
+      throw err;
+    }
   }
 }
 
