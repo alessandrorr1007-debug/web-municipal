@@ -2401,38 +2401,19 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             </p>
                           </div>
 
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", paddingTop: "12px", borderTop: "1px solid #e2e8f0" }}>
-                            <div>
-                              <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
-                                🏢 Identificador / Nombre de Sucursal *
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Ej: Sede Principal, Sucursal Av. Larco 450, Local N° 2"
-                                value={nombreSucursalForm}
-                                onChange={(e) => setNombreSucursalForm(e.target.value)}
-                                required
-                                style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #3b82f6", fontSize: "13.5px", fontWeight: "bold" }}
-                              />
-                            </div>
-
-                            <div>
-                              <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
-                                📍 Dirección del Local Comercial (Sucursal) *
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Ej: Av. Nicolás de Piérola N° 1079 / Av. España 450"
-                                value={direccionForm}
-                                onChange={(e) => setDireccionForm(e.target.value)}
-                                required
-                                style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #3b82f6", fontSize: "13.5px", fontWeight: "bold" }}
-                              />
-                            </div>
+                          <div style={{ paddingTop: "12px", borderTop: "1px solid #e2e8f0" }}>
+                            <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
+                              📍 Dirección del Local Comercial *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Ej: Av. Nicolás de Piérola N° 1079 / Av. España 450"
+                              value={direccionForm}
+                              onChange={(e) => setDireccionForm(e.target.value)}
+                              required
+                              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #3b82f6", fontSize: "13.5px", fontWeight: "bold" }}
+                            />
                           </div>
-                          <small style={{ color: "#64748b", fontSize: "12px", marginTop: "6px", display: "block" }}>
-                            ℹ️ Permite registrar múltiples licencias e inspecciones para distintas sucursales de un mismo RUC. Modifique el nombre o dirección según corresponda.
-                          </small>
                         </div>
                       </div>
                     )}
