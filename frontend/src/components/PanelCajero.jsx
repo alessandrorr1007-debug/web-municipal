@@ -650,10 +650,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   }, [solicitudes]);
 
   // EVALUACIÓN SECUENCIAL DE LOS 4 PASOS DEL WIZARD DE CAJERO
-  // Paso 1: Datos de Contacto (Teléfono Celular iniciado en 9 y Correo válido)
+  // Paso 1: Datos de Contacto y Validación RENIEC (DNI Obligatorio de 8 dígitos y Validado)
+  const esDniValido = Boolean(dniForm) && dniForm.trim().length === 8 && dniValidado;
   const esTelefonoValido = /^9\d{8}$/.test(telefonoForm);
   const esCorreoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoForm);
-  const paso1Completado = esTelefonoValido && esCorreoValido;
+  const paso1Completado = esDniValido && esTelefonoValido && esCorreoValido;
 
   // Paso 2: Validación SUNAT
   const sunatPermiteContinuar = rucValidado && estadoSunat === "ACTIVO" && condicionSunat === "HABIDO";
@@ -1027,6 +1028,16 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
     if (esEfectivo && (montoRecibidoNum < MONTO_TRAMITE || montoRecibidoNum > 200)) {
       alert(`⚠️ El monto recibido en efectivo debe estar entre S/ ${MONTO_TRAMITE.toFixed(2)} y S/ 200.00 (máxima denominación de billete peruano).`);
+      return;
+    }
+
+    if (!dniForm || dniForm.trim().length !== 8) {
+      alert("⚠️ Debe ingresar un DNI válido de 8 dígitos del cliente.");
+      return;
+    }
+
+    if (!dniValidado) {
+      alert("⚠️ El DNI ha sido modificado o no ha sido consultado. Debe presionar el botón 'Buscar / Consultar RENIEC' para validar el DNI antes de registrar.");
       return;
     }
 
@@ -2443,7 +2454,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                       onClick={ejecutarRegistroPresencialCompleto}
                       disabled={
                         procesando ||
-                        (tipoComprobanteSeleccionado === "Boleta" && (!dniForm || dniForm.trim().length !== 8)) ||
+                        !dniValidado ||
+                        (!dniForm || dniForm.trim().length !== 8) ||
                         (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
                         (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
                           ((parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
@@ -2452,7 +2464,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         width: "100%",
                         padding: "16px",
                         background:
-                          (tipoComprobanteSeleccionado === "Boleta" && (!dniForm || dniForm.trim().length !== 8)) ||
+                          !dniValidado ||
+                          (!dniForm || dniForm.trim().length !== 8) ||
                           (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
                           (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
                             ((parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
@@ -2466,7 +2479,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         fontSize: "16.5px",
                         fontWeight: "800",
                         cursor:
-                          (tipoComprobanteSeleccionado === "Boleta" && (!dniForm || dniForm.trim().length !== 8)) ||
+                          !dniValidado ||
+                          (!dniForm || dniForm.trim().length !== 8) ||
                           (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
                           (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
                             ((parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
@@ -3372,7 +3386,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         placeholder="DNI (8 dígitos)"
                         value={dniForm}
                         onChange={(e) => {
-                          setDniForm(e.target.value);
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 8);
+                          setDniForm(val);
                           setDniValidado(false);
                           setNombresForm("");
                           setApellidosForm("");
