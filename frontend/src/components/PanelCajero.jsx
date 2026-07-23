@@ -1121,15 +1121,57 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         solicitudCobro.correoUsuario || ""
       );
 
-      // Notificación 2: Al Inspector Asignado (Sistema + Correo)
+      // Notificación 2: Al Inspector Asignado (Sistema + Correo Electrónico)
+      const correoInspectorCobro = inspectorElegido.correo || `${(inspectorElegido.nombre || "inspector").toLowerCase().replace(/[^a-z]/g, "")}@munitrujillo.gob.pe`;
+      const htmlInspectorCobroEmail = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background: #ffffff;">
+          <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; padding: 20px; text-align: center;">
+            <h2 style="margin: 0; font-size: 20px; color: #38bdf8;">🏛️ MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+            <p style="margin: 4px 0 0; font-size: 13px; color: #94a3b8;">Subgerencia de Licencias y Comercialización</p>
+          </div>
+
+          <div style="padding: 24px; color: #334155; line-height: 1.6;">
+            <h3 style="color: #0f172a; margin-top: 0; font-size: 18px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">
+              🔍 ASIGNACIÓN DE INSPECCIÓN TÉCNICA DE EDIFICACIÓN
+            </h3>
+            <p>Estimado(a) <strong>${inspectorElegido.nombre}</strong> (${inspectorElegido.cargo || "Inspector Municipal"}),</p>
+            <p>Se le ha asignado una nueva inspección técnica para el expediente municipal detallado a continuación:</p>
+
+            <div style="background: #eff6ff; border-left: 4px solid #2563eb; padding: 16px; margin: 16px 0; border-radius: 8px;">
+              <h4 style="margin: 0 0 10px; color: #1e40af; font-size: 15px;">📋 DATOS DE LA VISITA TÉCNICA</h4>
+              <p style="margin: 4px 0;"><strong>N° Expediente:</strong> EXP-${idExpLimpio}</p>
+              <p style="margin: 4px 0;"><strong>📅 Fecha Programada:</strong> <span style="color: #1e3a8a; font-weight: bold;">${fechaInspeccion}</span></p>
+              <p style="margin: 4px 0;"><strong>🕒 Horario de Visita:</strong> <span style="color: #1e3a8a; font-weight: bold;">${horaLabel}</span></p>
+              <p style="margin: 4px 0;"><strong>🏢 Nombre Comercial:</strong> ${solicitudCobro.nombreNegocio || "Establecimiento Comercial"}</p>
+              <p style="margin: 4px 0;"><strong>🧾 RUC:</strong> ${solicitudCobro.ruc || "---"}</p>
+              <p style="margin: 4px 0;"><strong>📍 Dirección del Local:</strong> ${solicitudCobro.direccion || "---"}</p>
+              <p style="margin: 4px 0;"><strong>📍 Distrito:</strong> ${solicitudCobro.distrito || "Trujillo"}</p>
+              <p style="margin: 4px 0;"><strong>👤 Solicitante / Titular:</strong> ${solicitudCobro.nombreSolicitante || "---"}</p>
+              <p style="margin: 4px 0;"><strong>📱 Teléfono:</strong> ${solicitudCobro.telefono || "---"}</p>
+              <p style="margin: 4px 0;"><strong>📧 Correo:</strong> ${solicitudCobro.correoUsuario || "---"}</p>
+              <p style="margin: 4px 0;"><strong>✍️ Cobro y Asignación por Ventanilla:</strong> ${nombreCajera}</p>
+            </div>
+
+            <p style="font-size: 13px; color: #64748b; font-style: italic;">
+              Por favor acudir puntualmente en el rango de horario asignado. Al finalizar, registre el Acta de Inspección en el Módulo de Inspectores.
+            </p>
+          </div>
+
+          <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 14px; text-align: center; font-size: 11px; color: #64748b;">
+            Sistema de Gestión de Licencias de Funcionamiento — Municipalidad Provincial de Trujillo
+          </div>
+        </div>
+      `;
+
       await crearNotificacion(
         inspectorElegido.uid || "INSPECTOR",
         {
-          titulo: "Nueva Inspección Asignada",
-          descripcion: `Se le ha asignado la inspección del expediente EXP-${solicitudCobro.id} (${solicitudCobro.nombreNegocio}) para el ${fechaInspeccion} a las ${horaLabel}. Programado por la cajera ${nombreCajera}.`,
+          titulo: `Nueva Inspección Asignada — EXP-${idExpLimpio}`,
+          descripcion: `Se le ha asignado la inspección del expediente EXP-${idExpLimpio} (${solicitudCobro.nombreNegocio}) para el ${fechaInspeccion} a las ${horaLabel}.`,
           icono: "🔍",
+          html: htmlInspectorCobroEmail,
         },
-        inspectorElegido.correo || ""
+        correoInspectorCobro
       );
 
       const actualizada = { ...solicitudCobro, ...cambios, codComprobante };
@@ -1557,17 +1599,59 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         }
       }
 
-      if (esEfectivo) {
-        crearNotificacion(
-          inspectorElegido.uid || "INSPECTOR",
-          {
-            titulo: "Nueva Inspección Asignada (Presencial)",
-            descripcion: `Visita presencial asignada para el expediente EXP-${solicitudCompleta.id} (${nombreNegocioForm}) el ${fechaInspeccion} a las ${horaLabel}. Registrado por cajera ${nombreCajera}.`,
-            icono: "🔍",
-          },
-          inspectorElegido.correo || ""
-        ).catch((err) => console.error("Error envío correo inspector:", err));
-      }
+      // NOTIFICACIÓN Y CORREO ELECTRÓNICO AL INSPECTOR MUNICIPAL ASIGNADO
+      const correoInspector = inspectorElegido.correo || `${(inspectorElegido.nombre || "inspector").toLowerCase().replace(/[^a-z]/g, "")}@munitrujillo.gob.pe`;
+      const htmlInspectorEmail = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background: #ffffff;">
+          <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; padding: 20px; text-align: center;">
+            <h2 style="margin: 0; font-size: 20px; color: #38bdf8;">🏛️ MUNICIPALIDAD PROVINCIAL DE TRUJILLO</h2>
+            <p style="margin: 4px 0 0; font-size: 13px; color: #94a3b8;">Subgerencia de Licencias y Comercialización</p>
+          </div>
+
+          <div style="padding: 24px; color: #334155; line-height: 1.6;">
+            <h3 style="color: #0f172a; margin-top: 0; font-size: 18px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">
+              🔍 ASIGNACIÓN DE INSPECCIÓN TÉCNICA DE EDIFICACIÓN
+            </h3>
+            <p>Estimado(a) <strong>${inspectorElegido.nombre}</strong> (${inspectorElegido.cargo || "Inspector Municipal"}),</p>
+            <p>Se le ha asignado una nueva inspección técnica para el expediente presencial detallado a continuación:</p>
+
+            <div style="background: #eff6ff; border-left: 4px solid #2563eb; padding: 16px; margin: 16px 0; border-radius: 8px;">
+              <h4 style="margin: 0 0 10px; color: #1e40af; font-size: 15px;">📋 DATOS DE LA VISITA TÉCNICA</h4>
+              <p style="margin: 4px 0;"><strong>N° Expediente:</strong> EXP-${expIdLimpio}</p>
+              <p style="margin: 4px 0;"><strong>📅 Fecha Programada:</strong> <span style="color: #1e3a8a; font-weight: bold;">${fechaInspeccion}</span></p>
+              <p style="margin: 4px 0;"><strong>🕒 Horario de Visita:</strong> <span style="color: #1e3a8a; font-weight: bold;">${horaLabel}</span></p>
+              <p style="margin: 4px 0;"><strong>🏢 Nombre Comercial:</strong> ${nombreNegocioForm}</p>
+              <p style="margin: 4px 0;"><strong>🧾 RUC:</strong> ${rucForm}</p>
+              <p style="margin: 4px 0;"><strong>📍 Dirección del Local:</strong> ${direccionForm}</p>
+              <p style="margin: 4px 0;"><strong>📍 Distrito:</strong> ${distritoSunat || "Trujillo"}</p>
+              <p style="margin: 4px 0;"><strong>👤 Solicitante / Titular:</strong> ${nombresForm} ${apellidosForm}</p>
+              <p style="margin: 4px 0;"><strong>🪪 DNI:</strong> ${dniForm}</p>
+              <p style="margin: 4px 0;"><strong>📱 Teléfono de Contacto:</strong> ${telefonoForm}</p>
+              <p style="margin: 4px 0;"><strong>📧 Correo Electrónico:</strong> ${correoForm}</p>
+              <p style="margin: 4px 0;"><strong>✍️ Registrado por Ventanilla:</strong> ${nombreCajera}</p>
+            </div>
+
+            <p style="font-size: 13px; color: #64748b; font-style: italic;">
+              Por favor acudir puntualmente en el rango de horario asignado. Al finalizar, registre el Acta de Inspección en el Módulo de Inspectores.
+            </p>
+          </div>
+
+          <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 14px; text-align: center; font-size: 11px; color: #64748b;">
+            Sistema de Gestión de Licencias de Funcionamiento — Municipalidad Provincial de Trujillo
+          </div>
+        </div>
+      `;
+
+      crearNotificacion(
+        inspectorElegido.uid || "INSPECTOR",
+        {
+          titulo: `Nueva Inspección Asignada — EXP-${expIdLimpio}`,
+          descripcion: `Visita presencial asignada para el expediente EXP-${expIdLimpio} (${nombreNegocioForm}) el ${fechaInspeccion} a las ${horaLabel}.`,
+          icono: "🔍",
+          html: htmlInspectorEmail,
+        },
+        correoInspector
+      ).catch((err) => console.error("Error envío correo inspector:", err));
 
       const resExito = {
         id: solicitudCompleta.id,

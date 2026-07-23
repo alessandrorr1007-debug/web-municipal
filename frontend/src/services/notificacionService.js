@@ -12,17 +12,22 @@ import {
 const COLLECTION = "notificaciones";
 const API_URL = import.meta.env.VITE_API_URL || "";
 
-export const crearNotificacion = async (uidUsuario, { titulo, descripcion, icono }, correoUsuario = "") => {
+export const crearNotificacion = async (uidUsuario, notifPayload, correoUsuario = "") => {
   if (!uidUsuario) return;
   const idNotificacion = doc(collection(db, COLLECTION)).id;
   const fechaHora = new Date().toISOString();
+
+  const titulo = typeof notifPayload === "string" ? notifPayload : notifPayload?.titulo || "";
+  const descripcion = typeof notifPayload === "object" ? notifPayload?.descripcion || "" : "";
+  const icono = typeof notifPayload === "object" ? notifPayload?.icono || "🔔" : "🔔";
+  const html = typeof notifPayload === "object" ? notifPayload?.html || null : null;
 
   const nueva = {
     id_notificacion: idNotificacion,
     uid_usuario: uidUsuario,
     titulo,
     descripcion,
-    icono: icono || "🔔",
+    icono,
     fecha_hora: fechaHora,
     leida: false,
   };
@@ -39,7 +44,7 @@ export const crearNotificacion = async (uidUsuario, { titulo, descripcion, icono
       fetch(`${API_URL}/api/email/enviar-notificacion`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ correoUsuario, titulo, descripcion }),
+        body: JSON.stringify({ correoUsuario, titulo, descripcion, html }),
       }).then((res) => {
         if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos.");
         else console.log("[NOTIFICACION EMAIL] Enviado correctamente.");
