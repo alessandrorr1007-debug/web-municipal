@@ -1520,8 +1520,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
           </div>
         `;
 
-        // ENVIAR CORREO 1: CONFIRMACIÓN DE SOLICITUD
-        await crearNotificacion(
+        // ENVIAR CORREOS EN SEGUNDO PLANO (NON-BLOCKING) PARA EVITAR CONGELAMIENTO
+        crearNotificacion(
           solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
           {
             titulo: `${tipoTramiteSeleccionado} Registrada — EXP-${expIdLimpio}`,
@@ -1530,11 +1530,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             html: htmlNotificacionSolicitud,
           },
           correoForm
-        );
+        ).catch((err) => console.error("Error envío correo 1:", err));
 
         if (esEfectivo) {
           // ENVIAR CORREO 2: COMPROBANTE DE VENTA ELECTRÓNICO (SOLO SI ES EN EFECTIVO)
-          await crearNotificacion(
+          crearNotificacion(
             solicitudCompleta.uidUsuario || "CIUDADANO_VENTANILLA",
             {
               titulo: `${nombreComprobanteTitulo} — N° ${codComprobante}`,
@@ -1543,12 +1543,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
               html: htmlBoletaElectronica,
             },
             correoForm
-          );
+          ).catch((err) => console.error("Error envío correo boleta:", err));
         }
       }
 
       if (esEfectivo) {
-        await crearNotificacion(
+        crearNotificacion(
           inspectorElegido.uid || "INSPECTOR",
           {
             titulo: "Nueva Inspección Asignada (Presencial)",
@@ -1556,7 +1556,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             icono: "🔍",
           },
           inspectorElegido.correo || ""
-        );
+        ).catch((err) => console.error("Error envío correo inspector:", err));
       }
 
       const resExito = {
@@ -1604,9 +1604,12 @@ function PanelCajero({ seccion, cambiarSeccion }) {
         }
       }
 
+      // CIERRE DE MODAL Y MOSTRAR RESULTADO EXITOSO DE INMEDIATO
       setComprobanteGenerado(solicitudCompleta);
       setResultadoRegistroExitoso(resExito);
-      await cargarSolicitudes();
+      setMostrarModalNuevaSolicitud(false);
+      setSeccion("nueva-solicitud");
+      cargarSolicitudes().catch(() => {});
     } catch (err) {
       console.error(err);
       alert("Error al ejecutar el registro presencial: " + err.message);

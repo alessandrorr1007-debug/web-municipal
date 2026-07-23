@@ -115,72 +115,38 @@ export const sanitizarSolicitudPayload = (solicitud) => {
 
 export const guardarSolicitud = async (solicitud) => {
   const solicitudLimpia = sanitizarSolicitudPayload(solicitud);
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const docId = String(solicitudLimpia.id || Date.now().toString().slice(-8)).replace(/^EXP-/, "");
 
   try {
-    const headers = await authHeaders();
-    const response = await fetch(`${API_URL}/api/solicitudes`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(solicitudLimpia),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    const contentType = response.headers.get("content-type");
-    if (!response.ok && contentType && contentType.includes("application/json")) {
-      const errorData = await response.json();
-      if (errorData?.detalle || errorData?.error) {
-        throw new Error(errorData.detalle || errorData.error);
-      }
-    }
-
-    if (response.ok && contentType && contentType.includes("application/json")) {
-      const data = await response.json();
-      const idReal = String(data.idSolicitud || data.id || solicitudLimpia.id).replace(/^EXP-/, "");
-      return {
-        ...solicitudLimpia,
-        id: idReal,
-        numeroExpediente: `EXP-${idReal}`,
-      };
-    }
-
-    // Fallback: Guardado directo en Firestore si el backend responde con error de status o no-JSON (Ej. 413)
-    console.warn(`[guardarSolicitud] Servidor devolvió HTTP ${response.status}. Utilizando respaldo directo a Firestore...`);
-    const docId = String(solicitudLimpia.id || Date.now().toString().slice(-8)).replace(/^EXP-/, "");
-    await setDoc(doc(db, COLLECTION_NAME, docId), {
+    // 1. Guardado instantáneo directo en Firestore
+    const refDoc = doc(db, COLLECTION_NAME, docId);
+    const payloadConMeta = {
       ...solicitudLimpia,
       id: docId,
       numeroExpediente: `EXP-${docId}`,
       creadoEn: serverTimestamp(),
-    });
+    };
+
+    await setDoc(refDoc, payloadConMeta);
+    console.log(`[guardarSolicitud] Registrado exitosamente en Firestore con ID EXP-${docId}`);
+
+    // 2. Notificar al backend API opcionalmente en segundo plano (non-blocking)
+    authHeaders().then((headers) => {
+      fetch(`${API_URL}/api/solicitudes`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(solicitudLimpia),
+      }).catch((e) => console.warn("[guardarSolicitud API async warning]", e.message));
+    }).catch(() => {});
 
     return {
       ...solicitudLimpia,
       id: docId,
       numeroExpediente: `EXP-${docId}`,
     };
-  } catch (error) {
-    clearTimeout(timeoutId);
-    console.warn("[guardarSolicitud] Fallo en API POST. Utilizando respaldo directo a Firestore...", error.message);
-    try {
-      const docId = String(solicitudLimpia.id || Date.now().toString().slice(-8)).replace(/^EXP-/, "");
-      await setDoc(doc(db, COLLECTION_NAME, docId), {
-        ...solicitudLimpia,
-        id: docId,
-        numeroExpediente: `EXP-${docId}`,
-        creadoEn: serverTimestamp(),
-      });
-      return {
-        ...solicitudLimpia,
-        id: docId,
-        numeroExpediente: `EXP-${docId}`,
-      };
-    } catch (fsError) {
-      throw new Error(`Error al registrar la solicitud: ${fsError.message}`);
-    }
+  } catch (fsError) {
+    console.error("[guardarSolicitud] Error al escribir en Firestore:", fsError);
+    throw new Error(`Error al registrar la solicitud: ${fsError.message}`);
   }
 };
 
