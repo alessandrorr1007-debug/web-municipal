@@ -1610,7 +1610,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       setComprobanteGenerado(solicitudCompleta);
       setResultadoRegistroExitoso(resExito);
       setMostrarModalNuevaSolicitud(false);
-      setSeccion("nueva-solicitud");
+      if (cambiarSeccion) cambiarSeccion("nueva-solicitud");
       cargarSolicitudes().catch(() => {});
     } catch (err) {
       console.error(err);
