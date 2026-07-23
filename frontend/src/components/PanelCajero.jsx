@@ -651,11 +651,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   }, [solicitudes]);
 
   // EVALUACIÓN SECUENCIAL DE LOS 4 PASOS DEL WIZARD DE CAJERO
-  // Paso 1: Datos de Contacto y Validación RENIEC (DNI Obligatorio de 8 dígitos y Validado)
+  // Paso 1: Datos de Contacto (Teléfono Celular iniciado en 9 y Correo válido)
   const esDniValido = Boolean(dniForm) && dniForm.trim().length === 8 && dniValidado;
   const esTelefonoValido = /^9\d{8}$/.test(telefonoForm);
   const esCorreoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoForm);
-  const paso1Completado = esDniValido && esTelefonoValido && esCorreoValido;
+  const paso1Completado = esTelefonoValido && esCorreoValido;
 
   // Paso 2: Validación SUNAT
   const sunatPermiteContinuar = rucValidado && estadoSunat === "ACTIVO" && condicionSunat === "HABIDO";
@@ -2549,19 +2549,33 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     <button
                       type="button"
                       onClick={() => {
-                        if (pasoActual === 1 && !paso1Completado) {
-                          alert("⚠️ Ingrese un teléfono celular peruano válido (9 dígitos iniciado en 9) y un correo electrónico.");
-                          return;
+                        if (pasoActual === 1) {
+                          if (!esTelefonoValido) {
+                            alert("⚠️ Ingrese un teléfono celular peruano válido (9 dígitos iniciado en 9).");
+                            return;
+                          }
+                          if (!esCorreoValido) {
+                            alert("⚠️ Ingrese un correo electrónico de notificaciones válido.");
+                            return;
+                          }
                         }
                         if (pasoActual === 2) {
                           if (!rucValidado) {
                             alert("⚠️ Debe consultar y validar el RUC en SUNAT para continuar.");
                             return;
                           }
-                          const dupRucNav = solicitudes.find((s) => s.ruc === rucForm.trim() && !["Rechazado", "Licencia rechazada"].includes(s.estado));
+                          const dirNormNav = (direccionForm || "").toLowerCase().trim();
+                          const sucursalNormNav = (nombreSucursalForm || "").toLowerCase().trim();
+                          const dupRucNav = solicitudes.find((s) => {
+                            if (!s || String(s.ruc).trim() !== String(rucForm).trim()) return false;
+                            if (["Rechazado", "Licencia rechazada", "Anulado"].includes(s.estado)) return false;
+                            const sDir = (s.direccion || "").toLowerCase().trim();
+                            const sSuc = (s.nombreSucursal || "").toLowerCase().trim();
+                            return (dirNormNav && sDir && sDir === dirNormNav) || (sucursalNormNav && sSuc && sucursalNormNav.length > 2 && sSuc === sucursalNormNav);
+                          });
                           if (dupRucNav) {
                             const expLimpioNav = String(dupRucNav.id).replace(/^EXP-/, "");
-                            alert(`🚫 No es posible continuar con el trámite.\n\nEl RUC ${rucForm} ya cuenta con la solicitud EXP-${expLimpioNav} registrada en el sistema.\n\nNo se permite registrar más de una solicitud por RUC.`);
+                            alert(`🚫 No es posible continuar con el trámite.\n\nEl RUC ${rucForm} ya cuenta con la solicitud EXP-${expLimpioNav} registrada para este mismo local/sucursal ("${direccionForm}").\n\nSi está registrando una nueva sucursal, la dirección del local debe ser diferente.`);
                             return;
                           }
                           if (!esJurisdiccionTrujillo) {
