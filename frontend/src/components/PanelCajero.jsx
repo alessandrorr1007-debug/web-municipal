@@ -2349,11 +2349,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           </p>
                         </div>
 
-                        {/* SECCIÓN DE LOCALES / SUCURSALES REGISTRADAS PREVIAMENTE PARA ESTE RUC */}
-                        {sucursalesExistentesDelRuc.length > 0 && (
+                        {/* SECCIÓN DE LOCALES / SUCURSALES REGISTRADAS PREVIAMENTE PARA ESTE RUC (SOLO SI TIENE MÁS DE 1 LOCAL REGISTRADO) */}
+                        {sucursalesExistentesDelRuc.length > 1 && (
                           <div style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: "16px", borderRadius: "14px", marginBottom: "16px" }}>
                             <label style={{ display: "block", fontSize: "13.5px", fontWeight: "800", color: "#1e40af", marginBottom: "6px" }}>
-                              🏢 Locales y Sucursales Ya Registradas para este RUC ({sucursalesExistentesDelRuc.length}):
+                              🏢 Seleccionar Local / Sucursal Registrada de este RUC ({sucursalesExistentesDelRuc.length} locales registrados):
                             </label>
                             <select
                               defaultValue=""
@@ -2377,7 +2377,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                               ))}
                             </select>
                             <small style={{ color: "#1e3a8a", fontSize: "12px", marginTop: "6px", display: "block" }}>
-                              ℹ️ Seleccione la sucursal o local comercial registrado previamente para este RUC para autocompletar sus datos oficiales.
+                              ℹ️ Este RUC posee múltiples locales registrados. Seleccione la sucursal requerida para autocompletar su dirección oficial.
                             </small>
                           </div>
                         )}
@@ -2385,7 +2385,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         {/* SECCIÓN ESPECÍFICA: UBICACIÓN Y DATOS DE LA SUCURSAL/LOCAL */}
                         <div style={{ background: "white", padding: "16px 20px", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
                           <h5 style={{ margin: "0 0 10px", color: "#1e293b", fontSize: "14px", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px" }}>
-                            📍 Datos del Local Comercial / Sucursal a Licenciar
+                            📍 Datos de Ubicación del Local Comercial (SUNAT)
                           </h5>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "14px" }}>
                             <p style={{ margin: 0, fontSize: "13px", color: "#334155" }}>
@@ -2401,16 +2401,17 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
                           <div style={{ paddingTop: "12px", borderTop: "1px solid #e2e8f0" }}>
                             <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
-                              📍 Dirección del Local Comercial *
+                              📍 Dirección del Local Comercial (Oficial SUNAT) *
                             </label>
                             <input
                               type="text"
-                              placeholder="Ej: Av. Nicolás de Piérola N° 1079 / Av. España 450"
                               value={direccionForm}
-                              onChange={(e) => setDireccionForm(e.target.value)}
-                              required
-                              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #3b82f6", fontSize: "13.5px", fontWeight: "bold" }}
+                              readOnly
+                              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: "#f1f5f9", color: "#334155", cursor: "not-allowed" }}
                             />
+                            <small style={{ color: "#64748b", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                              🔒 Dirección oficial provista por la consulta SUNAT. No es posible modificarla manualmente.
+                            </small>
                           </div>
                         </div>
                       </div>
