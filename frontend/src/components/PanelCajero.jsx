@@ -1213,24 +1213,26 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       return;
     }
 
-    if (!dniForm || dniForm.trim().length !== 8) {
-      alert("⚠️ Debe ingresar un DNI válido de 8 dígitos del cliente.");
-      return;
-    }
+    const esFactura = tipoComprobanteSeleccionado === "Factura";
 
-    if (!dniValidado) {
-      alert("⚠️ El DNI ha sido modificado o no ha sido consultado. Debe presionar el botón 'Buscar / Consultar RENIEC' para validar el DNI antes de registrar.");
-      return;
-    }
-
-    if (tipoComprobanteSeleccionado === "Boleta" && (!dniForm || dniForm.trim().length !== 8)) {
-      alert("⚠️ Boleta de Venta Electrónica: Por favor ingrese el DNI de 8 dígitos del cliente para emitir la Boleta.");
-      return;
-    }
-
-    if (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) {
-      alert("⚠️ Factura Electrónica: Para emitir una Factura es obligatorio haber registrado un RUC válido de 11 dígitos de la empresa.");
-      return;
+    if (!esFactura) {
+      if (!dniForm || dniForm.trim().length !== 8) {
+        alert("⚠️ Boleta de Venta Electrónica: Debe ingresar un DNI válido de 8 dígitos del cliente.");
+        return;
+      }
+      if (!dniValidado) {
+        alert("⚠️ El DNI ha sido modificado o no ha sido consultado. Debe presionar el botón 'Buscar / Consultar RENIEC' para validar el DNI antes de emitir la Boleta.");
+        return;
+      }
+    } else {
+      if (!rucForm || rucForm.trim().length !== 11) {
+        alert("⚠️ Factura Electrónica: Para emitir una Factura es obligatorio haber registrado un RUC válido de 11 dígitos de la empresa.");
+        return;
+      }
+      if (!rucValidado) {
+        alert("⚠️ Debe consultar y validar el RUC de la empresa con SUNAT antes de emitir la Factura Electrónica.");
+        return;
+      }
     }
 
     setProcesando(true);
@@ -2728,54 +2730,70 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={ejecutarRegistroPresencialCompleto}
-                      disabled={
-                        procesando ||
-                        !dniValidado ||
-                        (!dniForm || dniForm.trim().length !== 8) ||
-                        (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
-                        (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
-                          (!cajaAbierta.abierta || (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
-                      }
-                      style={{
-                        width: "100%",
-                        padding: "16px",
-                        background:
-                          !dniValidado ||
-                          (!dniForm || dniForm.trim().length !== 8) ||
-                          (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
-                          (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
-                            (!cajaAbierta.abierta || (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
-                            ? "#cbd5e1"
-                            : !metodoPagoSeleccionado.toLowerCase().includes("efectivo")
-                            ? "linear-gradient(90deg, #2563eb, #1d4ed8)"
-                            : "linear-gradient(90deg, #16a34a, #059669)",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "14px",
-                        fontSize: "16.5px",
-                        fontWeight: "800",
-                        cursor:
-                          !dniValidado ||
-                          (!dniForm || dniForm.trim().length !== 8) ||
-                          (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
-                          (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
-                            (!cajaAbierta.abierta || (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
-                            ? "not-allowed"
-                            : "pointer",
-                        boxShadow: "0 4px 14px rgba(0, 0, 0, 0.15)"
-                      }}
-                    >
-                      {procesando
-                        ? (!metodoPagoSeleccionado.toLowerCase().includes("efectivo") ? "🌐 Conectando con Pasarela Flow..." : "⏳ Procesando Registro y Emisión en Caja...")
-                        : (metodoPagoSeleccionado.toLowerCase().includes("efectivo") && !cajaAbierta.abierta)
-                        ? "🔒 Debe aperturar la caja antes de registrar pagos en efectivo"
-                        : !metodoPagoSeleccionado.toLowerCase().includes("efectivo")
-                        ? "🌐 Ir a Pasarela de Pago Billetera Digital (Flow) ➔"
-                        : "💰 Confirmar Pago en Efectivo (S/ 3.00) y Registrar Solicitud"}
-                    </button>
+                    {(() => {
+                      const esFacturaDoc = tipoComprobanteSeleccionado === "Factura";
+                      const esEfectivoDoc = metodoPagoSeleccionado.toLowerCase().includes("efectivo");
+
+                      const faltaComprobante = esFacturaDoc
+                        ? (!rucValidado || !rucForm || rucForm.trim().length !== 11)
+                        : (!dniValidado || !dniForm || dniForm.trim().length !== 8);
+
+                      const faltaCajaAbierta = esEfectivoDoc && !cajaAbierta.abierta;
+                      const faltaMontoEfectivo = esEfectivoDoc && ((parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200);
+
+                      const botonBloqueado = procesando || faltaComprobante || faltaCajaAbierta || faltaMontoEfectivo;
+
+                      return (
+                        <>
+                          {/* AVISOS DE AYUDA EXPLICATIVOS SI EL BOTÓN ESTÁ INHABILITADO */}
+                          {faltaCajaAbierta && (
+                            <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", color: "#991b1b", padding: "10px 14px", borderRadius: "10px", marginBottom: "12px", fontSize: "12.5px", fontWeight: "bold", textAlign: "center" }}>
+                              🔒 Debe aperturar la caja municipal antes de registrar pagos en efectivo.
+                            </div>
+                          )}
+                          {!faltaCajaAbierta && esFacturaDoc && faltaComprobante && (
+                            <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", color: "#991b1b", padding: "10px 14px", borderRadius: "10px", marginBottom: "12px", fontSize: "12.5px", fontWeight: "bold", textAlign: "center" }}>
+                              ⚠️ Para emitir Factura Electrónica, valide el RUC de 11 dígitos con SUNAT.
+                            </div>
+                          )}
+                          {!faltaCajaAbierta && !esFacturaDoc && faltaComprobante && (
+                            <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", color: "#991b1b", padding: "10px 14px", borderRadius: "10px", marginBottom: "12px", fontSize: "12.5px", fontWeight: "bold", textAlign: "center" }}>
+                              ⚠️ Para emitir Boleta de Venta Electrónica, consulte y valide el DNI de 8 dígitos con RENIEC.
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={ejecutarRegistroPresencialCompleto}
+                            disabled={botonBloqueado}
+                            style={{
+                              width: "100%",
+                              padding: "16px",
+                              background: botonBloqueado
+                                ? "#cbd5e1"
+                                : !esEfectivoDoc
+                                ? "linear-gradient(90deg, #2563eb, #1d4ed8)"
+                                : "linear-gradient(90deg, #16a34a, #059669)",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "14px",
+                              fontSize: "16.5px",
+                              fontWeight: "800",
+                              cursor: botonBloqueado ? "not-allowed" : "pointer",
+                              boxShadow: "0 4px 14px rgba(0, 0, 0, 0.15)"
+                            }}
+                          >
+                            {procesando
+                              ? (!esEfectivoDoc ? "🌐 Conectando con Pasarela Flow..." : "⏳ Procesando Registro y Emisión en Caja...")
+                              : faltaCajaAbierta
+                              ? "🔒 Debe aperturar la caja antes de registrar pagos en efectivo"
+                              : !esEfectivoDoc
+                              ? "🌐 Ir a Pasarela de Pago Billetera Digital (Flow) ➔"
+                              : "💰 Confirmar Pago en Efectivo (S/ 3.00) y Registrar Solicitud"}
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 
