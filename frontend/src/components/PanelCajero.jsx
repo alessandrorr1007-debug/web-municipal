@@ -14,6 +14,11 @@ import { consultarRuc } from "../services/rucService";
 import { convertirNumeroALetras, obtenerDniValido, obtenerNombreCiudadanoValido } from "../services/comprobanteService";
 import { GROS_DISPONIBLES, obtenerDocumentosPorGiro } from "../config/documentosPorGiro";
 import { useAuth } from "../context/AuthContext";
+import {
+  abrirCajaMunicipal,
+  obtenerCajaActivaPorCajero,
+  cerrarCajaMunicipal,
+} from "../services/cajasService";
 import VisualizadorDocumentoModal from "./VisualizadorDocumentoModal";
 import {
   TIME_SLOTS,
@@ -397,54 +402,112 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [actividadEconomicaSunat, setActividadEconomicaSunat] = useState("");
   const [esJurisdiccionTrujillo, setEsJurisdiccionTrujillo] = useState(true);
 
-  // ESTADOS Y GESTIÓN DE APERTURA, ARQUEO Y CIERRE DE CAJA MUNICIPAL
+  // ESTADOS Y GESTIÓN DE APERTURA, ARQUEO Y CIERRE DE CAJA MUNICIPAL (BUENAS PRÁCTICAS)
   const [cajaAbierta, setCajaAbierta] = useState(() => {
     try {
       const saved = localStorage.getItem("caja_municipal_estado");
-      return saved ? JSON.parse(saved) : { abierta: false, montoInicial: 0, ventanilla: "Ventanilla N° 01", turno: "Turno Mañana (08:00 - 16:00)", fechaApertura: null };
+      return saved ? JSON.parse(saved) : { abierta: false, montoInicial: 0, fechaApertura: null };
     } catch {
-      return { abierta: false, montoInicial: 0, ventanilla: "Ventanilla N° 01", turno: "Turno Mañana (08:00 - 16:00)", fechaApertura: null };
+      return { abierta: false, montoInicial: 0, fechaApertura: null };
     }
   });
 
   const [mostrarModalAperturaCaja, setMostrarModalAperturaCaja] = useState(false);
   const [mostrarModalArqueoCaja, setMostrarModalArqueoCaja] = useState(false);
-
   const [formAperturaMonto, setFormAperturaMonto] = useState("100.00");
-  const [formAperturaVentanilla, setFormAperturaVentanilla] = useState("Ventanilla N° 01 — Principal");
-  const [formAperturaTurno, setFormAperturaTurno] = useState("Turno Mañana (08:00 - 16:00)");
+  const [procesandoApertura, setProcesandoApertura] = useState(false);
 
-  const ejecutarAperturaCaja = (e) => {
+  // EFECTO DE CUALIFICACIÓN: VERIFICAR AL INICIAR SI EL CAJERO DE SESIÓN YA POSEE UNA CAJA ABIERTA EN FIRESTORE
+  useEffect(() => {
+    const verificarCajaActiva = async () => {
+      const cajeroId = usuario?.uid || usuario?.id || "CAJERO-001";
+      try {
+        const cajaActivaBD = await obtenerCajaActivaPorCajero(cajeroId);
+        if (cajaActivaBD) {
+          const estadoAbierta = {
+            id: cajaActivaBD.id,
+            abierta: true,
+            montoInicial: parseFloat(cajaActivaBD.montoInicial || 0),
+            fechaApertura: cajaActivaBD.fechaApertura || new Date().toLocaleString("es-PE"),
+            cajeraNombre: cajaActivaBD.cajeroNombre || usuario?.nombre || usuario?.email || "Cajero Responsable",
+            cajeroId: cajaActivaBD.cajeroId || cajeroId
+          };
+          setCajaAbierta(estadoAbierta);
+          localStorage.setItem("caja_municipal_estado", JSON.stringify(estadoAbierta));
+        }
+      } catch (err) {
+        console.error("Error al consultar caja activa del cajero:", err);
+      }
+    };
+
+    verificarCajaActiva();
+  }, [usuario]);
+
+  // APERTURA DE CAJA: UTILIZA AUTOMÁTICAMENTE LA INFORMACIÓN DEL CAJERO DE LA SESIÓN
+  const ejecutarAperturaCaja = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const monto = parseFloat(formAperturaMonto) || 0;
-    if (monto < 0) {
-      alert("⚠️ Ingrese un monto inicial en efectivo válido (S/ 0.00 o mayor).");
+
+    const cajeroId = usuario?.uid || usuario?.id || "CAJERO-001";
+    const cajeroNombre = usuario?.nombre || usuario?.displayName || usuario?.email || "Cajera Responsable";
+    const cajeroEmail = usuario?.email || "";
+
+    const monto = parseFloat(formAperturaMonto);
+    if (isNaN(monto) || monto < 0) {
+      alert("⚠️ Ingrese un monto inicial en efectivo válido (mayor o igual a S/ 0.00).");
       return;
     }
 
-    const fechaAct = new Date().toLocaleString("es-PE", { dateStyle: "short", timeStyle: "medium" });
-    const nuevaApertura = {
-      abierta: true,
-      montoInicial: monto,
-      ventanilla: formAperturaVentanilla || "Ventanilla N° 01",
-      turno: formAperturaTurno || "Turno Mañana",
-      fechaApertura: fechaAct,
-      cajeraNombre: usuario?.nombre || usuario?.email || "Cajera Responsable",
-      uidCajera: usuario?.uid || "CAJERA-001"
-    };
+    // VALIDACIÓN LOCAL Y DE FIRESTORE: NO PERMITIR MÁS DE UNA CAJA ABIERTA PARA EL MISMO CAJERO
+    if (cajaAbierta.abierta) {
+      alert(`⚠️ Ya cuenta con una Caja Municipal Abierta desde ${cajaAbierta.fechaApertura || "el inicio de turno"} con un fondo inicial de S/ ${cajaAbierta.montoInicial.toFixed(2)}.\n\nNo es posible registrar más de una apertura activa simultáneamente.`);
+      setMostrarModalAperturaCaja(false);
+      return;
+    }
 
-    setCajaAbierta(nuevaApertura);
-    localStorage.setItem("caja_municipal_estado", JSON.stringify(nuevaApertura));
-    setMostrarModalAperturaCaja(false);
-    alert(`✅ Caja Municipal Aperturada Exitosamente.\n\nFondo Inicial: S/ ${monto.toFixed(2)}\nVentanilla: ${nuevaApertura.ventanilla}\nFecha/Hora: ${nuevaApertura.fechaApertura}`);
+    try {
+      setProcesandoApertura(true);
+      const resCaja = await abrirCajaMunicipal({
+        cajeroId,
+        cajeroNombre,
+        cajeroEmail,
+        montoInicial: monto,
+      });
+
+      const nuevaAperturaState = {
+        id: resCaja.id,
+        abierta: true,
+        montoInicial: monto,
+        fechaApertura: resCaja.fechaApertura,
+        cajeraNombre: cajeroNombre,
+        cajeroId: cajeroId,
+        cajeroEmail: cajeroEmail
+      };
+
+      setCajaAbierta(nuevaAperturaState);
+      localStorage.setItem("caja_municipal_estado", JSON.stringify(nuevaAperturaState));
+      setMostrarModalAperturaCaja(false);
+      alert(`✅ Caja Municipal Aperturada Exitosamente.\n\nResponsable: ${cajeroNombre}\nFondo Inicial: S/ ${monto.toFixed(2)}\nFecha y Hora: ${resCaja.fechaApertura}`);
+    } catch (error) {
+      alert(error.message || "Error al realizar la apertura de caja.");
+    } finally {
+      setProcesandoApertura(false);
+    }
   };
 
-  const ejecutarCierreCaja = () => {
+  const ejecutarCierreCaja = async () => {
     if (!window.confirm("¿Está seguro de efectuar el CIERRE DE CAJA Y ARQUEO DE TURNO? No se podrán procesar cobros presenciales hasta aperturar un nuevo turno.")) {
       return;
     }
 
-    const estadoCerrada = { abierta: false, montoInicial: 0, ventanilla: "", turno: "", fechaApertura: null };
+    try {
+      if (cajaAbierta.id) {
+        await cerrarCajaMunicipal(cajaAbierta.id, resumenArqueoCaja);
+      }
+    } catch (err) {
+      console.error("Error cerrando caja en Firestore:", err);
+    }
+
+    const estadoCerrada = { abierta: false, montoInicial: 0, fechaApertura: null };
     setCajaAbierta(estadoCerrada);
     localStorage.setItem("caja_municipal_estado", JSON.stringify(estadoCerrada));
     setMostrarModalArqueoCaja(false);
@@ -4054,19 +4117,37 @@ function PanelCajero({ seccion, cambiarSeccion }) {
             </div>
 
             <form onSubmit={ejecutarAperturaCaja} style={{ padding: "24px" }}>
-              <div style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: "14px 16px", borderRadius: "12px", marginBottom: "20px" }}>
-                <p style={{ margin: 0, fontSize: "13px", color: "#1e40af", lineHeight: "1.5" }}>
-                  <strong>👤 Cajera Responsable:</strong> {usuario?.nombre || usuario?.email || "Cajera de Ventanilla"}<br />
-                  <strong>📅 Fecha y Hora:</strong> {new Date().toLocaleString("es-PE")}
-                </p>
+              {/* FICHA INFORMADA AUTOMÁTICAMENTE DESDE LA SESIÓN DEL USUARIO AUTENTICADO */}
+              <div style={{ background: "#f8fafc", border: "1.5px solid #cbd5e1", padding: "16px", borderRadius: "12px", marginBottom: "20px" }}>
+                <h5 style={{ margin: "0 0 10px", color: "#1e3a8a", fontSize: "13.5px", fontWeight: "700" }}>
+                  👤 Información de Sesión Autenticada (Cajero Responsable)
+                </h5>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "12.5px", color: "#334155" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>Responsable:</strong> <span style={{ color: "#0f172a", fontWeight: "bold" }}>{usuario?.nombre || usuario?.displayName || usuario?.email || "Cajero Municipal"}</span>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>ID Cajero:</strong> <span style={{ color: "#0f172a", fontWeight: "bold" }}>{usuario?.uid || usuario?.id || "CAJERO-001"}</span>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Correo Sesión:</strong> <span style={{ color: "#0f172a" }}>{usuario?.email || "cajero@municipalidad.gob.pe"}</span>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Estado Inicial:</strong> <span style={{ color: "#15803d", fontWeight: "bold" }}>🟢 Abierta</span>
+                  </p>
+                  <p style={{ margin: 0, gridColumn: "span 2" }}>
+                    <strong>Fecha / Hora:</strong> <span style={{ color: "#0f172a" }}>{new Date().toLocaleString("es-PE")}</span>
+                  </p>
+                </div>
               </div>
 
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "6px" }}>
-                  💰 Fondo Inicial en Efectivo (S/) *
+              {/* ÚNICO CAMPO SOLICITADO: MONTO INICIAL DE CAJA */}
+              <div style={{ marginBottom: "24px" }}>
+                <label style={{ display: "block", fontSize: "13.5px", fontWeight: "800", color: "#0f172a", marginBottom: "6px" }}>
+                  💰 Monto Inicial de Caja (S/) *
                 </label>
                 <div style={{ position: "relative" }}>
-                  <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", fontWeight: "bold", color: "#64748b", fontSize: "16px" }}>S/</span>
+                  <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", fontWeight: "bold", color: "#64748b", fontSize: "18px" }}>S/</span>
                   <input
                     type="number"
                     step="0.10"
@@ -4075,58 +4156,29 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     value={formAperturaMonto}
                     onChange={(e) => setFormAperturaMonto(e.target.value)}
                     required
-                    style={{ width: "100%", padding: "12px 14px 12px 42px", borderRadius: "10px", border: "1.5px solid #2563eb", fontSize: "18px", fontWeight: "800", color: "#1e293b", background: "#f8fafc" }}
+                    style={{ width: "100%", padding: "12px 14px 12px 46px", borderRadius: "10px", border: "2px solid #2563eb", fontSize: "20px", fontWeight: "900", color: "#0f172a", background: "#ffffff" }}
                   />
                 </div>
-                <small style={{ color: "#64748b", fontSize: "12px", marginTop: "4px", display: "block" }}>
-                  Monto en soles asignado a caja física para dar vuelto a los contribuyentes.
+                <small style={{ color: "#64748b", fontSize: "12px", marginTop: "6px", display: "block" }}>
+                  Ingrese el fondo de sencillo en soles con el que inicia su turno para dar vuelto a los usuarios.
                 </small>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "24px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                    🏢 Ventanilla de Atención *
-                  </label>
-                  <select
-                    value={formAperturaVentanilla}
-                    onChange={(e) => setFormAperturaVentanilla(e.target.value)}
-                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
-                  >
-                    <option value="Ventanilla N° 01 — Principal">Ventanilla N° 01 (Principal)</option>
-                    <option value="Ventanilla N° 02 — Licencias">Ventanilla N° 02 (Licencias)</option>
-                    <option value="Ventanilla N° 03 — Preferencial">Ventanilla N° 03 (Preferencial)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                    🕒 Turno de Atención *
-                  </label>
-                  <select
-                    value={formAperturaTurno}
-                    onChange={(e) => setFormAperturaTurno(e.target.value)}
-                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
-                  >
-                    <option value="Turno Mañana (08:00 - 16:00)">Turno Mañana (08:00 - 16:00)</option>
-                    <option value="Turno Tarde (16:00 - 20:00)">Turno Tarde (16:00 - 20:00)</option>
-                  </select>
-                </div>
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
                 <button
                   type="button"
                   onClick={() => setMostrarModalAperturaCaja(false)}
+                  disabled={procesandoApertura}
                   style={{ padding: "12px 20px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
+                  disabled={procesandoApertura}
                   style={{ padding: "12px 24px", background: "#16a34a", color: "white", border: "none", borderRadius: "10px", fontWeight: "800", fontSize: "14.5px", cursor: "pointer", boxShadow: "0 4px 12px rgba(22,163,74,0.25)" }}
                 >
-                  🔓 Aperturar Caja Municipal
+                  {procesandoApertura ? "⏳ Registrando Apertura..." : "🔓 Confirmar Apertura de Caja"}
                 </button>
               </div>
             </form>
