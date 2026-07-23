@@ -989,6 +989,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     const montoRecibidoNum = parseFloat(montoRecibidoInput) || 0;
     const vueltoCalculado = Math.max(0, montoRecibidoNum - MONTO_TRAMITE);
 
+    if (esEfectivo && !cajaAbierta.abierta) {
+      alert("🔒 Debe aperturar la caja antes de registrar pagos en efectivo.");
+      return;
+    }
+
     if (esEfectivo && montoRecibidoNum < MONTO_TRAMITE) {
       alert(`⚠️ El monto recibido (S/ ${montoRecibidoNum.toFixed(2)}) es menor al total a pagar (S/ ${MONTO_TRAMITE.toFixed(2)}). Por favor ingrese un monto válido.`);
       return;
@@ -1197,6 +1202,11 @@ function PanelCajero({ seccion, cambiarSeccion }) {
     const esEfectivo = metodoPagoSeleccionado.toLowerCase().includes("efectivo");
     const montoRecibidoNum = parseFloat(montoRecibidoInput) || 0;
     const vueltoCalculado = Math.max(0, montoRecibidoNum - MONTO_TRAMITE);
+
+    if (esEfectivo && !cajaAbierta.abierta) {
+      alert("🔒 Debe aperturar la caja antes de registrar pagos en efectivo.");
+      return;
+    }
 
     if (esEfectivo && (montoRecibidoNum < MONTO_TRAMITE || montoRecibidoNum > 200)) {
       alert(`⚠️ El monto recibido en efectivo debe estar entre S/ ${MONTO_TRAMITE.toFixed(2)} y S/ 200.00 (máxima denominación de billete peruano).`);
@@ -2507,12 +2517,25 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           </label>
                           <select
                             value={metodoPagoSeleccionado}
-                            onChange={(e) => setMetodoPagoSeleccionado(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val.toLowerCase().includes("efectivo") && !cajaAbierta.abierta) {
+                                alert("🔒 Debe aperturar la caja antes de registrar pagos en efectivo.");
+                              }
+                              setMetodoPagoSeleccionado(val);
+                            }}
                             style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
                           >
-                            <option value="Efectivo en Caja Municipal">💵 Efectivo en Caja Municipal</option>
-                            <option value="Pago Billetera Digital">📱 Pago Billetera Digital</option>
+                            <option value="Efectivo en Caja Municipal" disabled={!cajaAbierta.abierta}>
+                              {cajaAbierta.abierta ? "💵 Efectivo en Caja Municipal" : "🔒 💵 Efectivo (Debe aperturar caja primero)"}
+                            </option>
+                            <option value="Pago Billetera Digital">📱 Pago Billetera Digital (Flow / Yape / Plin / Tarjeta)</option>
                           </select>
+                          {!cajaAbierta.abierta && metodoPagoSeleccionado.toLowerCase().includes("efectivo") && (
+                            <small style={{ color: "#dc2626", fontWeight: "bold", fontSize: "12px", display: "block", marginTop: "6px" }}>
+                              🔒 Debe aperturar la caja antes de registrar pagos en efectivo. (Puede seleccionar Billetera Digital para continuar).
+                            </small>
+                          )}
                         </div>
                       </div>
 
@@ -2711,7 +2734,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         (!dniForm || dniForm.trim().length !== 8) ||
                         (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
                         (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
-                          ((parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
+                          (!cajaAbierta.abierta || (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
                       }
                       style={{
                         width: "100%",
@@ -2721,7 +2744,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           (!dniForm || dniForm.trim().length !== 8) ||
                           (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
                           (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
-                            ((parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
+                            (!cajaAbierta.abierta || (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
                             ? "#cbd5e1"
                             : !metodoPagoSeleccionado.toLowerCase().includes("efectivo")
                             ? "linear-gradient(90deg, #2563eb, #1d4ed8)"
@@ -2736,7 +2759,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                           (!dniForm || dniForm.trim().length !== 8) ||
                           (tipoComprobanteSeleccionado === "Factura" && (!rucForm || rucForm.trim().length !== 11)) ||
                           (metodoPagoSeleccionado.toLowerCase().includes("efectivo") &&
-                            ((parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
+                            (!cajaAbierta.abierta || (parseFloat(montoRecibidoInput) || 0) < MONTO_TRAMITE || (parseFloat(montoRecibidoInput) || 0) > 200))
                             ? "not-allowed"
                             : "pointer",
                         boxShadow: "0 4px 14px rgba(0, 0, 0, 0.15)"
@@ -2744,6 +2767,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     >
                       {procesando
                         ? (!metodoPagoSeleccionado.toLowerCase().includes("efectivo") ? "🌐 Conectando con Pasarela Flow..." : "⏳ Procesando Registro y Emisión en Caja...")
+                        : (metodoPagoSeleccionado.toLowerCase().includes("efectivo") && !cajaAbierta.abierta)
+                        ? "🔒 Debe aperturar la caja antes de registrar pagos en efectivo"
                         : !metodoPagoSeleccionado.toLowerCase().includes("efectivo")
                         ? "🌐 Ir a Pasarela de Pago Billetera Digital (Flow) ➔"
                         : "💰 Confirmar Pago en Efectivo (S/ 3.00) y Registrar Solicitud"}
