@@ -2485,7 +2485,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
                           <div style={{ paddingTop: "12px", borderTop: "1px solid #e2e8f0" }}>
                             <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
-                              📍 Dirección del Local Comercial (Oficial SUNAT) *
+                              📍 Dirección del Local Comercial *
                             </label>
                             <input
                               type="text"
@@ -3990,7 +3990,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 </div>
 
                 <div style={{ marginBottom: "10px" }}>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>🔒 Dirección Fiscal del Establecimiento (Oficial SUNAT - Solo Lectura) *</label>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "bold", color: "#334155", marginBottom: "4px" }}>📍 Dirección del Local Comercial *</label>
                   <input
                     type="text"
                     placeholder="🔒 Se autocompleta consultando SUNAT"
