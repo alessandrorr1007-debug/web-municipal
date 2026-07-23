@@ -371,7 +371,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   // ESTADOS PARA REGISTRO PRESENCIAL DE NUEVA SOLICITUD (WIZARD DE PASO ÚNICO ACTIVO)
   const [pasoActual, setPasoActual] = useState(1);
   const [pagoConfirmadoLocal, setPagoConfirmadoLocal] = useState(false);
-  const [tipoComprobanteSeleccionado, setTipoComprobanteSeleccionado] = useState("Boleta");
+  const [tipoComprobanteSeleccionado, setTipoComprobanteSeleccionado] = useState("Factura");
   const [tipoTramiteSeleccionado, setTipoTramiteSeleccionado] = useState("Nueva Licencia de Funcionamiento");
   const [resultadoRegistroExitoso, setResultadoRegistroExitoso] = useState(null);
   const [mostrarModalNuevaSolicitud, setMostrarModalNuevaSolicitud] = useState(false);
@@ -2496,8 +2496,8 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                         </div>
                         <div style={{ textAlign: "right", background: "#ffffff", padding: "10px 16px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
                           <small style={{ color: "#64748b", fontWeight: "bold", display: "block", fontSize: "11px" }}>COMPROBANTE A EMITIR</small>
-                          <strong style={{ color: tipoComprobanteSeleccionado === "Factura" ? "#dc2626" : "#2563eb", fontSize: "14px" }}>
-                            {tipoComprobanteSeleccionado === "Factura" ? "🧾 Factura Electrónica (F001-AUTO)" : "📄 Boleta Electrónica (B001-AUTO)"}
+                          <strong style={{ color: "#dc2626", fontSize: "14px" }}>
+                            🧾 Factura Electrónica (F001-AUTO)
                           </strong>
                         </div>
                       </div>
@@ -2512,8 +2512,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                             onChange={(e) => setTipoComprobanteSeleccionado(e.target.value)}
                             style={{ width: "100%", padding: "12px 16px", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "14px", fontWeight: "700" }}
                           >
-                            <option value="Boleta">📄 Boleta de Venta Electrónica (B001)</option>
-                            <option value="Factura">🧾 Factura Electrónica (F001)</option>
+                            <option value="Factura">🧾 Factura Electrónica (F001 - Único Comprobante)</option>
                           </select>
                         </div>
 
@@ -4108,7 +4107,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     onChange={(e) => setTipoComprobanteSeleccionado(e.target.value)}
                     style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold" }}
                   >
-                    <option value="Boleta">📄 Boleta de Venta Electrónica (B001)</option>
                     <option value="Factura">🧾 Factura Electrónica (F001)</option>
                   </select>
                 </div>
