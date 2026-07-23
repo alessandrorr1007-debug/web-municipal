@@ -1981,12 +1981,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
         <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
           {/* BADGE ESTADO DE CAJA MUNICIPAL */}
-          {cajaAbierta.abierta ? (
-            <div style={{ background: "#f0fdf4", color: "#166534", padding: "6px 14px", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", border: "1.5px solid #86efac", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-              <span>🟢 <strong>CAJA ABIERTA</strong></span>
-              <span style={{ color: "#15803d", fontSize: "12px" }}>• {cajaAbierta.ventanilla} (Fondo: S/ {cajaAbierta.montoInicial.toFixed(2)})</span>
-            </div>
-          ) : (
+          {!cajaAbierta.abierta && (
             <div style={{ background: "#fef2f2", color: "#991b1b", padding: "6px 14px", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", border: "1.5px solid #fca5a5", display: "flex", alignItems: "center", gap: "8px" }}>
               <span>🔴 <strong>CAJA CERRADA</strong></span>
               <span style={{ color: "#b91c1c", fontSize: "12px" }}>• Requiere Apertura de Turno</span>
