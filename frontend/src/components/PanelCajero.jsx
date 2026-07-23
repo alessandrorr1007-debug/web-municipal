@@ -2407,7 +2407,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                               type="text"
                               value={direccionForm}
                               readOnly
-                              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: "#f1f5f9", color: "#334155", cursor: "not-allowed" }}
+                              disabled
+                              onKeyDown={(e) => e.preventDefault()}
+                              onFocus={(e) => e.target.blur()}
+                              style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "13.5px", fontWeight: "bold", background: "#e2e8f0", color: "#1e293b", cursor: "not-allowed", pointerEvents: "none", userSelect: "none" }}
                             />
                             <small style={{ color: "#64748b", fontSize: "12px", marginTop: "4px", display: "block" }}>
                               🔒 Dirección oficial provista por la consulta SUNAT. No es posible modificarla manualmente.
@@ -3912,9 +3915,10 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                     placeholder="🔒 Se autocompleta consultando SUNAT"
                     value={direccionForm}
                     readOnly
-                    required
+                    disabled
                     onKeyDown={(e) => e.preventDefault()}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#f1f5f9", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b" }}
+                    onFocus={(e) => e.target.blur()}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", background: "#e2e8f0", cursor: "not-allowed", fontWeight: "bold", color: "#1e293b", pointerEvents: "none", userSelect: "none" }}
                   />
                 </div>
 
