@@ -51,11 +51,11 @@ export const getIdToken = async () => {
 
 export const authHeaders = async () => {
   const token = await getIdToken();
-  if (!token) throw new Error("No hay sesión activa.");
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
+  const headers = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
 };
 
 export default app;

@@ -341,18 +341,18 @@ const crearNotificacionEnDb = async (uidUsuario, { titulo, descripcion, icono, h
     }
 
     if (correoUsuario) {
-      authHeaders().then(headers => {
-        fetch(`${API_URL}/api/email/enviar-notificacion`, {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(`${API_URL}/api/email/enviar-notificacion`, {
           method: "POST",
           headers,
           body: JSON.stringify({ correoUsuario, titulo, descripcion, html }),
-        }).then((res) => {
-          if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos.");
-          else console.log("[NOTIFICACION EMAIL] Enviado correctamente a:", correoUsuario);
-        }).catch((err) => {
-          console.error("[NOTIFICACION EMAIL] Error al conectar para enviar email:", err.message);
         });
-      }).catch(err => console.error("[NOTIFICACION EMAIL] No se pudo obtener token:", err.message));
+        if (!res.ok) console.error("[NOTIFICACION EMAIL] Error del servidor de correos:", res.status);
+        else console.log("[NOTIFICACION EMAIL] Enviado correctamente a:", correoUsuario);
+      } catch (err) {
+        console.error("[NOTIFICACION EMAIL] Error al conectar para enviar email:", err.message);
+      }
     }
   } catch (err) {
     console.error("Error creando notificación:", err);
