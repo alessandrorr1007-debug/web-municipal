@@ -416,6 +416,7 @@ function PanelCajero({ seccion, cambiarSeccion }) {
   const [mostrarModalAperturaCaja, setMostrarModalAperturaCaja] = useState(false);
   const [mostrarModalArqueoCaja, setMostrarModalArqueoCaja] = useState(false);
   const [formAperturaMonto, setFormAperturaMonto] = useState("100.00");
+  const [observacionesCierre, setObservacionesCierre] = useState("");
   const [procesandoApertura, setProcesandoApertura] = useState(false);
 
   // EFECTO DE CUALIFICACIÓN: VERIFICAR AL INICIAR SI EL CAJERO DE SESIÓN YA POSEE UNA CAJA ABIERTA EN FIRESTORE
@@ -528,30 +529,27 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
   const resumenArqueoCaja = useMemo(() => {
     const lista = Array.isArray(solicitudes) ? solicitudes : [];
-    const cobrosHoy = lista.filter((s) => {
+    const cobrosEfectivoHoy = lista.filter((s) => {
       if (!s) return false;
       const estadoP = String(s.estadoPago || s.pago || "").toLowerCase();
-      return estadoP.includes("confirmado") || estadoP.includes("pagado");
+      const esConfirmado = estadoP.includes("confirmado") || estadoP.includes("pagado");
+      const esEfectivo = String(s.metodoPago || "").toLowerCase().includes("efectivo");
+      return esConfirmado && esEfectivo;
     });
 
-    const totalEfectivo = cobrosHoy
-      .filter((s) => String(s.metodoPago || "").toLowerCase().includes("efectivo"))
-      .reduce((sum, s) => sum + (parseFloat(s.montoPagado) || MONTO_TRAMITE), 0);
-
-    const totalDigital = cobrosHoy
-      .filter((s) => !String(s.metodoPago || "").toLowerCase().includes("efectivo"))
-      .reduce((sum, s) => sum + (parseFloat(s.montoPagado) || MONTO_TRAMITE), 0);
+    const totalEfectivo = cobrosEfectivoHoy.reduce(
+      (sum, s) => sum + (parseFloat(s.montoPagado) || MONTO_TRAMITE),
+      0
+    );
 
     const fondoInicial = parseFloat(cajaAbierta.montoInicial) || 0;
     const saldoTotalEnCaja = fondoInicial + totalEfectivo;
 
     return {
-      totalOperaciones: cobrosHoy.length,
+      totalOperaciones: cobrosEfectivoHoy.length,
       totalEfectivo,
-      totalDigital,
       fondoInicial,
       saldoTotalEnCaja,
-      totalRecaudadoGeneral: totalEfectivo + totalDigital,
     };
   }, [solicitudes, cajaAbierta]);
 
@@ -4299,40 +4297,44 @@ function PanelCajero({ seccion, cambiarSeccion }) {
                 </div>
               </div>
 
-              {/* TARJETAS RESUMEN DE ARQUEO EN TIEMPO REAL */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
-                <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "14px", borderRadius: "10px", textAlign: "center" }}>
-                  <span style={{ fontSize: "11px", fontWeight: "bold", color: "#1e40af", display: "block", textTransform: "uppercase" }}>Fondo Inicial</span>
-                  <strong style={{ fontSize: "20px", color: "#1e3a8a" }}>S/ {resumenArqueoCaja.fondoInicial.toFixed(2)}</strong>
+              {/* TARJETAS RESUMEN DE ARQUEO EN TIEMPO REAL (FÍSICO EN EFECTIVO) */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "20px" }}>
+                <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "16px", borderRadius: "12px", textAlign: "center" }}>
+                  <span style={{ fontSize: "11.5px", fontWeight: "bold", color: "#1e40af", display: "block", textTransform: "uppercase" }}>Fondo Inicial</span>
+                  <strong style={{ fontSize: "22px", color: "#1e3a8a" }}>S/ {resumenArqueoCaja.fondoInicial.toFixed(2)}</strong>
                 </div>
 
-                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "14px", borderRadius: "10px", textAlign: "center" }}>
-                  <span style={{ fontSize: "11px", fontWeight: "bold", color: "#166534", display: "block", textTransform: "uppercase" }}>Efectivo Recaudado</span>
-                  <strong style={{ fontSize: "20px", color: "#15803d" }}>S/ {resumenArqueoCaja.totalEfectivo.toFixed(2)}</strong>
-                </div>
-
-                <div style={{ background: "#faf5ff", border: "1px solid #e9d5ff", padding: "14px", borderRadius: "10px", textAlign: "center" }}>
-                  <span style={{ fontSize: "11px", fontWeight: "bold", color: "#6b21a8", display: "block", textTransform: "uppercase" }}>Digital / Flow</span>
-                  <strong style={{ fontSize: "20px", color: "#7e22ce" }}>S/ {resumenArqueoCaja.totalDigital.toFixed(2)}</strong>
+                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "16px", borderRadius: "12px", textAlign: "center" }}>
+                  <span style={{ fontSize: "11.5px", fontWeight: "bold", color: "#166534", display: "block", textTransform: "uppercase" }}>Efectivo Recaudado</span>
+                  <strong style={{ fontSize: "22px", color: "#15803d" }}>S/ {resumenArqueoCaja.totalEfectivo.toFixed(2)}</strong>
                 </div>
               </div>
 
               {/* RESUMEN TOTAL BALANCES */}
-              <div style={{ background: "#0f172a", color: "white", padding: "20px", borderRadius: "14px", marginBottom: "24px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", borderBottom: "1px solid #334155", paddingBottom: "10px" }}>
-                  <span style={{ fontSize: "13.5px", color: "#94a3b8" }}>Total Operaciones Atendidas:</span>
+              <div style={{ background: "#0f172a", color: "white", padding: "20px", borderRadius: "14px", marginBottom: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <span style={{ fontSize: "13.5px", color: "#94a3b8" }}>Total Operaciones Atendidas en Efectivo:</span>
                   <strong style={{ fontSize: "16px", color: "#38bdf8" }}>{resumenArqueoCaja.totalOperaciones} Operación(es)</strong>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <span style={{ fontSize: "13.5px", color: "#94a3b8" }}>Total Recaudado Bruto (Efectivo + Flow):</span>
-                  <strong style={{ fontSize: "16px", color: "#4ade80" }}>S/ {resumenArqueoCaja.totalRecaudadoGeneral.toFixed(2)}</strong>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "10px", borderTop: "2px solid #334155" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "12px", borderTop: "2px solid #334155" }}>
                   <span style={{ fontSize: "15px", fontWeight: "bold", color: "#f8fafc" }}>🧮 ARQUEO FÍSICO EN CAJA (Fondo Inicial + Efectivo):</span>
                   <strong style={{ fontSize: "24px", fontWeight: "900", color: "#facc15" }}>S/ {resumenArqueoCaja.saldoTotalEnCaja.toFixed(2)}</strong>
                 </div>
+              </div>
+
+              {/* OBSERVACIONES DEL CIERRE DE CAJA */}
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  📝 Observaciones del Cierre de Caja (Opcional):
+                </label>
+                <textarea
+                  rows="2"
+                  placeholder="Ingrese cualquier incidencia, descuadre o nota relevante del turno..."
+                  value={observacionesCierre}
+                  onChange={(e) => setObservacionesCierre(e.target.value)}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", resize: "vertical" }}
+                />
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
