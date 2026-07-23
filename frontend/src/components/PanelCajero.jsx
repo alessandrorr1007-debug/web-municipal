@@ -1379,9 +1379,9 @@ function PanelCajero({ seccion, cambiarSeccion }) {
       const resGuardado = await guardarSolicitud(nuevaSolicitudPresencial);
       const idReal = typeof resGuardado === "object" ? String(resGuardado.id || idExp) : String(resGuardado || idExp);
       const solicitudCompleta = { ...nuevaSolicitudPresencial, id: idReal };
+      const expIdLimpio = String(solicitudCompleta.id).replace(/^EXP-/, "");
 
       if (correoForm) {
-        const expIdLimpio = String(solicitudCompleta.id).replace(/^EXP-/, "");
 
         // CORREO 1: CONFIRMACIÓN DE SOLICITUD BIEN ESTRUCTURADO PARA GMAIL
         const htmlNotificacionSolicitud = `
@@ -1668,7 +1668,6 @@ function PanelCajero({ seccion, cambiarSeccion }) {
 
       if (!metodoPagoSeleccionado.toLowerCase().includes("efectivo")) {
         try {
-          const expIdLimpio = String(solicitudCompleta.id).replace(/^EXP-/, "");
           const emailTarget = (correoForm && correoForm.includes("@") && correoForm.split("@")[0].length >= 2)
             ? correoForm
             : "contribuyente@munitrujillo.gob.pe";
